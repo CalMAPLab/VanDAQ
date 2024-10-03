@@ -1,0 +1,26 @@
+---
+instrument: Fubar_sensor
+type: simulated
+connection: none
+measurement_delay_secs: 0 
+stream:
+  line_delimiter: "\r\n"
+  item_delimiter: ","
+  items: "Fubars"
+  formats: "f"
+  units: "fpm"
+  acqTypes: "measurement_calibrated"
+simulate:
+  cycle_secs: 1
+  Fubars:
+    signal: sine
+    min: 300
+    max: 600
+    period: 400
+logs:
+  log_dir: "/home/robin/vandaq/acquirer/log"
+  log_file: "Fubar_sensor.log"
+  log_level: "INFO"
+  logger_name: "Fubar_sensor"
+
+

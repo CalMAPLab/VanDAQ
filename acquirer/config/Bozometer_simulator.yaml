@@ -1,0 +1,26 @@
+---
+instrument: PseudoTech_Bozometer
+type: simulated
+connection: none
+measurement_delay_secs: 0 
+stream:
+  line_delimiter: "\r\n"
+  item_delimiter: ","
+  items: "Bozons"
+  formats: "f"
+  units: "bpm"
+  acqTypes: "measurement_calibrated"
+simulate:
+  cycle_secs: 1
+  Bozons:
+    signal: random
+    min: 300
+    max: 600
+    period: 127
+logs:
+  log_dir: "/home/robin/vandaq/acquirer/log"
+  log_file: "PseudoTech_Bozometer.log"
+  log_level: "INFO"
+  logger_name: "PseudoTech_Bozometer"
+
+

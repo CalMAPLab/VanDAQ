@@ -1,0 +1,5 @@
+logs:
+  log_dir: "/home/robin/vandaq/collector/log"
+  log_file: "collector.log"
+  log_level: "INFO"
+  logger_name: "collector"
