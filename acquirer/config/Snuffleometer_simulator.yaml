@@ -1,0 +1,41 @@
+---
+instrument: Baskin_Snuffleometer
+type: simulated
+connection: none
+measurement_delay_secs: 0 
+stream:
+  line_delimiter: "\r\n"
+  item_delimiter: ","
+  items: "Snuffles,detector_v,chamber_P,chamber_T"
+  formats: "f,f,f,f,f"
+  units: "msnufs,mV,mbar,temp_c"
+  acqTypes: "measurement_calibrated,engineering,engineering,engineering"
+simulate:
+  cycle_secs: 1
+  Snuffles:
+    signal: sawtooth
+    min: 1
+    max: 10
+    period: 420
+  detector_v:
+    signal: sawtooth
+    min: 50
+    max: 500
+    period: 420
+  chamber_P:
+    signal: sine
+    min: 800
+    max: 1001
+    period: 170
+  chamber_T:
+    signal: triangle
+    min: 40
+    max: 50
+    period: 164
+logs:
+  log_dir: "/home/robin/vandaq/acquirer/log"
+  log_file: "Baskin_Snuffleometer.log"
+  log_level: "INFO"
+  logger_name: "Baskin_Snuffleometer"
+    
+

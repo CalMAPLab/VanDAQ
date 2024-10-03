@@ -1,0 +1,41 @@
+---
+instrument: CO2_Simulator_2
+type: simulated
+connection: none
+measurement_delay_secs: 0 
+stream:
+  line_delimiter: "\r\n"
+  item_delimiter: ","
+  items: "CO2,H2O,cell_P,cell_T"
+  formats: "f,f,f,f,f"
+  units: "ppm,ppm,mbar,temp_c"
+  acqTypes: "measurement_calibrated,measurement_calibrated,engineering,engineering"
+simulate:
+  cycle_secs: 1
+  CO2:
+    signal: random
+    min: 300
+    max: 600
+    period: 80
+  H2O:
+    signal: random
+    min: 50
+    max: 500
+    period: 206
+  cell_P:
+    signal: sawtooth
+    min: 800
+    max: 1001
+    period: 170
+  cell_T:
+    signal: triangle
+    min: 40
+    max: 50
+    period: 200
+logs:
+  log_dir: "/home/robin/vandaq/acquirer/log"
+  log_file: "CO2_Simulator2.log"
+  log_level: "INFO"
+  logger_name: "CO2_Simulator2"
+    
+

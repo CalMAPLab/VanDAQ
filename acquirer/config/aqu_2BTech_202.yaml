@@ -1,0 +1,20 @@
+---
+instrument: 2BTech_202
+type: simpleSerial
+connection: serial
+serial:
+  device: "/dev/ttyUSB0"
+  baud: 19200
+measurement_delay_secs: 0 
+stream:
+  line_delimiter: "\r\n"
+  item_delimiter: ","
+  items: "O3,cell_T,cell_P,x,x,x,inst_date,inst_time"
+  formats: "f,f,f,x,x,x,%d/%m/%y,%H:%M:%S"
+  units: "ppb,temp_C,mbar,x,x,x,date,time"
+  acqTypes: "measurement_calibrated,engineering,engineering,x,x,x,inst_date,inst_time"
+logs:
+  log_dir: "/home/robin/vandaq/acquirer/log"
+  log_file: "acquirer_2BTech_202.log"
+  log_level: "INFO"
+  logger_name: "acquirer_2BTech_202"
