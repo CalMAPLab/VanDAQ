@@ -1,4 +1,5 @@
 ---
+platform: van1
 instrument: Baskin_Snuffleometer
 type: simulated
 connection: none

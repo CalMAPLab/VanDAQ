@@ -1,4 +1,5 @@
 ---
+platform: van1
 instrument: 2BTech_202
 type: simpleSerial
 connection: serial

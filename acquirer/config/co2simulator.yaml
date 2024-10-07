@@ -1,4 +1,5 @@
 ---
+platform: van1
 instrument: CO2_Simulator
 type: simulated
 connection: none

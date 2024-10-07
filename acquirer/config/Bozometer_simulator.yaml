@@ -1,4 +1,5 @@
 ---
+platform: van1
 instrument: PseudoTech_Bozometer
 type: simulated
 connection: none

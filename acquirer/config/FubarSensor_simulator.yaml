@@ -1,4 +1,5 @@
 ---
+platform: van1
 instrument: Fubar_sensor
 type: simulated
 connection: none
