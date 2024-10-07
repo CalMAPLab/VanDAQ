@@ -1,4 +1,6 @@
 **/*.pyc
 **/*.log
+**/*.bak
+**/*.sbm
 acquirer/log/*
-
+collector/log/*
