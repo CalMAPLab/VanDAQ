@@ -1,9 +1,11 @@
 from ipcqueue import posixmq
-import datetime
+from datetime import datetime, timedelta
 import os
 import sys
 import yaml
 import logging
+import lzma
+import pickle
 from logging.handlers import TimedRotatingFileHandler
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
@@ -134,6 +136,25 @@ def insert_measurment_into_database(session, message):
 		logger.error("Failed to insert data due to integrity constraint violation.")
 		return False
 
+def submit_measurement(measurement, submit_time, config):
+	# collect measurements, and store into files at configured intervals  
+	global submissions
+	changed_file = False
+	if (datetime.now() - submit_time).total_seconds() / 60 >= config['submissions']['submit_file_minutes']:
+		# Time to write the submission file
+		filename = os.path.join(config['submissions']['submit_file_dir'], 
+						config['submissions']['submit_file_basename'])
+		filename += submit_time.strftime('%Y%m%d_%H%M%S')
+		filename += '.sbm'
+		with lzma.open(filename,'wb') as file:
+			pickle.dump(submissions,file)
+		submissions = []
+		changed_file = True
+	submissions.append(measurement)
+	return changed_file
+
+
+
 # load configuration file
 if len(sys.argv) < 2:
     print("Error: Must supply a configuration file")
@@ -171,15 +192,26 @@ engine = create_engine('postgresql://vandaq:p3st3r@localhost:5432/vandaq-sandbox
 Session = sessionmaker(bind=engine)
 session = Session()
 
-while True:
-	message = queue.get()
-	logger.debug(str(message))
-	for measurement in message:
-		if 'acquisition_type' in measurement.keys():
-			success = insert_measurment_into_database(session, measurement)
-			if success:
-				logger.debug("Measurement inserted successfully.")
-			else:
-				logger.error("Measurement insertion failed: "+str(measurement))
+submissions = []
+sumbission_start_time = datetime.now()
 
+while True:
+	try:
+		message = queue.get()
+	except Exception as e:
+		logger.error("exception in get from queue")
+		logger.error(e)
+	else:
+		logger.debug(str(message))
+		for measurement in message:
+			if 'acquisition_type' in measurement.keys():
+				success = insert_measurment_into_database(session, measurement)
+				if success:
+					logger.debug("Measurement inserted successfully.")
+				else:
+					logger.error("Measurement insertion failed: "+str(measurement))
+				#print(str(len(submissions))+'submissions to '+sumbission_start_time.strftime("%Y-%m-%d %H:%M:%S"))
+				if submit_measurement(measurement, sumbission_start_time, config):
+					sumbission_start_time = datetime.now()
+					
 

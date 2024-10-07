@@ -3,3 +3,7 @@ logs:
   log_file: "collector.log"
   log_level: "INFO"
   logger_name: "collector"
+submissions:
+  submit_file_dir: "/home/robin/vandaq/collector/submission"
+  submit_file_basename: "submit_van1_"
+  submit_file_minutes: 1
