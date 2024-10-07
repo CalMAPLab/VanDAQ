@@ -17,6 +17,7 @@ def get_measurements(engine, start_time=None, end_time=None, last_only=False):
     # Base query joining all relevant tables
     base_query = session.query(
         func.date_trunc('second', DimTime.time).label('sample_time'),
+        DimPlatform.platform,
         DimInstrument.instrument,
         DimParameter.parameter,
         DimUnit.unit,
@@ -67,7 +68,7 @@ def get_measurements(engine, start_time=None, end_time=None, last_only=False):
     df = pd.read_sql(base_query.statement, session.bind)
 
     # Create a column name from the combination of instrument, parameter, unit, and acquisition_type
-    df['measurement'] = df['instrument'] + ' | ' + df['parameter'] + ' | ' + df['unit'] + ' | ' + df['acquisition_type']
+    df['measurement'] = df['platform'] + ' | ' +df['instrument'] + ' | ' + df['parameter'] + ' | ' + df['unit'] + ' | ' + df['acquisition_type']
 
     # Pivot the DataFrame to get sample_time as index and measurement combinations as columns
     df_pivot = df.pivot_table(index='sample_time', columns='measurement', values='avg_value', aggfunc='mean')

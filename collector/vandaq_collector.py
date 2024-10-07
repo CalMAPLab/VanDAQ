@@ -11,8 +11,15 @@ from sqlalchemy.orm import sessionmaker, relationship
 from vandaq_schema import *
 
 def insert_measurment_into_database(session, message):
-	try:
-		
+	try:		
+		# Check if the platform already exists, otherwise insert it
+		platform_record = session.query(DimPlatform).filter_by(
+			platform=message['platform'],).first()
+		if not platform_record:
+			platform_record = DimPlatform(platform=message['platform'])
+			session.add(platform_record)
+			session.flush()  # Ensure the ID is generated
+
 		# Check if the instrument already exists, otherwise insert it
 		instrument_record = session.query(DimInstrument).filter_by(
 			instrument=message['instrument'],).first()
@@ -71,12 +78,14 @@ def insert_measurment_into_database(session, message):
 	
 	    # Add an instrument measurement record if not already there
 		inst_meas_record = session.query(InstrumentMeasurements).filter_by(
+			platform_id=platform_record.id,
 			instrument_id=instrument_record.id,
 			acquisition_type_id=acquisition_type_record.id,
 			parameter_id=parameter_record.id,
 			unit_id=unit_record.id).first()
 		if not inst_meas_record:
 			inst_meas_record = InstrumentMeasurements(
+				platform_id=platform_record.id,
 				instrument_id=instrument_record.id,
 				acquisition_type_id=acquisition_type_record.id,
 				parameter_id=parameter_record.id,
@@ -89,9 +98,10 @@ def insert_measurment_into_database(session, message):
 		else:
 			measurementString = None
 
-		# Insert the  with the dimension IDs
+		# Insert the measurement with the dimension IDs
 		if inst_has_timestamp:
 			measurement_record = FactMeasurement(
+				platform_id=platform_record.id,
 				instrument_id=instrument_record.id,
 				parameter_id=parameter_record.id,
 				unit_id=unit_record.id,
@@ -104,6 +114,7 @@ def insert_measurment_into_database(session, message):
 			)
 		else:
 			measurement_record = FactMeasurement(
+				platform_id=platform_record.id,
 				instrument_id=instrument_record.id,
 				parameter_id=parameter_record.id,
 				unit_id=unit_record.id,

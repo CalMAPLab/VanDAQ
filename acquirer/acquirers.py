@@ -79,6 +79,7 @@ class Acquirer:
 
             for i in range(0,len(res_values)):		
                 resultDict = {
+                    'platform':self.config['platform'],
                     'instrument':self.config['instrument'],
                     'parameter':res_parameters[i],
                     'unit':res_units[i],
