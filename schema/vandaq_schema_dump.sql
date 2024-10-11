@@ -43,7 +43,7 @@ CREATE SEQUENCE public.acquisition_type_id_seq
     NO MINVALUE
     NO MAXVALUE
     CACHE 1;
-
+    
 
 ALTER TABLE public.acquisition_type_id_seq OWNER TO vandaq;
 
@@ -52,6 +52,98 @@ ALTER TABLE public.acquisition_type_id_seq OWNER TO vandaq;
 --
 
 ALTER SEQUENCE public.acquisition_type_id_seq OWNED BY public.acquisition_type.id;
+
+
+--
+-- Name: alarm_id_seq; Type: SEQUENCE; Schema: public; Owner: vandaq
+--
+
+CREATE SEQUENCE public.alarm_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.alarm_id_seq OWNER TO vandaq;
+
+--
+-- Name: alarm; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.alarm (
+    id bigint DEFAULT nextval('public.alarm_id_seq'::regclass) NOT NULL,
+    platform_id integer NOT NULL,
+    instrument_id integer NOT NULL,
+    acquisition_time_id bigint NOT NULL,
+    alarm_severity_id integer NOT NULL,
+    alarm_type_id integer NOT NULL,
+    parameter_id integer,
+    data_impacted boolean NOT NULL,
+    message character varying
+);
+
+
+ALTER TABLE public.alarm OWNER TO postgres;
+
+--
+-- Name: alarm_severity_id_seq; Type: SEQUENCE; Schema: public; Owner: vandaq
+--
+
+CREATE SEQUENCE public.alarm_severity_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.alarm_severity_id_seq OWNER TO vandaq;
+
+--
+-- Name: alarm_severity; Type: TABLE; Schema: public; Owner: vandaq
+--
+
+CREATE TABLE public.alarm_severity (
+    id integer DEFAULT nextval('public.alarm_severity_id_seq'::regclass) NOT NULL,
+    alarm_type character varying NOT NULL
+);
+
+
+ALTER TABLE public.alarm_severity OWNER TO vandaq;
+
+--
+-- Name: alarm_type; Type: TABLE; Schema: public; Owner: vandaq
+--
+
+CREATE TABLE public.alarm_type (
+    id integer NOT NULL,
+    alarm_type character varying NOT NULL
+);
+
+
+ALTER TABLE public.alarm_type OWNER TO vandaq;
+
+--
+-- Name: alarm_type_id_seq; Type: SEQUENCE; Schema: public; Owner: vandaq
+--
+
+CREATE SEQUENCE public.alarm_type_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.alarm_type_id_seq OWNER TO vandaq;
+
+--
+-- Name: alarm_type_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: vandaq
+--
+
+ALTER SEQUENCE public.alarm_type_id_seq OWNED BY public.alarm_type.id;
 
 
 --
@@ -148,6 +240,18 @@ CREATE TABLE public.measurement (
 ALTER TABLE public.measurement OWNER TO vandaq;
 
 --
+-- Name: measurement_alarm; Type: TABLE; Schema: public; Owner: vandaq
+--
+
+CREATE TABLE public.measurement_alarm (
+    measurement_id bigint NOT NULL,
+    alarm_id bigint NOT NULL
+);
+
+
+ALTER TABLE public.measurement_alarm OWNER TO vandaq;
+
+--
 -- Name: measurement_id_seq; Type: SEQUENCE; Schema: public; Owner: vandaq
 --
 
@@ -203,7 +307,7 @@ ALTER SEQUENCE public.parameter_id_seq OWNED BY public.parameter.id;
 
 
 --
--- Name: platform; Type: TABLE; Schema: public; Owner: postgres
+-- Name: platform; Type: TABLE; Schema: public; Owner: vandaq
 --
 
 CREATE TABLE public.platform (
@@ -212,10 +316,10 @@ CREATE TABLE public.platform (
 );
 
 
-ALTER TABLE public.platform OWNER TO postgres;
+ALTER TABLE public.platform OWNER TO vandaq;
 
 --
--- Name: platform_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: platform_id_seq; Type: SEQUENCE; Schema: public; Owner: vandaq
 --
 
 CREATE SEQUENCE public.platform_id_seq
@@ -226,10 +330,10 @@ CREATE SEQUENCE public.platform_id_seq
     CACHE 1;
 
 
-ALTER TABLE public.platform_id_seq OWNER TO postgres;
+ALTER TABLE public.platform_id_seq OWNER TO vandaq;
 
 --
--- Name: platform_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: platform_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: vandaq
 --
 
 ALTER SEQUENCE public.platform_id_seq OWNED BY public.platform.id;
@@ -310,6 +414,13 @@ ALTER TABLE ONLY public.acquisition_type ALTER COLUMN id SET DEFAULT nextval('pu
 
 
 --
+-- Name: alarm_type id; Type: DEFAULT; Schema: public; Owner: vandaq
+--
+
+ALTER TABLE ONLY public.alarm_type ALTER COLUMN id SET DEFAULT nextval('public.alarm_type_id_seq'::regclass);
+
+
+--
 -- Name: instrument id; Type: DEFAULT; Schema: public; Owner: vandaq
 --
 
@@ -338,7 +449,7 @@ ALTER TABLE ONLY public.parameter ALTER COLUMN id SET DEFAULT nextval('public.pa
 
 
 --
--- Name: platform id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: platform id; Type: DEFAULT; Schema: public; Owner: vandaq
 --
 
 ALTER TABLE ONLY public.platform ALTER COLUMN id SET DEFAULT nextval('public.platform_id_seq'::regclass);
@@ -372,6 +483,30 @@ ALTER TABLE ONLY public.acquisition_type
 
 ALTER TABLE ONLY public.acquisition_type
     ADD CONSTRAINT acquisition_type_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: alarm alarm_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.alarm
+    ADD CONSTRAINT alarm_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: alarm_severity alarm_severity_pkey; Type: CONSTRAINT; Schema: public; Owner: vandaq
+--
+
+ALTER TABLE ONLY public.alarm_severity
+    ADD CONSTRAINT alarm_severity_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: alarm_type alarm_type_pkey; Type: CONSTRAINT; Schema: public; Owner: vandaq
+--
+
+ALTER TABLE ONLY public.alarm_type
+    ADD CONSTRAINT alarm_type_pkey PRIMARY KEY (id);
 
 
 --
@@ -423,7 +558,7 @@ ALTER TABLE ONLY public.parameter
 
 
 --
--- Name: platform platform_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: platform platform_pkey; Type: CONSTRAINT; Schema: public; Owner: vandaq
 --
 
 ALTER TABLE ONLY public.platform
@@ -492,10 +627,38 @@ CREATE INDEX idx_acquisition_type_id ON public.acquisition_type USING btree (id)
 
 
 --
+-- Name: idx_alarm_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_alarm_id ON public.alarm USING btree (id) WITH (deduplicate_items='true');
+
+
+--
+-- Name: idx_alarm_severity_id; Type: INDEX; Schema: public; Owner: vandaq
+--
+
+CREATE INDEX idx_alarm_severity_id ON public.alarm_severity USING btree (id) WITH (deduplicate_items='true');
+
+
+--
+-- Name: idx_alarm_type_id; Type: INDEX; Schema: public; Owner: vandaq
+--
+
+CREATE INDEX idx_alarm_type_id ON public.alarm_type USING btree (id) WITH (deduplicate_items='true');
+
+
+--
 -- Name: idx_instrument_id; Type: INDEX; Schema: public; Owner: vandaq
 --
 
 CREATE INDEX idx_instrument_id ON public.instrument USING btree (id);
+
+
+--
+-- Name: idx_measurement_id; Type: INDEX; Schema: public; Owner: vandaq
+--
+
+CREATE INDEX idx_measurement_id ON public.measurement USING btree (id) WITH (deduplicate_items='true');
 
 
 --
@@ -506,7 +669,7 @@ CREATE INDEX idx_parameter_id ON public.parameter USING btree (id);
 
 
 --
--- Name: idx_platform_id; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_platform_id; Type: INDEX; Schema: public; Owner: vandaq
 --
 
 CREATE INDEX idx_platform_id ON public.platform USING btree (id) WITH (deduplicate_items='true');
@@ -531,6 +694,46 @@ CREATE INDEX idx_time_id ON public."time" USING btree (id);
 --
 
 CREATE INDEX idx_unit_id ON public.unit USING btree (id);
+
+
+--
+-- Name: alarm acq_time_fk; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.alarm
+    ADD CONSTRAINT acq_time_fk FOREIGN KEY (acquisition_time_id) REFERENCES public."time"(id);
+
+
+--
+-- Name: measurement_alarm alarm_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: vandaq
+--
+
+ALTER TABLE ONLY public.measurement_alarm
+    ADD CONSTRAINT alarm_id_fk FOREIGN KEY (alarm_id) REFERENCES public.alarm(id);
+
+
+--
+-- Name: alarm alarm_severity_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.alarm
+    ADD CONSTRAINT alarm_severity_id_fk FOREIGN KEY (alarm_severity_id) REFERENCES public.alarm_severity(id);
+
+
+--
+-- Name: alarm alarm_type_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.alarm
+    ADD CONSTRAINT alarm_type_id_fk FOREIGN KEY (alarm_type_id) REFERENCES public.alarm_type(id);
+
+
+--
+-- Name: alarm instrument_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.alarm
+    ADD CONSTRAINT instrument_id_fk FOREIGN KEY (instrument_id) REFERENCES public.instrument(id);
 
 
 --
@@ -590,6 +793,14 @@ ALTER TABLE ONLY public.measurement
 
 
 --
+-- Name: measurement_alarm measurement_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: vandaq
+--
+
+ALTER TABLE ONLY public.measurement_alarm
+    ADD CONSTRAINT measurement_id_fk FOREIGN KEY (measurement_id) REFERENCES public.measurement(id);
+
+
+--
 -- Name: measurement measurement_instrument_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: vandaq
 --
 
@@ -635,6 +846,22 @@ ALTER TABLE ONLY public.measurement
 
 ALTER TABLE ONLY public.measurement
     ADD CONSTRAINT measurement_unit_id_fkey FOREIGN KEY (unit_id) REFERENCES public.unit(id);
+
+
+--
+-- Name: alarm parameter_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.alarm
+    ADD CONSTRAINT parameter_id_fk FOREIGN KEY (parameter_id) REFERENCES public.parameter(id);
+
+
+--
+-- Name: alarm platform_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.alarm
+    ADD CONSTRAINT platform_id_fk FOREIGN KEY (platform_id) REFERENCES public.platform(id);
 
 
 --
