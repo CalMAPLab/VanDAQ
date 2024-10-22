@@ -23,7 +23,32 @@ class Acquirer:
         self.config = config_dict
         self.logger = logging.getLogger(self.config['logs']['logger_name'])
         if doqueue:
-            self.queue = posixmq.Queue('/measurements')
+            self.open_queue()
+
+    def open_queue(self):
+        myMaxMsgSize = self.config['queue']['max_msg_size']
+        myMaxMsgs = self.config['queue']['max_msgs']
+        myQname = self.config['queue']['name']
+        qExists = False
+        # check if queue already exists
+        try:
+            queue = posixmq.Queue(myQname)
+            qExists = True
+        except OSError as e:
+            self.logger.debug('Queue does not yet exist')
+        if qExists:
+            attribs = queue.qattr()
+            # if queue exists, check to make sure it is big enough
+            if attribs['max_size'] < myMaxMsgs or attribs['max_msgbytes'] < myMaxMsgSize:
+                # destroy the queue if it is too small
+                queue.close()
+                queue.unlink()
+                qExists = False
+        if not qExists:
+            # create the queue if it doesn't exist or has been detroyed
+            queue = posixmq.Queue(myQname, maxsize=myMaxMsgs, maxmsgsize=myMaxMsgSize)
+        self.queue = queue
+
 
     def get_next_instrument_record(self):
         # this is always overridden
@@ -68,10 +93,10 @@ class Acquirer:
                         res_parameters.append(items[i])
                         res_units.append(units[i])
                         res_acqTypes.append(acqTypes[i])
-                    elif '/' in formats[i]:
+                    elif items[i] == 'inst_date':
                         parsed = datetime.strptime(parts[i], formats[i])
                         date = parsed.date()
-                    elif ':' in formats[i]:
+                    elif items[i] == 'inst_time':
                         parsed = datetime.strptime(parts[i], formats[i])
                         time = parsed.time()
                     if time and date:
@@ -128,7 +153,7 @@ class SerialStreamAcquirer(Acquirer):
             if len(line.split(self.config['stream']['item_delimiter'])) == self.num_items_per_line:
                 dataMessage = self.parse_simple_string_to_record(line)
                 if len(dataMessage) > 0:
-                    self.queue.put(dataMessage)       
+                    self.send_measurement_to_queue(dataMessage)       
         
 class SimulatedAcquirer(Acquirer):
     def __init__(self, configdict):
