@@ -153,6 +153,35 @@ def submit_measurement(measurement, submit_time, config):
 	submissions.append(measurement)
 	return changed_file
 
+def open_queue(config, logger):
+	myMaxMsgSize = config['queue']['max_msg_size']
+	myMaxMsgs = config['queue']['max_msgs']
+	myQname = config['queue']['name']
+	qExists = False
+	# check if queue already exists
+	try:
+		queue = posixmq.Queue(myQname)
+		qExists = True
+	except OSError as e:
+		logger.debug('Queue does not yet exist')
+	if qExists:
+		attribs = queue.qattr()
+		# if queue exists, check to make sure it is big enough
+		if attribs['max_size'] < myMaxMsgs or attribs['max_msgbytes'] < myMaxMsgSize:
+			# destroy the queue if it is too small
+			queue.close()
+			queue.unlink()
+			qExists = False
+	if not qExists:
+		# create the queue if it doesn't exist or has been detroyed
+		queue = posixmq.Queue(myQname, maxsize=myMaxMsgs, maxmsgsize=myMaxMsgSize)
+	# KLUDGE-- bug in posixmq-- does not update internal member variables
+	# _max_msg_size and _maxsize to match actual queue attributes, but uses them to 
+	# size the receive buffer, causing "too big" error on large messages.  Set these variables.
+	attribs = queue.qattr()
+	queue._max_msg_size = attribs['max_msgbytes']
+	queue._maxsize = attribs['max_size']
+	return queue
 
 
 # load configuration file
@@ -185,9 +214,9 @@ handler.setLevel(logging.INFO)
 logger.addHandler(handler)
 
 logger.info('Starting collector')
-queue = posixmq.Queue('/measurements')
+queue = open_queue(config, logger)
 
-engine = create_engine('postgresql://vandaq:p3st3r@localhost:5432/vandaq-sandbox', echo=False)
+engine = create_engine(config['connect_string'], echo=False)
 
 Session = sessionmaker(bind=engine)
 session = Session()

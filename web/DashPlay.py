@@ -25,8 +25,9 @@ def get_last_valid_value(dataList, column):
 
 def get_instrument_measurements(engine):
     # Fetch the latest measurement set
+    print('getting measurements')
     df = get_measurements(engine, start_time=datetime.datetime.now()-datetime.timedelta(minutes=5))
-
+    print(df)
     outlist = []
     data = df.to_dict('records')
     instrument = ''
@@ -78,6 +79,7 @@ def create_grid_cell(graph,text):
                 "padding-bottom": "30%",
                 "display": "inline-block",
                 "margin": "10px",
+				"background-color": "black"
             },
             children=[
                 dcc.Graph(
@@ -89,6 +91,7 @@ def create_grid_cell(graph,text):
                         "left": 0,
                         "height": "100%",
                         "width": "100%",
+						"background-color": "black"
                     },
                 ),
                 html.Div(
@@ -98,10 +101,11 @@ def create_grid_cell(graph,text):
                         "top": "50%",
                         "left": "50%",
                         "transform": "translate(-50%, -50%)",
-                        "color": "red",
-                        "font-size": "24px",
-                        "font-weight": "bold",
-                        "text-align": "left",
+                        "color": "white",
+						"font-family": "sans-serif",
+  #                      "font-size": "24px",
+  #                      "font-weight": "bold",
+  #                      "text-align": "left",
                     },
                 ),
             ],
@@ -112,7 +116,12 @@ def create_grid_cell(graph,text):
 # Function that returns a list of objects (in this case, strings)
 def get_list_of_items():
     global sample_time 
+    before_query = datetime.datetime.now()
+    print('query starts '+before_query.strftime('%Y%m%d_%H%M%S'))
     measurements, df = get_instrument_measurements(engine)
+    after_query = datetime.datetime.now()
+    print('query completes '+after_query.strftime('%Y%m%d_%H%M%S'))
+    print(str((after_query-before_query).total_seconds())+' seconds')
     sample_time = measurements[0]
     items = []
     for instrument in measurements:
@@ -123,12 +132,12 @@ def get_list_of_items():
             instrument_name = html.H2(instrument['instrument'].replace('_',' '))
             reading_cells = [instrument_name]
             for reading in instrument['readings']:
-                reading_string = reading['parameter'] + ': ' + str(reading['value'])[0:8] + ' '+ reading['unit']
+                reading_string = reading['parameter'] + ': ' + '{:.2f}'.format(reading['value']) + ' '+ reading['unit']
                 reading_line = None
                 if 'engineering' in reading['type']:
-                    reading_line = html.H4(reading_string)  
+                    reading_line = html.Div(reading_string,className='engineering_reading')  
                 else:
-                    reading_line = html.H3(reading_string)
+                    reading_line = html.Div(reading_string,className='ambient_reading')
                 reading_cells.append(reading_line)
                 if 'seconds_ago' in reading.keys():
                     seconds_ago = reading['seconds_ago']
@@ -138,13 +147,21 @@ def get_list_of_items():
                 
     return items, sample_time
 
-# Define the layout of the app
-app.layout = html.Div([
-    dcc.Interval(id='interval-component', interval=15*1000, n_intervals=0),
-    html.H1('VanDAQ Operator Dashboard',style={'textAlign':'left'}),
-    html.Div(' Last sample time: '+ sample_time.strftime("%m/%d/%Y, %H:%M:%S"),id='sample_timestamp'),
 
-    html.Div(id='grid-container',style={"textAlign": "left"})
+local_styles ={
+    'font-family': 'sans-serif',
+    'background-color': 'black',
+    'color':'white'
+}
+
+refresh_secs = 1
+
+# Define the layout of the app
+app.layout = html.Div(children=[ 
+    dcc.Interval(id='interval-component', interval=refresh_secs*1000, n_intervals=0),
+    html.H1('VanDAQ Operator Dashboard',style={'text-align':'left'}),
+    html.Div(' Last sample time: '+ sample_time.strftime("%m/%d/%Y, %H:%M:%S"),id='sample_timestamp'),
+    html.Div(id='grid-container')
 ])
 
 @app.callback(

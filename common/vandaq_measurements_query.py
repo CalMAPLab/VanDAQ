@@ -6,7 +6,7 @@ from vandaq_schema import *
 
 # Assume engine is already created with the appropriate database URL
 # engine = create_engine('postgresql://user:password@host:port/dbname')
-engine = create_engine('postgresql://vandaq:p3st3r@128.32.222.186:5432/vandaq-sandbox', echo=False)
+engine = create_engine('postgresql://vandaq:p3st3r@169.229.157.3:5432/vandaq-sandbox', echo=False)
 # Create a session
 Session = sessionmaker(bind=engine)
 session = Session()
