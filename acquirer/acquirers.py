@@ -89,16 +89,24 @@ class Acquirer:
                 value = None
                 if items[i] != 'x':
                     if formats[i] == 'f':
-                        res_values.append(float(parts[i]))
-                        res_parameters.append(items[i])
-                        res_units.append(units[i])
-                        res_acqTypes.append(acqTypes[i])
+                        try:
+                            fl = float(parts[i])
+                        except:
+                            self.logger.error('bad item '+items[i]+'='+parts[i]+' in line \"'+line+'\"')
+                        else:
+                            res_values.append(float(parts[i]))
+                            res_parameters.append(items[i])
+                            res_units.append(units[i])
+                            res_acqTypes.append(acqTypes[i])
                     elif items[i] == 'inst_date':
                         parsed = datetime.strptime(parts[i], formats[i])
                         date = parsed.date()
                     elif items[i] == 'inst_time':
                         parsed = datetime.strptime(parts[i], formats[i])
                         time = parsed.time()
+                    elif items[i] == 'inst_datetime':
+                        parsed = datetime.strptime(parts[i], formats[i])
+                        instTime = parsed
                     if time and date:
                         instTime = datetime.combine(date, time)
 
