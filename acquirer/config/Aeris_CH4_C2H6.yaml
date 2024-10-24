@@ -1,0 +1,26 @@
+---
+platform: van1
+instrument: Aeris_CH4_C2H6
+type: simpleSerial
+queue:
+  name: "/dev-measurements"
+  max_msg_size: 8000
+  max_msgs: 50
+connection: serial
+serial:
+  device: "/dev/ttyUSB1"
+  baud: 9600
+measurement_delay_secs: 0 
+stream:
+  line_delimiter: "\r\n"
+  item_delimiter: ","
+  items: "inst_datetime,Inlet_Number,P,T0,T1,T2,T5,Tgas,CH4,H2O,C2H6,R,x,TEC_sink_temp,Wall_Code,x,x"
+  formats: "%m/%d/%Y %H:%M:%S.%f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,x,x" 
+  units: "datetime,count,mbar,deg_c,deg_c,deg_c,deg_c,deg_c,ppm,ppm,ppb,const,ratio,deg_c,count,x,x"
+  acqTypes: "inst_datetime,engineering,engineering,engineering,engineering,engineering,engineering,engineering,measurement_calibrated,measurement_calibrated,measurement_calibrated,engineering,measurement_calibrated,engineering,engineering,x,x"
+  
+logs:
+  log_dir: "/home/robin/vandaq/acquirer/log"
+  log_file: "acquirer_Aeris_CH4_C2H6.log"
+  log_level: "INFO"
+  logger_name: "Aeris_CH4_C2H6"
