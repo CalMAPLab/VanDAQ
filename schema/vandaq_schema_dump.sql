@@ -863,6 +863,33 @@ ALTER TABLE ONLY public.alarm
 ALTER TABLE ONLY public.alarm
     ADD CONSTRAINT platform_id_fk FOREIGN KEY (platform_id) REFERENCES public.platform(id);
 
+CREATE OR REPLACE VIEW public.measurement_expanded
+ AS
+ SELECT m.id AS measurement_id,
+    t1."time" AS acquisition_time,
+    t2."time" AS instrument_time,
+    t3."time" AS sample_time,
+    i.instrument AS instrument_name,
+    p.parameter AS parameter_name,
+    u.unit AS unit_name,
+    at.acquisition_type AS acquisition_type_name,
+    m.value,
+    m.string,
+    plat.platform AS platform_name
+   FROM measurement m
+     LEFT JOIN "time" t1 ON m.acquisition_time_id = t1.id
+     LEFT JOIN "time" t2 ON m.instrument_time_id = t2.id
+     LEFT JOIN "time" t3 ON m.sample_time_id = t3.id
+     LEFT JOIN instrument i ON m.instrument_id = i.id
+     LEFT JOIN parameter p ON m.parameter_id = p.id
+     LEFT JOIN unit u ON m.unit_id = u.id
+     LEFT JOIN acquisition_type at ON m.acquisition_type_id = at.id
+     LEFT JOIN platform plat ON m.platform_id = plat.id
+  ORDER BY t3."time";
+
+ALTER TABLE public.measurement_expanded
+    OWNER TO postgres;
+
 
 --
 -- PostgreSQL database dump complete
