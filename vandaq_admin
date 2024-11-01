@@ -1,0 +1,112 @@
+#!/usr/bin/python3
+import sys
+import os
+from glob import glob
+import subprocess
+import psutil
+
+args = sys.argv
+if 'python' in args[0]:
+	args = args[1:]
+
+acqDir = '/home/vandaq/vandaq/acquirer/'
+acqLogDir = acqDir+'log/'
+collDir = '/home/vandaq/vandaq/collector/' 
+collLogDir = collDir+'log/'
+processes = []
+
+def getAcquirerProcesses():
+	ps = []
+	for p in psutil.process_iter():
+		try:
+			status = p.status()
+		except Exception as e:
+			i=1
+		else: 
+			if p.status() != 'zombie':
+				cmdln = ' '.join(p.cmdline())
+				if 'vandaq_acquirer.py' in cmdln:
+					ps.append(p)
+	return ps
+
+
+def getCollectorProcesses():
+	ps = []
+	for p in psutil.process_iter():
+		try:
+	  		status = p.status()
+		except Exception as e:
+			i=1
+		else: 
+			if p.status() != 'zombie':
+				cmdln = ' '.join(p.cmdline())
+				if 'vandaq_collector.py' in cmdln:
+					ps.append(p)
+	return ps
+
+
+def startup():
+	print('starting VanDAQ processes')
+	if len(args) > 2:
+		basedir = args[2]
+	else:
+		basedir = acqDir+'config/'
+	
+	if basedir[-1] != '/':
+		basedir += '/'
+
+	this_env = os.environ.copy()
+	cmd = ['python3',collDir+'vandaq_collector.py', collDir+'vandaq_collector.yaml']
+	logFileName = collLogDir + 'collector.log'
+	configs = glob(basedir+'*.yaml')
+	logFile = open(logFileName,'a')
+	proc = subprocess.Popen(cmd, env=this_env, stdout=logFile)
+	#proc.wait()
+	print('Started collector '+str(cmd)+'   pid='+str(proc.pid))
+	processes.append({'cmd':cmd, 'pid':proc.pid})
+	if len(configs) > 0:
+		for config in configs:
+			logFileName = acqLogDir + os.path.basename(config.replace('.yaml',''))
+			logFile = open(logFileName,'a')
+			cmd = ['python3',acqDir+'vandaq_acquirer.py',config]
+			proc = subprocess.Popen(cmd, env=this_env, stdout=logFile)
+			#proc.wait()
+			pid = proc.pid
+			print('Started acquirer '+str(cmd)+'   pid='+str(pid))
+			processes.append({'cmd':cmd, 'pid':proc.pid})
+
+def stop():
+	print('Stopping VanDAQ processes')
+	ps = getCollectorProcesses()
+	for p in ps:
+		print('stopping '+' '.join(p.cmdline())+' pid '+str(p.pid)) 
+		p.kill()
+		p.wait()
+	ps = getAcquirerProcesses()
+	for p in ps:
+		print('stopping '+' '.join(p.cmdline())+' pid '+str(p.pid)) 
+		p.kill()
+		p.wait()
+
+def status():
+	print('Looking for VanDAQ processes')
+	ps = getCollectorProcesses() + getAcquirerProcesses()
+	if not ps:
+		print('No VanDAQ process running')
+	else:
+		print('command \t pid \t status')
+		for p in ps:
+			line = ' '.join(p.cmdline())+'\t'
+			line += str(p.pid)+'\t'
+			line += p.status()
+			print(line)
+
+commands = {'startup':startup, 'stop':stop, 'status':status}
+
+if len(args) >= 2 and args[1] in commands.keys():
+	command = commands[args[1]]
+	command()
+else:
+	print('no command found')
+
+
