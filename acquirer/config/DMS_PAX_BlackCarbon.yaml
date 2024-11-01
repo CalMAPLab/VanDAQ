@@ -8,7 +8,7 @@ queue:
   max_msgs: 50
 connection: serial
 serial:
-  device: "/dev/ttyUSB0"
+  device: "/dev/usb_serial_DMT_PAX_BC"
   baud: 115200
 measurement_delay_secs: 0 
 stream:
@@ -17,7 +17,7 @@ stream:
   items: "x,x,x,x,x,x,Bscat,scat_raw,Babs,Babs_phase,Babs_noise,laser_power,laser_power_phase,Q_factor,mic_P_at_res_freq,res_freq,backgrnd_Bscat,mic_raw,bkgrnd_Babs,bkgrnd_Babs_phase,Bext,single_scat_albedo,BC_mass,sample_T,sample_RH,sample_dewpoint,x,x,x,x,x,x,x,x,x,plus5V,plus3.3V,x,5Vdig,rtc_batt,x,x,laser_pd_current,laser_current,laser_T,x,cell_P,inlet_P,sample_pump_P,plus12V,sample_count,mode,countdown_timer,disk_free_space,laser_on_time,x,usb_status,alarms,inst_date,inst_time"
   formats: "x,x,x,x,x,x,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,x,x,x,x,x,x,x,x,x,f,f,x,f,f,x,x,f,f,f,x,f,f,f,f,f,f,f,f,f,x,f,s,%Y-%m-%d,%H:%M:%S"
   units: "x,x,x,x,x,x,1/Mm,counts,1/Mm,deg,1/Mm,W,deg,counts,dB,Hz,1/Mm,counts,1/Mm,deg,1/Mm,counts,ug/m3,temp_C,%_rh,temp_C,x,x,x,x,x,x,x,x,x,V,V,x,V,V,x,x,Amp,Amp,temp_C,x,mbar,mbar,mbar,V,quantity,quantity,secs,Gbytes,hours,x,quantity,string,date,time"
-  acqTypes: "x,x,x,x,x,x,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,measurement_calibrated,engineering,engineering,engineering,x,x,x,x,x,x,x,x,x,engineering,engineering,x,engineering,engineering,x,x,engineering,engineering,engineering,x,engineering,engineering,engineering,plus12V,engineering,engineering,engineering,engineering,engineering,x,engineering,alarms,inst_date,inst_time"
+  acqTypes: "x,x,x,x,x,x,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,measurement_calibrated,engineering,engineering,engineering,x,x,x,x,x,x,x,x,x,engineering,engineering,x,engineering,engineering,x,x,engineering,engineering,engineering,x,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,x,engineering,alarms,inst_date,inst_time"
 alarms:
   parsed:
     Bscat:
@@ -271,7 +271,7 @@ alarms:
           level: ALARM
           message: "Real time clock battery out of bounds"      
 logs:
-  log_dir: "/home/robin/vandaq/acquirer/log"
+  log_dir: "/home/vandaq/vandaq/acquirer/log"
   log_file: "acquirer_DMS_PAX_BlackCarbon.log"
   log_level: "INFO"
   logger_name: "DMS_PAX_BlackCarbon"

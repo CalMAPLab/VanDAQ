@@ -4,11 +4,11 @@ queue:
   max_msgs: 50
 connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-dev"
 logs:
-  log_dir: "/home/robin/vandaq/collector/log"
+  log_dir: "/home/vandaq/vandaq/collector/log"
   log_file: "collector.log"
   log_level: "INFO"
   logger_name: "collector"
 submissions:
-  submit_file_dir: "/home/robin/vandaq/collector/submission"
+  submit_file_dir: "/home/vandaq/vandaq/collector/submission"
   submit_file_basename: "submit_van1_"
   submit_file_minutes: 1
