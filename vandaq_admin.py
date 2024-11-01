@@ -9,9 +9,9 @@ args = sys.argv
 if 'python' in args[0]:
 	args = args[1:]
 
-acqDir = '/home/robin/vandaq/acquirer/'
+acqDir = '/home/vandaq/vandaq/acquirer/'
 acqLogDir = acqDir+'log/'
-collDir = '/home/robin/vandaq/collector/' 
+collDir = '/home/vandaq/vandaq/collector/' 
 collLogDir = collDir+'log/'
 processes = []
 
@@ -40,7 +40,7 @@ def startup():
 	if len(args) > 2:
 		basedir = args[2]
 	else:
-		basedir = '/home/robin/vandaq/acquirer/config/'
+		basedir = acqDir+'config/'
 	
 	if basedir[-1] != '/':
 		basedir += '/'

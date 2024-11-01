@@ -8,7 +8,7 @@ queue:
   max_msgs: 50
 connection: serial
 serial:
-  device: "/dev/ttyUSB1"
+  device: "/dev/usb_serial_AERIS_CH4_C2H6"
   baud: 9600
 measurement_delay_secs: 0 
 stream:
@@ -20,7 +20,7 @@ stream:
   acqTypes: "inst_datetime,engineering,engineering,engineering,engineering,engineering,engineering,engineering,measurement_calibrated,measurement_calibrated,measurement_calibrated,engineering,measurement_calibrated,engineering,engineering,x,x"
   
 logs:
-  log_dir: "/home/robin/vandaq/acquirer/log"
+  log_dir: "/home/vandaq/vandaq/acquirer/log"
   log_file: "acquirer_Aeris_CH4_C2H6.log"
   log_level: "INFO"
   logger_name: "Aeris_CH4_C2H6"

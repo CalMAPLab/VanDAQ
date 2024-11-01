@@ -157,12 +157,16 @@ class SerialStreamAcquirer(Acquirer):
 
     def run(self):
         while True:
-            line = self.serial_port.readline().decode()
-            if len(line.split(self.config['stream']['item_delimiter'])) == self.num_items_per_line:
-                dataMessage = self.parse_simple_string_to_record(line)
-                if len(dataMessage) > 0:
-                    self.send_measurement_to_queue(dataMessage)       
-        
+            try:
+                line = self.serial_port.readline().decode()
+            except Exception as e:
+                self.logger.error('Error reading serial port '+config['serial']['device']+' :'+ e)
+            else:
+                if len(line.split(self.config['stream']['item_delimiter'])) == self.num_items_per_line:
+                    dataMessage = self.parse_simple_string_to_record(line)
+                    if len(dataMessage) > 0:
+                        self.send_measurement_to_queue(dataMessage)       
+            
 class SimulatedAcquirer(Acquirer):
     def __init__(self, configdict):
         Acquirer.__init__(self, configdict)
