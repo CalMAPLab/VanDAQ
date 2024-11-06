@@ -887,6 +887,7 @@ CREATE OR REPLACE VIEW public.measurement_expanded
      LEFT JOIN platform plat ON m.platform_id = plat.id
   ORDER BY t3."time";
 
+
 ALTER TABLE public.measurement_expanded
     OWNER TO postgres;
 
