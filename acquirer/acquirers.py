@@ -144,28 +144,40 @@ class SerialStreamAcquirer(Acquirer):
     baudrate = 19200
     serial_port = None
     num_items_per_line = 0
+    serial_open = False
+    serial_open_error_logged = False
     
     def __init__(self, configdict):
         Acquirer.__init__(self,configdict)
         self.num_items_per_line = len(self.config['stream']['items'].split(','))
-        
-        try:
-            self.serial_port = serial.Serial(self.config['serial']['device'],baudrate=self.config['serial']['baud'])    
-        except serial.SerialException as e:
-            self.logger.error('Error opening serial port '+config['serial']['device']+' :'+ e)
-            exit()
-
+     
+    def check_serial_open(self):
+        if not self.serial_open:
+            try:
+                self.serial_port = serial.Serial(self.config['serial']['device'],baudrate=self.config['serial']['baud'])    
+                self.serial_open = True
+                self.serial_open_error_logged = False
+            except serial.SerialException as e:
+                if not self.serial_open_error_logged:
+                    self.logger.error('Error opening serial port '+self.config['serial']['device']+' :'+ str(e))
+                    self.serial_open_error_logged = True
+        return self.serial_open
+               
+                
     def run(self):
         while True:
-            try:
-                line = self.serial_port.readline().decode()
-            except Exception as e:
-                self.logger.error('Error reading serial port '+config['serial']['device']+' :'+ e)
+            if self.check_serial_open():
+                try:
+                    line = self.serial_port.readline().decode()
+                except Exception as e:
+                    self.logger.error('Error reading serial port '+config['serial']['device']+' :'+ e)
+                else:
+                    if len(line.split(self.config['stream']['item_delimiter'])) == self.num_items_per_line:
+                        dataMessage = self.parse_simple_string_to_record(line)
+                        if len(dataMessage) > 0:
+                            self.send_measurement_to_queue(dataMessage)
             else:
-                if len(line.split(self.config['stream']['item_delimiter'])) == self.num_items_per_line:
-                    dataMessage = self.parse_simple_string_to_record(line)
-                    if len(dataMessage) > 0:
-                        self.send_measurement_to_queue(dataMessage)       
+                sleep(1)
             
 class SimulatedAcquirer(Acquirer):
     def __init__(self, configdict):
