@@ -1,8 +1,10 @@
 import sys
 import serial
+import socket
 import yaml
 import numpy as np
 import logging
+import pickle
 import random
 from datetime import datetime, timedelta
 from time import sleep
@@ -178,7 +180,128 @@ class SerialStreamAcquirer(Acquirer):
                             self.send_measurement_to_queue(dataMessage)
             else:
                 sleep(1)
-            
+
+class NetworkAcquirer(Acquirer):
+    def __init__(self, configdict):
+        Acquirer.__init__(self, configdict)
+        self.socket = None
+        self.socket_open = False
+        self.conn = None
+        self.addr = None
+
+    def check_socket_open(self):
+        host = self.config['network']['address']
+        port = self.config['network']['port']
+        if not self.socket or not self.socket_open:
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                self.socket.bind((host, port))
+                self.socket.listen()
+                # Accept a connection
+                self.conn, self.addr = self.socket.accept()
+                self.socket_open = True
+            except Exception as e:
+                self.socket_open = False
+        return self.socket_open
+
+    def read_message_from_socket(self):
+        message = None
+        # Receive data from the client
+        length_data = self.conn.recv(4)
+        if length_data:
+            message_length = int.from_bytes(length_data, 'big')
+            received_data = b""
+            while len(received_data) < message_length:
+                chunk = self.conn.recv(1024)
+                if chunk:
+                    received_data += chunk
+            if len(received_data) == message_length:
+                message = pickle.loads(received_data)
+        return message
+
+class NetworkStreamingAcquirer(NetworkAcquirer):
+    def __init__(self, configdict):
+        NetworkAcquirer.__init__(self, configdict)
+
+    def parse_dict_to_record(self,message_dict,dict_key):
+        # parses a dictionary object received in a message 
+        # as acquared from the instrument
+        # and returns a list of dictionaries, one dict for each parameter
+        # read by the instrument
+        # this clearly needs a rewrite        
+        item_keys = self.config[dict_key]['keys'].split(',')
+        item_keys = [float(key) if key.isnumeric() else key for key in item_keys]
+
+        items = self.config[dict_key]['items'].split(',')
+        resultList = []
+        formats = self.config[dict_key]['formats'].split(',')
+        units = self.config[dict_key]['units'].split(',')
+        acqTypes = self.config[dict_key]['acqTypes'].split(',')
+        res_values = []
+        res_parameters = []
+        res_units = []
+        res_acqTypes = []
+        time = None
+        date = None
+        instTime = None
+        parts = [message_dict[dict_key][key] for key in item_keys]
+        for i in range(0,len(parts)):
+            if items[i] != 'x':
+                if formats[i] == 'f':
+                    try:
+                        fl = float(parts[i])
+                    except:
+                        self.logger.error('bad item '+items[i]+'='+parts[i]+' in line \"'+line+'\"')
+                    else:
+                        res_values.append(float(parts[i]))
+                        res_parameters.append(items[i])
+                        res_units.append(units[i])
+                        res_acqTypes.append(acqTypes[i])
+                elif items[i] == 'inst_date':
+                    parsed = datetime.strptime(parts[i], formats[i])
+                    date = parsed.date()
+                elif items[i] == 'inst_time':
+                    parsed = datetime.strptime(parts[i], formats[i])
+                    time = parsed.time()
+                elif items[i] == 'inst_datetime':
+                    parsed = datetime.strptime(parts[i], formats[i])
+                    instTime = parsed
+                if time and date:
+                    instTime = datetime.combine(date, time)
+    
+        for i in range(0,len(res_values)):		
+            resultDict = {
+                'platform':self.config['platform'],
+                'instrument':self.config['instrument'],
+                'parameter':res_parameters[i],
+                'unit':res_units[i],
+                'acquisition_type':res_acqTypes[i],
+                'acquisition_time':datetime.now(),
+                'sample_time':datetime.now(),
+                'instrument_time':instTime,
+                'value':res_values[i]} 
+            resultList.append(resultDict)
+        return resultList 
+
+    def run(self):
+        while True:
+            if self.check_socket_open():
+                try:
+                    message = self.read_message_from_socket()
+                except Exception as e:
+                    self.logger.error('Error reading from network socket '+self.config['network']['port']+' :'+ e)
+                else:
+                    if message:
+                        dicts = self.config['dictionaries'].split(',')
+                        for dict in dicts:
+                            dataMessage = self.parse_dict_to_record(message,dict)
+                            if len(dataMessage) > 0:
+                                self.send_measurement_to_queue(dataMessage)
+            else:
+                sleep(1)
+
+          
+                      
 class SimulatedAcquirer(Acquirer):
     def __init__(self, configdict):
         Acquirer.__init__(self, configdict)
@@ -238,8 +361,12 @@ class AquirerFactory():
     def makeSimulatorAcquirer(self, config):
         acquirer = SimulatedAcquirer(config)
         return acquirer
+
+    def makeNetworkStreamingAcquirer(self, config):
+        acquirer = NetworkStreamingAcquirer(config)
+        return acquirer
     
-    selector = {'simpleSerial':makeSerialAcquirer, 'simulated':makeSimulatorAcquirer }
+    selector = {'simpleSerial':makeSerialAcquirer, 'simulated':makeSimulatorAcquirer, 'networkStreaming':makeNetworkStreamingAcquirer }
 
     def make(self,config):
         maker = self.selector[config['type']]

@@ -1,0 +1,25 @@
+---
+platform: van1
+instrument: VOCUS
+type: networkStreaming
+queue:
+  name: "/dev-measurements"
+  max_msg_size: 8000
+  max_msgs: 50
+connection: network
+network:
+  address: "0.0.0.0"
+  port: 6969
+measurement_delay_secs: 0 
+dictionaries: "ms"
+ms:
+  keys: "33,45,47,59,63,78,79,107,109,121,125,137,371"
+  items: "m/z 33,m/z 45,m/z 47,m/z 59,m/z 63,m/z 78,m/z 79,m/z 107,m/z 109,m/z 121,m/z 125,m/z 137,m/z 371"
+  formats: "f,f,f,f,f,f,f,f,f,f,f,f,f" 
+  units: "count,count,count,count,count,count,count,count,count,count,count,count,count"
+  acqTypes: "measurement_raw,measurement_raw,measurement_raw,measurement_raw,measurement_raw,measurement_raw,measurement_raw,measurement_raw,measurement_raw,measurement_raw,measurement_raw,measurement_raw,measurement_raw"  
+logs:
+  log_dir: "/home/vandaq/vandaq/acquirer/log"
+  log_file: "acquirer_VOCUS.log"
+  log_level: "INFO"
+  logger_name: "VOCUS"
