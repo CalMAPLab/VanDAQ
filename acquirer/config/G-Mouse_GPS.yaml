@@ -1,0 +1,19 @@
+---
+platform: van1
+instrument: G-Mouse_GPS
+type: serial_nmea_GPS
+queue:
+  name: "/dev-measurements"
+  max_msg_size: 8000
+  max_msgs: 50
+connection: serial
+serial:
+  device: "/dev/usb_serial_G-Mouse_GPS"
+  baud: 9600
+measurement_delay_secs: 0 
+  
+logs:
+  log_dir: "/home/vandaq/vandaq/acquirer/log"
+  log_file: "G-Mouse_GPS.log"
+  log_level: "INFO"
+  logger_name: "G-Mouse_GPS"

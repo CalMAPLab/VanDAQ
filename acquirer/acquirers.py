@@ -8,6 +8,7 @@ import pickle
 import random
 from datetime import datetime, timedelta
 from time import sleep
+import pynmea2
 
 doqueue = True
 if doqueue:
@@ -151,8 +152,11 @@ class SerialStreamAcquirer(Acquirer):
     
     def __init__(self, configdict):
         Acquirer.__init__(self,configdict)
-        self.num_items_per_line = len(self.config['stream']['items'].split(','))
-     
+        try:
+            self.num_items_per_line = len(self.config['stream']['items'].split(','))
+        except Exception as e:
+            pass
+        
     def check_serial_open(self):
         if not self.serial_open:
             try:
@@ -300,7 +304,60 @@ class NetworkStreamingAcquirer(NetworkAcquirer):
             else:
                 sleep(1)
 
-          
+class SerialNmeaGPSAcquirer(SerialStreamAcquirer):
+    def __init__(self, configdict):
+        SerialStreamAcquirer.__init__(self, configdict)
+
+    def make_measurement_item(self, parameter, unit, value, string=None, timestamp=None):
+        resultDict = {
+            'platform':self.config['platform'],
+            'instrument':self.config['instrument'],
+            'parameter':parameter,
+            'unit':unit,
+            'acquisition_type':'GPS',
+            'acquisition_time':datetime.now(),
+            'sample_time':datetime.now(),
+            'value':value}
+        if timestamp:
+            resultDict['instrument_time'] = timestamp
+        if string:
+            resultDict['string'] = string
+        return resultDict
+            
+
+    def process_nmea_sentence(self, sentence):
+        try:
+            # Parse the NMEA sentence
+            msg = pynmea2.parse(sentence)
+
+            # Only process messages with position data
+            messages = []
+            if isinstance(msg, pynmea2.types.talker.RMC):
+                timeStamp = msg.timestamp
+                messages.append(self.make_measurement_item('latitude','lat',float(msg.latitude),timestamp = timeStamp))
+                messages.append(self.make_measurement_item('longitude','lon',float(msg.longitude),timestamp = timeStamp))
+                if msg.spd_over_grnd:
+                    messages.append(self.make_measurement_item('speed','m/s',float(msg.spd_over_grnd)*0.514444,timestamp = timeStamp))
+                if msg.true_course:
+                    messages.append(self.make_measurement_item('direction','deg',float(msg.true_course),timestamp = timeStamp))
+                return messages
+        except pynmea2.ParseError as e:
+            self.logger.error(f"Failed to parse NMEA sentence: {e}")
+            return None
+
+    def run(self):
+        while True:            
+            if self.check_serial_open():
+                try:
+                    line = self.serial_port.readline().decode('ascii', errors='replace').strip()
+                except Exception as e:
+                    self.logger.error('Error reading serial port '+self.config['serial']['device']+' :'+ e)
+                else:
+                    messages = self.process_nmea_sentence(line)
+                    if messages:
+                        self.send_measurement_to_queue(messages)                           
+            else:
+                sleep(1)        
                       
 class SimulatedAcquirer(Acquirer):
     def __init__(self, configdict):
@@ -365,8 +422,12 @@ class AquirerFactory():
     def makeNetworkStreamingAcquirer(self, config):
         acquirer = NetworkStreamingAcquirer(config)
         return acquirer
+
+    def makeSerialNmeaGPSAcquirer(self, config):
+        acquirer = SerialNmeaGPSAcquirer(config)
+        return acquirer
     
-    selector = {'simpleSerial':makeSerialAcquirer, 'simulated':makeSimulatorAcquirer, 'networkStreaming':makeNetworkStreamingAcquirer }
+    selector = {'simpleSerial':makeSerialAcquirer, 'simulated':makeSimulatorAcquirer, 'networkStreaming':makeNetworkStreamingAcquirer, 'serial_nmea_GPS':makeSerialNmeaGPSAcquirer}
 
     def make(self,config):
         maker = self.selector[config['type']]
@@ -381,3 +442,4 @@ if __name__ == '__main__':
     factory = AquirerFactory()
     acq = factory.make(config)
     acq.run()
+    
