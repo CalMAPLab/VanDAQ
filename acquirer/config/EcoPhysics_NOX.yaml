@@ -2,6 +2,7 @@
 platform: van1
 instrument: EcoPhysics_NOX
 type: simpleSerial
+#verbose: 1
 queue:
   name: "/dev-measurements"
   max_msg_size: 8000

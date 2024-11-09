@@ -15,7 +15,8 @@ if doqueue:
     from  ipcqueue import posixmq
 
 class Acquirer:
-    def __init__(self, config_dict):    
+    def __init__(self, config_dict):  
+        self.verbose = False  
         self.last_acquire_time = datetime.now()
         self.secs_since_last_acquire = 0
         self.measurements = []
@@ -25,6 +26,16 @@ class Acquirer:
         self.sim_direction = 1
         self.config = config_dict
         self.logger = logging.getLogger(self.config['logs']['logger_name'])
+        try:
+            if self.config['verbose'] > 0:
+                self.verbose = True
+        except Exception as e:
+            pass
+        self.measurement_delay = 0
+        try:
+            self.measurement_delay = self.config['measurement_delay_secs']
+        except Exception as e:
+            pass
         if doqueue:
             self.open_queue()
 
@@ -65,6 +76,8 @@ class Acquirer:
             if doqueue:
                 self.logger.debug('queuing %s', str(measurements))
                 self.queue.put(measurements)
+                if self.verbose:
+                    print(str(measurements))
             else:
                 self.logger.debug('not queuing %s', str(measurements))
         
@@ -112,6 +125,9 @@ class Acquirer:
                         instTime = parsed
                     if time and date:
                         instTime = datetime.combine(date, time)
+            
+            acquisition_time = datetime.now().replace(microsecond=0)
+            sample_time = acquisition_time - timedelta(seconds = self.measurement_delay)
 
             for i in range(0,len(res_values)):		
                 resultDict = {
@@ -120,8 +136,8 @@ class Acquirer:
                     'parameter':res_parameters[i],
                     'unit':res_units[i],
                     'acquisition_type':res_acqTypes[i],
-                    'acquisition_time':datetime.now(),
-                    'sample_time':datetime.now(),
+                    'acquisition_time':acquisition_time,
+                    'sample_time':sample_time,
                     'instrument_time':instTime,
                     'value':res_values[i]} 
                 resultList.append(resultDict)
@@ -272,6 +288,9 @@ class NetworkStreamingAcquirer(NetworkAcquirer):
                     instTime = parsed
                 if time and date:
                     instTime = datetime.combine(date, time)
+
+        acquisition_time = datetime.now().replace(microsecond=0)
+        sample_time = acquisition_time - timedelta(seconds = self.measurement_delay)
     
         for i in range(0,len(res_values)):		
             resultDict = {
@@ -280,8 +299,8 @@ class NetworkStreamingAcquirer(NetworkAcquirer):
                 'parameter':res_parameters[i],
                 'unit':res_units[i],
                 'acquisition_type':res_acqTypes[i],
-                'acquisition_time':datetime.now(),
-                'sample_time':datetime.now(),
+                'acquisition_time':acquisition_time,
+                'sample_time':sample_time,
                 'instrument_time':instTime,
                 'value':res_values[i]} 
             resultList.append(resultDict)
@@ -309,14 +328,17 @@ class SerialNmeaGPSAcquirer(SerialStreamAcquirer):
         SerialStreamAcquirer.__init__(self, configdict)
 
     def make_measurement_item(self, parameter, unit, value, string=None, timestamp=None):
+        acquisition_time = datetime.now().replace(microsecond=0)
+        sample_time = acquisition_time - timedelta(seconds = self.measurement_delay)
+
         resultDict = {
             'platform':self.config['platform'],
             'instrument':self.config['instrument'],
             'parameter':parameter,
             'unit':unit,
             'acquisition_type':'GPS',
-            'acquisition_time':datetime.now(),
-            'sample_time':datetime.now(),
+            'acquisition_time': acquisition_time,
+            'sample_time':  sample_time,
             'value':value}
         if timestamp:
             resultDict['instrument_time'] = timestamp
@@ -346,18 +368,32 @@ class SerialNmeaGPSAcquirer(SerialStreamAcquirer):
             return None
 
     def run(self):
-        while True:            
+        buffer = ""
+        while True:
             if self.check_serial_open():
                 try:
-                    line = self.serial_port.readline().decode('ascii', errors='replace').strip()
+                    # Read all available data from the serial port
+                    data = self.serial_port.read(self.serial_port.in_waiting or 1).decode('ascii', errors='replace')
+                    
+                    # Append data to the buffer
+                    buffer += data
+
+                    # Split buffer by carriage return '\r'
+                    lines = buffer.split('\r')
+                    
+                    # Process each complete sentence in the buffer
+                    for line in lines[:-1]:
+                        line = line.strip()
+                        if line.startswith('$'):
+                            message = self.process_nmea_sentence(line)
+                            if message:
+                                self.send_measurement_to_queue(message)
+
+                    # Keep the last incomplete sentence in the buffer
+                    buffer = lines[-1] if lines[-1] else ""
                 except Exception as e:
-                    self.logger.error('Error reading serial port '+self.config['serial']['device']+' :'+ e)
-                else:
-                    messages = self.process_nmea_sentence(line)
-                    if messages:
-                        self.send_measurement_to_queue(messages)                           
-            else:
-                sleep(1)        
+                    self.logger.error('Error reading serial port ' + self.config['serial']['device'] + ' :' + str(e))
+
                       
 class SimulatedAcquirer(Acquirer):
     def __init__(self, configdict):
