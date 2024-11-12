@@ -61,7 +61,7 @@ def insert_measurment_into_database(session, message):
 			session.add(acq_time_record)
 			session.flush()  # Ensure the ID is generated
 
-		inst_has_timestamp = (type(message['instrument_time']).__name__ == 'datetime')
+		inst_has_timestamp = 'instrument_time' in message and (type(message['instrument_time']).__name__ == 'datetime')
 
 		if inst_has_timestamp:
 			# Check if the instrument time already exists, otherwise insert it
