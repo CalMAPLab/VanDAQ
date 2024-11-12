@@ -60,7 +60,7 @@ def startup():
 	logFileName = collLogDir + 'collector.log'
 	configs = glob(basedir+'*.yaml')
 	logFile = open(logFileName,'a')
-	proc = subprocess.Popen(cmd, env=this_env, stdout=logFile)
+	proc = subprocess.Popen(cmd, env=this_env, stdout=logFile, stderr=logFile)
 	#proc.wait()
 	print('Started collector '+str(cmd)+'   pid='+str(proc.pid))
 	processes.append({'cmd':cmd, 'pid':proc.pid})
@@ -69,7 +69,7 @@ def startup():
 			logFileName = acqLogDir + os.path.basename(config.replace('.yaml',''))
 			logFile = open(logFileName,'a')
 			cmd = ['python3',acqDir+'vandaq_acquirer.py',config]
-			proc = subprocess.Popen(cmd, env=this_env, stdout=logFile)
+			proc = subprocess.Popen(cmd, env=this_env, stdout=logFile, stderr=logFile)
 			#proc.wait()
 			pid = proc.pid
 			print('Started acquirer '+str(cmd)+'   pid='+str(pid))
