@@ -74,26 +74,28 @@ class Acquirer:
     def send_measurement_to_queue(self, measurements):
         if len(measurements) > 0:
             if doqueue:
-                self.logger.debug('queuing %s', str(measurements))
+                #self.logger.debug('queuing %s', str(measurements))
                 self.queue.put(measurements)
                 if self.verbose:
                     print(str(measurements))
             else:
                 self.logger.debug('not queuing %s', str(measurements))
         
-    def parse_simple_string_to_record(self,line):
+    def parse_simple_string_to_record(self,line,params_key, item_delimiter = ','):
         # parses a string record as acquared from the instrument
         # and returns a list fo dictionaries, one dict for each parameter
         # read by the instrument
-        # this clearly needs a rewrite        
-        parts = line.strip().split(self.config['stream']['item_delimiter'])
-        items = self.config['stream']['items'].split(',')
+        # this clearly needs a rewrite 
+        if 'item_delimiter' in self.config[params_key]:
+            item_delimiter = self.config[params_key]['item_delimiter']
+        parts = line.strip().split(item_delimiter)
+        items = self.config[params_key]['items'].split(',')
         resultList = []
 
         if len(parts) == len(items):
-            formats = self.config['stream']['formats'].split(',')
-            units = self.config['stream']['units'].split(',')
-            acqTypes = self.config['stream']['acqTypes'].split(',')
+            formats = self.config[params_key]['formats'].split(',')
+            units = self.config[params_key]['units'].split(',')
+            acqTypes = self.config[params_key]['acqTypes'].split(',')
             res_values = []
             res_parameters = []
             res_units = []
@@ -101,6 +103,7 @@ class Acquirer:
             time = None
             date = None
             instTime = None
+            next_day = False
             for i in range(0,len(parts)):
                 value = None
                 if items[i] != 'x':
@@ -118,12 +121,22 @@ class Acquirer:
                         parsed = datetime.strptime(parts[i], formats[i])
                         date = parsed.date()
                     elif items[i] == 'inst_time':
+                        # BUG HERE: some instruments deliver 24:00:00, python doesn't handle
+                        if parts[i] == '24:00:00':
+                            parts[i] == '00:00:00'
+                            next_day = True
                         parsed = datetime.strptime(parts[i], formats[i])
                         time = parsed.time()
                     elif items[i] == 'inst_datetime':
-                        parsed = datetime.strptime(parts[i], formats[i])
+                        if '24:00:00' in parts[i]:
+                            parts[i].replace('24:00:00', '00:00:00')
+                            parsed = datetime.strptime(parts[i], formats[i]) + timedelta(days=1)
+                        else:
+                            parsed = datetime.strptime(parts[i], formats[i])
                         instTime = parsed
                     if time and date:
+                        if next_day:
+                            date += timedelta(days=1)
                         instTime = datetime.combine(date, time)
             
             acquisition_time = datetime.now().replace(microsecond=0)
@@ -195,7 +208,7 @@ class SerialStreamAcquirer(Acquirer):
                     self.logger.error('Error reading serial port '+config['serial']['device']+' :'+ e)
                 else:
                     if len(line.split(self.config['stream']['item_delimiter'])) == self.num_items_per_line:
-                        dataMessage = self.parse_simple_string_to_record(line)
+                        dataMessage = self.parse_simple_string_to_record(line,'stream')
                         if len(dataMessage) > 0:
                             self.send_measurement_to_queue(dataMessage)
             else:
@@ -227,97 +240,62 @@ class NetworkAcquirer(Acquirer):
     def read_message_from_socket(self):
         message = None
         # Receive data from the client
-        length_data = self.conn.recv(4)
-        if length_data:
-            message_length = int.from_bytes(length_data, 'big')
-            received_data = b""
-            while len(received_data) < message_length:
-                chunk = self.conn.recv(1024)
-                if chunk:
-                    received_data += chunk
-            if len(received_data) == message_length:
-                message = pickle.loads(received_data)
+        success = False
+        while  not success:
+            self.logger.debug('About to recieve length from network socket '+str(self.config['network']['port']))
+            length_data = self.conn.recv(1024)
+            if len(length_data) != 4:
+                self.logger.error('Error receiving message length, len = '+str(len(length_data)))
+                continue
+            self.logger.debug('received length = '+ str(int.from_bytes(length_data, 'big')))
+            if length_data:
+                message_length = int.from_bytes(length_data, 'big')
+                received_data = b""
+                while len(received_data) < message_length:
+                    chunk = self.conn.recv(1024)
+                    self.logger.debug('received chunk of length = '+ str(len(chunk)))
+                    if chunk:
+                        if len(chunk) == 4 and len(received_data) + len(chunk) != message_length:
+                            # We've slipped a frame, restart with this data chunk as length
+                            message_length = int.from_bytes(chunk, 'big')
+                            continue
+                        else:
+                            received_data += chunk
+                if len(received_data) >= message_length:
+                    try:
+                        message = pickle.loads(received_data)
+                        self.logger.debug('pickled message of length = '+ str(len(received_data)))
+                        success = True
+                    except Exception as e:
+                        self.logger.error('Error converting message from socket, message len='+str(message_length)+' err:' + str(e))
+                        message = None
+                        success = True
         return message
 
 class NetworkStreamingAcquirer(NetworkAcquirer):
     def __init__(self, configdict):
         NetworkAcquirer.__init__(self, configdict)
 
-    def parse_dict_to_record(self,message_dict,dict_key):
-        # parses a dictionary object received in a message 
-        # as acquared from the instrument
-        # and returns a list of dictionaries, one dict for each parameter
-        # read by the instrument
-        # this clearly needs a rewrite        
-        item_keys = self.config[dict_key]['keys'].split(',')
-        item_keys = [float(key) if key.isnumeric() else key for key in item_keys]
-
-        items = self.config[dict_key]['items'].split(',')
-        resultList = []
-        formats = self.config[dict_key]['formats'].split(',')
-        units = self.config[dict_key]['units'].split(',')
-        acqTypes = self.config[dict_key]['acqTypes'].split(',')
-        res_values = []
-        res_parameters = []
-        res_units = []
-        res_acqTypes = []
-        time = None
-        date = None
-        instTime = None
-        parts = [message_dict[dict_key][key] for key in item_keys]
-        for i in range(0,len(parts)):
-            if items[i] != 'x':
-                if formats[i] == 'f':
-                    try:
-                        fl = float(parts[i])
-                    except:
-                        self.logger.error('bad item '+items[i]+'='+parts[i]+' in line \"'+line+'\"')
-                    else:
-                        res_values.append(float(parts[i]))
-                        res_parameters.append(items[i])
-                        res_units.append(units[i])
-                        res_acqTypes.append(acqTypes[i])
-                elif items[i] == 'inst_date':
-                    parsed = datetime.strptime(parts[i], formats[i])
-                    date = parsed.date()
-                elif items[i] == 'inst_time':
-                    parsed = datetime.strptime(parts[i], formats[i])
-                    time = parsed.time()
-                elif items[i] == 'inst_datetime':
-                    parsed = datetime.strptime(parts[i], formats[i])
-                    instTime = parsed
-                if time and date:
-                    instTime = datetime.combine(date, time)
-
-        acquisition_time = datetime.now().replace(microsecond=0)
-        sample_time = acquisition_time - timedelta(seconds = self.measurement_delay)
-    
-        for i in range(0,len(res_values)):		
-            resultDict = {
-                'platform':self.config['platform'],
-                'instrument':self.config['instrument'],
-                'parameter':res_parameters[i],
-                'unit':res_units[i],
-                'acquisition_type':res_acqTypes[i],
-                'acquisition_time':acquisition_time,
-                'sample_time':sample_time,
-                'instrument_time':instTime,
-                'value':res_values[i]} 
-            resultList.append(resultDict)
-        return resultList 
-
+    def measurement_dict_to_text_line(self, dict, keys):
+        if isinstance(keys, str):
+            keys = list(map(int,keys.split(',')))
+        value_strings = [str(dict[k]) for k in keys]
+        return ','.join(value_strings)                
+        
     def run(self):
         while True:
             if self.check_socket_open():
                 try:
                     message = self.read_message_from_socket()
                 except Exception as e:
-                    self.logger.error('Error reading from network socket '+self.config['network']['port']+' :'+ e)
+                    self.logger.error('Error reading from network socket '+int(self.config['network']['port'])+' :'+ e)
                 else:
                     if message:
                         dicts = self.config['dictionaries'].split(',')
                         for dict in dicts:
-                            dataMessage = self.parse_dict_to_record(message,dict)
+                            values_dict = message[dict]
+                            values_string = self.measurement_dict_to_text_line(values_dict, self.config[dict]['keys'])
+                            dataMessage = self.parse_simple_string_to_record(values_string,dict)
                             if len(dataMessage) > 0:
                                 self.send_measurement_to_queue(dataMessage)
             else:
@@ -438,7 +416,7 @@ class SimulatedAcquirer(Acquirer):
         cycle_interval = timedelta(seconds=self.config['simulate']['cycle_secs'])
         while True:
             line = self.make_data_line()
-            record = self.parse_simple_string_to_record(line)
+            record = self.parse_simple_string_to_record(line,'stream')
             self.send_measurement_to_queue(record)
             time_since_last_cycle = datetime.now() - cycle_time
             to = (cycle_interval.seconds * 1000 - time_since_last_cycle.microseconds) / 1000
