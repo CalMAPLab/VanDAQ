@@ -6,10 +6,12 @@ from logging.handlers import TimedRotatingFileHandler
 import sys
 import os
 
+
 if len(sys.argv) < 2:
     print("Error: Must supply a configuration file")
     exit()
 
+         
 try:
     configfile = open(sys.argv[1],'r')
     config = yaml.load(configfile, Loader=yaml.FullLoader)

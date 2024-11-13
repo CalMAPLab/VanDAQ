@@ -1,0 +1,38 @@
+---
+platform: van1
+instrument: Palas_Fidas_PM
+type: serialPolled
+#verbose: 1
+queue:
+  name: "/dev-measurements"
+  max_msg_size: 8000
+  max_msgs: 50
+connection: serial
+serial:
+  device: "/dev/usb_serial_Palas_Fidas_PM"
+  baud: 115200
+measurement_delay_secs: 0
+data_freq_secs: 1
+init:
+  init_send_1: "<sendVal 202=30>\r"
+poll:
+  pm:
+    #request_string: "<getVal 0;1;2;5;6;7;11;12;13;19;20;21;22;23;25;26;27;40;41;60;61;62;63;64;65>\r"
+    request_string: "<getVal 27;20;60;61;62;63;64;65>\r"
+    line_delimiter: "\r\n"
+    response_len_min: 26
+    response_len_max: 200
+    trim_response_begin: 9
+    trim_response_end: -3
+    item_delimiter: ";"
+    key_delimiter: "="
+    items: "flowrate,velocity,Cn,PM1,PM2.5,PM4,PM10,PMtot"
+    formats: "f,f,f,f,f,f,f,f" 
+    units: "lpm, m/s, P/cm^3, mg/m3, mg/m3, mg/m3, mg/m3, mg/m3"
+    acqTypes: "engineering,engineering,engineering,measurement_calibrated,measurement_calibrated,measurement_calibrated,measurement_calibrated,measurement_calibrated"
+  
+logs:
+  log_dir: "/home/vandaq/vandaq/acquirer/log"
+  log_file: "acquirer_EcoPhysics_NOX.log"
+  log_level: "INFO"
+  logger_name: "EcoPhysics_NOX"

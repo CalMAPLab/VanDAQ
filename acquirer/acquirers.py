@@ -81,21 +81,23 @@ class Acquirer:
             else:
                 self.logger.debug('not queuing %s', str(measurements))
         
-    def parse_simple_string_to_record(self,line,params_key, item_delimiter = ','):
+    def parse_simple_string_to_record(self,line,config_dict=None, item_delimiter = ','):
         # parses a string record as acquared from the instrument
         # and returns a list fo dictionaries, one dict for each parameter
         # read by the instrument
         # this clearly needs a rewrite 
-        if 'item_delimiter' in self.config[params_key]:
-            item_delimiter = self.config[params_key]['item_delimiter']
+        if not config_dict:
+            config_dict = self.config['stream']
+        if 'item_delimiter' in config_dict:
+            item_delimiter = config_dict['item_delimiter']
         parts = line.strip().split(item_delimiter)
-        items = self.config[params_key]['items'].split(',')
+        items = config_dict['items'].split(',')
         resultList = []
 
         if len(parts) == len(items):
-            formats = self.config[params_key]['formats'].split(',')
-            units = self.config[params_key]['units'].split(',')
-            acqTypes = self.config[params_key]['acqTypes'].split(',')
+            formats = config_dict['formats'].split(',')
+            units = config_dict['units'].split(',')
+            acqTypes = config_dict['acqTypes'].split(',')
             res_values = []
             res_parameters = []
             res_units = []
@@ -123,7 +125,7 @@ class Acquirer:
                     elif items[i] == 'inst_time':
                         # BUG HERE: some instruments deliver 24:00:00, python doesn't handle
                         if parts[i] == '24:00:00':
-                            parts[i] == '00:00:00'
+                            parts[i] = '00:00:00'
                             next_day = True
                         parsed = datetime.strptime(parts[i], formats[i])
                         time = parsed.time()
@@ -181,11 +183,18 @@ class SerialStreamAcquirer(Acquirer):
     
     def __init__(self, configdict):
         Acquirer.__init__(self,configdict)
-        try:
-            self.num_items_per_line = len(self.config['stream']['items'].split(','))
-        except Exception as e:
-            pass
-        
+        if 'stream' in self.config:
+            if 'items' in self.config['stream']:
+                try:
+                    self.num_items_per_line = len(self.config['stream']['items'].split(','))
+                except Exception as e:
+                    pass
+        if 'init' in self.config:
+            for key in self.config['init']:
+                if self.check_serial_open():
+                    self.serial_port.write(str.encode(self.config['init'][key]))
+                    sleep(0.1)
+
     def check_serial_open(self):
         if not self.serial_open:
             try:
@@ -208,11 +217,67 @@ class SerialStreamAcquirer(Acquirer):
                     self.logger.error('Error reading serial port '+config['serial']['device']+' :'+ e)
                 else:
                     if len(line.split(self.config['stream']['item_delimiter'])) == self.num_items_per_line:
-                        dataMessage = self.parse_simple_string_to_record(line,'stream')
+                        dataMessage = self.parse_simple_string_to_record(line,config_dict=self.config['stream'])
                         if len(dataMessage) > 0:
                             self.send_measurement_to_queue(dataMessage)
             else:
                 sleep(1)
+
+class SerialPolledAcquirer(SerialStreamAcquirer):
+    def __init__(self, configdict):
+        SerialStreamAcquirer.__init__(self, configdict)
+        self.lastPolled =datetime.now()
+        
+    def run(self):
+        while True:
+            if (datetime.now() - self.lastPolled).total_seconds() >= self.config['data_freq_secs']:
+                if self.check_serial_open():
+                    if 'poll' in self.config:
+                        for key in self.config['poll']:
+                            self.serial_port.reset_input_buffer()
+                            self.serial_port.write(str.encode(self.config['poll'][key]['request_string']))
+                            sleep(0.1)
+                            self.serial_port.flushInput()
+                            read = True #indicator of whether instrument is responding
+                            timeout = False #timeout for the reading
+
+                            wait_time = datetime.now()
+                            while self.serial_port.inWaiting() < self.config['poll'][key]['response_len_min'] and timeout == False:  # wait for 26 bytes before reading in
+                                sleep(.05)
+                                if (datetime.now() - wait_time).total_seconds() >= 1:
+                                    timeout = True
+                                    read = False
+                            
+                            resp_string = ''
+                            if read:
+                                sleep(.05)
+                                original_resp_string = self.serial_port.read_all().decode()
+                                try:
+                                    resp_string = original_resp_string
+                                    if 'trim_response_begin' in self.config['poll'][key]:
+                                        if 'trim_response_end' in self.config['poll'][key]:
+                                            resp_string = resp_string[self.config['poll'][key]['trim_response_begin']:self.config['poll'][key]['trim_response_end']]
+                                        else:
+                                            resp_string = resp_string[self.config['poll'][key]['trim_response_begin']:]
+                                    else:
+                                        if 'trim_response_end' in self.config['poll'][key]:
+                                            resp_string = resp_string[:self.config['poll'][key]['trim_response_end']]
+                                    
+                                    responses = resp_string.split(self.config['poll'][key]['item_delimiter'])                              
+                                    
+                                    resp_values = {}
+                                    if 'key_delimiter' in self.config['poll'][key]:
+                                        for response in responses:
+                                            parts = response.split(self.config['poll'][key]['key_delimiter'])
+                                            resp_values[parts[0]] = parts[1]
+
+                                    if resp_values:
+                                        value_string = self.config['poll'][key]['item_delimiter'].join(resp_values.values())
+                                        messages = self.parse_simple_string_to_record(value_string,config_dict=self.config['poll'][key])
+                                        self.send_measurement_to_queue(messages)
+                                        self.lastPolled =datetime.now()
+                                except Exception as e:
+                                    self.logger.error('cannot proccess response string: '+original_resp_string+' :' + str(e))
 
 class NetworkAcquirer(Acquirer):
     def __init__(self, configdict):
@@ -295,7 +360,7 @@ class NetworkStreamingAcquirer(NetworkAcquirer):
                         for dict in dicts:
                             values_dict = message[dict]
                             values_string = self.measurement_dict_to_text_line(values_dict, self.config[dict]['keys'])
-                            dataMessage = self.parse_simple_string_to_record(values_string,dict)
+                            dataMessage = self.parse_simple_string_to_record(values_string,config_dict=self.config[dict])
                             if len(dataMessage) > 0:
                                 self.send_measurement_to_queue(dataMessage)
             else:
@@ -416,7 +481,7 @@ class SimulatedAcquirer(Acquirer):
         cycle_interval = timedelta(seconds=self.config['simulate']['cycle_secs'])
         while True:
             line = self.make_data_line()
-            record = self.parse_simple_string_to_record(line,'stream')
+            record = self.parse_simple_string_to_record(line,config_dict=self.config['stream'])
             self.send_measurement_to_queue(record)
             time_since_last_cycle = datetime.now() - cycle_time
             to = (cycle_interval.seconds * 1000 - time_since_last_cycle.microseconds) / 1000
@@ -441,11 +506,17 @@ class AquirerFactory():
         acquirer = SerialNmeaGPSAcquirer(config)
         return acquirer
     
-    selector = {'simpleSerial':makeSerialAcquirer, 'simulated':makeSimulatorAcquirer, 'networkStreaming':makeNetworkStreamingAcquirer, 'serial_nmea_GPS':makeSerialNmeaGPSAcquirer}
+    def makeSerialPolledAcquirer(self, config):
+        acquirer = SerialPolledAcquirer(config)
+        return acquirer
+    
+    selector = {'simpleSerial':makeSerialAcquirer, 'simulated':makeSimulatorAcquirer, 'networkStreaming':makeNetworkStreamingAcquirer, 'serial_nmea_GPS':makeSerialNmeaGPSAcquirer, 'serialPolled':makeSerialPolledAcquirer}
 
     def make(self,config):
         maker = self.selector[config['type']]
         return maker(self,config)
+
+    
 
 # Run the app
 if __name__ == '__main__':
