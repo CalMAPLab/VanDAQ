@@ -21,5 +21,5 @@ ms:
 logs:
   log_dir: "/home/vandaq/vandaq/acquirer/log"
   log_file: "acquirer_VOCUS.log"
-  log_level: "INFO"
+  log_level: "DEBUG"
   logger_name: "VOCUS"
