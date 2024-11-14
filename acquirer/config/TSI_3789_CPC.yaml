@@ -1,0 +1,38 @@
+---
+platform: van1
+instrument: TSI_3789_CPC
+type: serialPolled
+verbose: 1
+queue:
+  name: "/dev-measurements"
+  max_msg_size: 8000
+  max_msgs: 50
+connection: serial
+serial:
+  device: "/dev/usb_serial_TSI_WCPC"
+  baud: 115200
+measurement_delay_secs: 0
+data_freq_secs: 1
+#init:
+#  init_send_1: "<sendVal 202=30>\r"
+poll:
+  pm:
+    request_string: "RALL\r"
+    line_delimiter: "\r\n"
+    response_len_min: 50
+    response_len_max: 200
+    #trim_response_begin: 9
+    trim_response_end: -2
+    item_delimiter: ","
+    #key_delimiter: "="
+    # 8.91E+03,0000,59.0,29.9,40.0,23.8,100.6,56.7,3.780,39
+    items: "particle_conc,errors,saturator_T,condenser_T,optics_T,P,oriface_P,nozzle_P,laser_current,liquid_level"
+    formats: "f,h,f,f,f,f,f,f,f,f" 
+    units: "P/cm^3, errors, temp_C,temp_C,temp_C,kPa,kPa,kPa,mA,liquid_level"
+    acqTypes: "measurement_calibrated,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering"
+  
+logs:
+  log_dir: "/home/vandaq/vandaq/acquirer/log"
+  log_file: "acquirer_TSI_3789_CPC.log"
+  log_level: "INFO"
+  logger_name: "TSI_3789_CPC"

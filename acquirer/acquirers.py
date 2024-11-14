@@ -107,15 +107,20 @@ class Acquirer:
             instTime = None
             next_day = False
             for i in range(0,len(parts)):
-                value = None
-                if items[i] != 'x':
-                    if formats[i] == 'f':
+                 if items[i] != 'x':
+                    if formats[i] in 'fh':
+                        part = parts[i]
                         try:
-                            fl = float(parts[i])
+                            if formats[i] == 'h':
+                                if '0x' not in part.lower():
+                                    part = '0x'+part
+                                fl = float(int(part,0))
+                            else:
+                                fl = float(part)
                         except:
                             self.logger.error('bad item '+items[i]+'='+parts[i]+' in line \"'+line+'\"')
                         else:
-                            res_values.append(float(parts[i]))
+                            res_values.append(fl)
                             res_parameters.append(items[i])
                             res_units.append(units[i])
                             res_acqTypes.append(acqTypes[i])
@@ -124,14 +129,14 @@ class Acquirer:
                         date = parsed.date()
                     elif items[i] == 'inst_time':
                         # BUG HERE: some instruments deliver 24:00:00, python doesn't handle
-                        if parts[i] == '24:00:00':
-                            parts[i] = '00:00:00'
+                        if parts[i][0:3] == '24:':
+                            parts[i][0:3] = '00:'
                             next_day = True
                         parsed = datetime.strptime(parts[i], formats[i])
                         time = parsed.time()
                     elif items[i] == 'inst_datetime':
-                        if '24:00:00' in parts[i]:
-                            parts[i].replace('24:00:00', '00:00:00')
+                        if ' 24:' in parts[i]:
+                            parts[i].replace(' 24:', ' 00:')
                             parsed = datetime.strptime(parts[i], formats[i]) + timedelta(days=1)
                         else:
                             parsed = datetime.strptime(parts[i], formats[i])
@@ -237,7 +242,7 @@ class SerialPolledAcquirer(SerialStreamAcquirer):
                             self.serial_port.reset_input_buffer()
                             self.serial_port.write(str.encode(self.config['poll'][key]['request_string']))
                             sleep(0.1)
-                            self.serial_port.flushInput()
+                            #self.serial_port.flushInput()
                             read = True #indicator of whether instrument is responding
                             timeout = False #timeout for the reading
 
@@ -250,7 +255,7 @@ class SerialPolledAcquirer(SerialStreamAcquirer):
                             
                             resp_string = ''
                             if read:
-                                sleep(.05)
+                                sleep(.01)
                                 original_resp_string = self.serial_port.read_all().decode()
                                 try:
                                     resp_string = original_resp_string
@@ -265,14 +270,17 @@ class SerialPolledAcquirer(SerialStreamAcquirer):
                                     
                                     responses = resp_string.split(self.config['poll'][key]['item_delimiter'])                              
                                     
-                                    resp_values = {}
+                                    value_string = ''
                                     if 'key_delimiter' in self.config['poll'][key]:
+                                        resp_values = {}                                  
                                         for response in responses:
                                             parts = response.split(self.config['poll'][key]['key_delimiter'])
                                             resp_values[parts[0]] = parts[1]
-
-                                    if resp_values:
                                         value_string = self.config['poll'][key]['item_delimiter'].join(resp_values.values())
+                                    else:
+                                        value_string = self.config['poll'][key]['item_delimiter'].join(responses)
+                                           
+                                    if value_string:                                        
                                         messages = self.parse_simple_string_to_record(value_string,config_dict=self.config['poll'][key])
                                         self.send_measurement_to_queue(messages)
                                         self.lastPolled =datetime.now()
