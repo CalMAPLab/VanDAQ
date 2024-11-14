@@ -20,7 +20,7 @@ poll:
     #request_string: "<getVal 0;1;2;5;6;7;11;12;13;19;20;21;22;23;25;26;27;40;41;60;61;62;63;64;65>\r"
     request_string: "<getVal 27;20;60;61;62;63;64;65>\r"
     line_delimiter: "\r\n"
-    response_len_min: 26
+    response_len_min: 100
     response_len_max: 200
     trim_response_begin: 9
     trim_response_end: -3
@@ -33,6 +33,6 @@ poll:
   
 logs:
   log_dir: "/home/vandaq/vandaq/acquirer/log"
-  log_file: "acquirer_EcoPhysics_NOX.log"
+  log_file: "acquirer_Palas_Fidas_PM.log"
   log_level: "INFO"
   logger_name: "EcoPhysics_NOX"
