@@ -7,14 +7,25 @@ import random
 import plotly.graph_objs as go
 import pandas as pd
 import datetime
+import yaml
 from vandaq_measurements_query import get_measurements
+from vandaq_2step_measurements_query import get_2step_query
 from sqlalchemy import create_engine, and_
 
 # Initialize the Dash app
 app = dash.Dash(__name__)
 
+configfile_name = '/home/vandaq/vandaq/web/DashPlay.yaml'
+try:
+    configfile = open(configfile_name,'r')
+    config = yaml.load(configfile, Loader=yaml.FullLoader)
+    configfile.close()
+except:
+    print("Cannot load config file "+configfile_name)
+    exit()
+
 # Database connection
-engine = create_engine('postgresql://vandaq:p3st3r@10.41.185.7:5432/vandaq-dev', echo=False)
+engine = create_engine('postgresql://vandaq:p3st3r@localhost:5432/vandaq-dev', echo=False)
 
 sample_time = datetime.datetime.now()
 
@@ -25,9 +36,8 @@ def get_last_valid_value(dataList, column):
 
 def get_instrument_measurements(engine):
     # Fetch the latest measurement set
-    print('getting measurements')
-    df = get_measurements(engine, start_time=datetime.datetime.now()-datetime.timedelta(minutes=5))
-    print(df)
+    #df = get_measurements(engine, start_time=datetime.datetime.now()-datetime.timedelta(minutes=5))
+    df = get_2step_query(engine, datetime.datetime.now()-datetime.timedelta(minutes=5))
     outlist = []
     data = df.to_dict('records')
     instrument = ''
@@ -52,22 +62,38 @@ def get_instrument_measurements(engine):
     if instrument_rec:
         outlist.append(instrument_rec)
     return outlist, df          
+
+graph_line_colors = ["rgba(0, 123, 255, 0.8)",# light blue line with transparency
+                     "rgba(182, 10, 10, 0.8)",# light red line with transparency
+                     "rgba(29, 163, 11, 0.8)",# light green line with transparency
+                     "rgba(140, 18, 189, 0.8)",# light purple line with transparency
+                     "rgba(161, 159, 9, 0.8)"]# light yellow line with transparency
             
-def create_trend_plot(instrument_data):
-    instrument_data = instrument_data.dropna()
-    return go.Figure(
-        go.Scatter(
+def create_trend_plot(instrument_data_list):
+    graphs = []
+    i = 0
+    num = len(instrument_data_list)
+    for instrument_data in instrument_data_list:
+        instrument_data = instrument_data.dropna()
+        graph = go.Scatter(
             x=instrument_data.index,
             y=instrument_data.values,
+            text = instrument_data.name,
             mode="lines",
-            line=dict(color="rgba(0, 123, 255, 0.8)"),  # light blue line with transparency
+            line=dict(color=graph_line_colors[i]),  
         )
+        graphs.append(graph)
+        i += 1
+
+    return go.Figure(
+        graphs
     ).update_layout(
         margin=dict(l=0, r=0, t=0, b=0),
         xaxis=dict(visible=False),
         yaxis=dict(visible=False),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
+        showlegend=False  # Hides the legend
     )
 
 def create_grid_cell(graph,text):
@@ -117,28 +143,49 @@ def create_grid_cell(graph,text):
 def get_list_of_items():
     global sample_time 
     before_query = datetime.datetime.now()
-    print('query starts '+before_query.strftime('%Y%m%d_%H%M%S'))
+    #print('query starts '+before_query.strftime('%Y%m%d_%H%M%S'))
     measurements, df = get_instrument_measurements(engine)
     after_query = datetime.datetime.now()
-    print('query completes '+after_query.strftime('%Y%m%d_%H%M%S'))
-    print(str((after_query-before_query).total_seconds())+' seconds')
+    #print('query completes '+after_query.strftime('%Y%m%d_%H%M%S'))
+    #print('Query took '+str((after_query-before_query).total_seconds())+' seconds')
     sample_time = measurements[0]
     items = []
     for instrument in measurements:
         seconds_ago = 0
         if 'dict' in str(type(instrument)):
-            col = ' | '.join([instrument['instrument'],instrument['readings'][0]['parameter'],instrument['readings'][0]['unit'],instrument['readings'][0]['type']])
-            graph = create_trend_plot(df[col])
+            instrument_text = instrument['instrument']
+            graph_columns = []
+            col = None
+            if instrument_text in config['display_params']:
+                columns = df.columns.tolist()
+                for graph_col in config['display_params'][instrument_text]['graph']:
+                    graph_columns += [df[c] for c in columns if instrument_text in c and ('| '+graph_col+' |') in c]
+                if col:
+                    col = col[0]
+            if not col:        
+                col = ' | '.join([instrument['instrument'],instrument['readings'][0]['parameter'],instrument['readings'][0]['unit'],instrument['readings'][0]['type']])
+            graph = create_trend_plot(graph_columns)
             instrument_name = html.H2(instrument['instrument'].replace('_',' '))
             reading_cells = [instrument_name]
+            do_display = True
             for reading in instrument['readings']:
-                reading_string = reading['parameter'] + ': ' + '{:.2f}'.format(reading['value']) + ' '+ reading['unit']
+                do_display = True
+                if instrument_text in config['display_params']:
+                    if config['display_params'][instrument_text]['display']:
+                        if not str(reading['parameter']) in config['display_params'][instrument_text]['display']:
+                            do_display = False
+                reading_string = reading['parameter'] + ': ' + '{:.4f}'.format(reading['value']) + ' '+ reading['unit']
                 reading_line = None
                 if 'engineering' in reading['type']:
-                    reading_line = html.Div(reading_string,className='engineering_reading')  
+#                   reading_line = html.Div(reading_string,className='engineering_reading')  
+                    reading_line = None  
                 else:
-                    reading_line = html.Div(reading_string,className='ambient_reading')
-                reading_cells.append(reading_line)
+                    if do_display:
+                        reading_line = html.Div(reading_string,className='ambient_reading')
+                    else:
+                        reading_line = None
+                if reading_line:
+                    reading_cells.append(reading_line)
                 if 'seconds_ago' in reading.keys():
                     seconds_ago = reading['seconds_ago']
             if seconds_ago > 1:
@@ -160,7 +207,7 @@ refresh_secs = 1
 app.layout = html.Div(children=[ 
     dcc.Interval(id='interval-component', interval=refresh_secs*1000, n_intervals=0),
     html.H1('VanDAQ Operator Dashboard',style={'text-align':'left'}),
-    html.Div(' Last sample time: '+ sample_time.strftime("%m/%d/%Y, %H:%M:%S"),id='sample_timestamp'),
+    html.Div(' Last sample time (UTC): '+ sample_time.strftime("%m/%d/%Y, %H:%M:%S"),id='sample_timestamp'),
     html.Div(id='grid-container')
 ])
 
@@ -177,7 +224,7 @@ def update_grid(n):
     #grid_items = [html.Div(item, className="grid-item") for item in items]
     grid_items = items
     
-    sample_timestamp = ' Last sample time: '+ sample_time.strftime("%m/%d/%Y, %H:%M:%S")
+    sample_timestamp = ' Last sample time (UTC): '+ sample_time.strftime("%m/%d/%Y, %H:%M:%S")
     # Return the grid layout with inline CSS
     return grid_items, sample_timestamp
 

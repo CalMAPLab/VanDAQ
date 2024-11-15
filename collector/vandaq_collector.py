@@ -111,6 +111,7 @@ def insert_measurment_into_database(session, message):
 				acquisition_time_id=acq_time_record.id,
 				instrument_time_id=inst_time_record.id,
 				sample_time_id=sample_time_record.id,
+				sample_time=message['sample_time'],
 				value=message['value'],
 				string=measurementString
 			)
@@ -123,6 +124,7 @@ def insert_measurment_into_database(session, message):
 				acquisition_type_id=acquisition_type_record.id,
 				acquisition_time_id=acq_time_record.id,
 				sample_time_id=sample_time_record.id,
+				sample_time=message['sample_time'],
 				value=message['value'],
 				string=measurementString
 			)
