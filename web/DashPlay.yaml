@@ -1,0 +1,61 @@
+display_params:
+  Aeris_CH4_C2H6:
+    graph:
+      - "CH4"
+      - "C2H6"
+      - "H2O"
+    display:
+      - "CH4"
+      - "C2H6"
+      - "H2O"
+  DMS_PAX_BlackCarbon:
+    graph:
+      - "BC_mass"
+    display:
+      - "BC_mass"
+  2BTech_211_G:
+    graph:
+      - "O3"
+    display:
+      - "O3"
+  EcoPhysics_NOX:
+    graph:
+      - "NO"
+      - "NO2"
+      - "NOx"
+    display:
+      - "NO"
+      - "NO2"
+      - "NOx"
+  VOCUS:
+    graph:
+      - "m/z 59"
+    display:
+      - "m/z 45"
+      - "m/z 33"
+      - "m/z 59"
+      - "m/z 69"
+  G-Mouse_GPS:
+    graph:
+      - "latitude"
+    display:
+      - "latitude"
+      - "longitude"
+  Palas_Fidas_PM:
+    graph:
+      - "PM1"
+      - "PM2.5"
+      - "PM4"
+      - "PM10"
+      - "PMtot"
+    display:
+      - "PM1"
+      - "PM2.5"
+      - "PM4"
+      - "PM10"
+      - "PMtot"
+  TSI_3789_CPC:
+    graph:
+      - "particle_conc"
+    display:
+      - "particle_conc"

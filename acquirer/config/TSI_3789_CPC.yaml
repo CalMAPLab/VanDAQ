@@ -2,7 +2,7 @@
 platform: van1
 instrument: TSI_3789_CPC
 type: serialPolled
-verbose: 1
+#verbose: 1
 queue:
   name: "/dev-measurements"
   max_msg_size: 8000

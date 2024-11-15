@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, BigInteger, Double, String, Numeric, Date, DateTime, ForeignKey, UniqueConstraint, Index
+from sqlalchemy import create_engine, Column, Integer, BigInteger, Double, String, Numeric, Date, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 
@@ -10,59 +10,51 @@ class DimPlatform(Base):
 	__tablename__ = 'platform'
 	id = Column(Integer, primary_key=True)
 	platform = Column(String , nullable=False, unique=True)
-	__table_args__ = (Index('idx_platform_id', 'id'),)
 
 # Dimension Table for Instruments
 class DimInstrument(Base):
 	__tablename__ = 'instrument'
 	id = Column(Integer, primary_key=True)
 	instrument = Column(String , nullable=False, unique=True)
-	__table_args__ = (Index('idx_instrument_id', 'id'),)
 
 # Dimension Table for Timestamps
 class DimTime(Base):
 	__tablename__ = 'time'
 	id = Column(BigInteger, primary_key=True)
 	time = Column(DateTime , nullable=False, unique=True)
-	__table_args__ = (Index('idx_time_id', 'id'),)
 
 # Dimension Table for measured Parameters
 class DimParameter(Base):
 	__tablename__ = 'parameter'
 	id = Column(Integer, primary_key=True)
 	parameter = Column(String , nullable=False, unique=True)
-	__table_args__ = (Index('idx_parameter_id', 'id'),)
 	
 # Dimension Table for measurement Units
 class DimUnit(Base):
 	__tablename__ = 'unit'
 	id = Column(Integer, primary_key=True)
 	unit = Column(String , nullable=False, unique=True)
-	__table_args__ = (Index('idx_unit_id', 'id'),)
 
 # Dimension Table for acquisition Types
 class DimAcquisitionType(Base):
 	__tablename__ = 'acquisition_type'
 	id = Column(Integer, primary_key=True)
 	acquisition_type = Column(String , nullable=False, unique=True)
-	__table_args__ = (Index('idx_acquisition_type_id', 'id'),)
 
 # Vector table for measurements taken by instruments
 class InstrumentMeasurements(Base):
 	__tablename__ = 'instrument_measurements'
 	id = Column(Integer, primary_key=True)
-	platform_id = Column(Integer, ForeignKey('platform.id'), nullable=False)
 	instrument_id = Column(Integer, ForeignKey('instrument.id'), nullable=False)
 	parameter_id = Column(Integer, ForeignKey('parameter.id'), nullable=False)
 	unit_id = Column(Integer, ForeignKey('unit.id'), nullable=False)
 	acquisition_type_id = Column(Integer, ForeignKey('acquisition_type.id'), nullable=False)
 	
-	platform = relationship("DimPlatform", foreign_keys=[platform_id])
 	instrument = relationship("DimInstrument", foreign_keys=[instrument_id])
 	parameter = relationship("DimParameter", foreign_keys=[parameter_id])
 	unit = relationship("DimUnit", foreign_keys=[unit_id])
 	acquisition_type = relationship("DimAcquisitionType", foreign_keys=[acquisition_type_id])
-	__table_args__ = (UniqueConstraint('platform_id','instrument_id', 'parameter_id', 'unit_id', 'acquisition_type_id', name='uq_instrument_measurements'),)
+	__table_args__ = (UniqueConstraint('instrument_id', 'parameter_id', 'unit_id', 'acquisition_type_id', name='uq_instrument_measurements'),)
 
 # Fact Table for measurement Data
   
@@ -74,7 +66,7 @@ class FactMeasurement(Base):
 	acquisition_time_id = Column(BigInteger, ForeignKey('time.id'), nullable=False)
 	instrument_time_id = Column(BigInteger, ForeignKey('time.id'), nullable=True)
 	sample_time_id = Column(BigInteger, ForeignKey('time.id'), nullable=False)
-	sample_time = Column(DateTime , nullable=False, unique=True)
+	sample_time = Column(DateTime , nullable=True, unique=False)
 
 	# Other foreign keys
 	platform_id = Column(Integer, ForeignKey('platform.id'), nullable=False)
@@ -86,6 +78,10 @@ class FactMeasurement(Base):
 	value = Column(Double, nullable=False)
 	string = Column(String(100), nullable=True)
 
+	# EXPLICIT SAMPLE_TIME COLUMN
+	#sample_time =  Column(DateTime , nullable=True, unique=True)
+
+
 	# Explicit relationships with unambiguous foreign keys
 	acquisition_time = relationship("DimTime", foreign_keys=[acquisition_time_id])
 	instrument_time = relationship("DimTime", foreign_keys=[instrument_time_id])
@@ -96,4 +92,4 @@ class FactMeasurement(Base):
 	parameter = relationship("DimParameter", foreign_keys=[parameter_id])
 	unit = relationship("DimUnit", foreign_keys=[unit_id])
 	acquisition_type = relationship("DimAcquisitionType", foreign_keys=[acquisition_type_id])
-	
+ 
