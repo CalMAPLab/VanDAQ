@@ -129,10 +129,11 @@ class Acquirer:
                         date = parsed.date()
                     elif items[i] == 'inst_time':
                         # BUG HERE: some instruments deliver 24:00:00, python doesn't handle
-                        if parts[i][0:3] == '24:':
-                            parts[i][0:3] = '00:'
+                        timestr = parts[i]
+                        if timestr[0:3] == '24:':
+                            timestr = '00:'+timestr[3:]
                             next_day = True
-                        parsed = datetime.strptime(parts[i], formats[i])
+                        parsed = datetime.strptime(timestr, formats[i])
                         time = parsed.time()
                     elif items[i] == 'inst_datetime':
                         if ' 24:' in parts[i]:

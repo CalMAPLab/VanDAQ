@@ -7,7 +7,7 @@ import logging
 import lzma
 import pickle
 from logging.handlers import TimedRotatingFileHandler
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, and_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker, relationship
 from vandaq_schema import *
@@ -77,7 +77,32 @@ def insert_measurment_into_database(session, message):
 			sample_time_record = DimTime(time=message['sample_time'])
 			session.add(sample_time_record)
 			session.flush()  # Ensure the ID is generated
-	
+
+		if message['acquisition_type'] == 'GPS':
+		# Check if the geolocation record already exists, otherwise insert it
+			geolocation_record = session.query(DimGeolocation).filter(
+       			and_(
+              		DimGeolocation.sample_time_id == sample_time_record.id,
+					DimGeolocation.platform_id == platform_record.id,
+					DimGeolocation.instrument_id == instrument_record.id
+				)
+			).first()
+
+			if not geolocation_record:
+				geolocation_record = DimGeolocation(sample_time_id = sample_time_record.id,
+											platform_id=platform_record.id,
+											instrument_id=instrument_record.id)
+				session.add(geolocation_record)
+				session.flush()
+			if message['parameter'] == 'latitude':
+				geolocation_record.latitude = message['value']
+				session.flush()
+			if message['parameter'] == 'longitude':
+				geolocation_record.longitude = message['value']
+				session.flush()
+
+
+   
 	    # Add an instrument measurement record if not already there
 		inst_meas_record = session.query(InstrumentMeasurements).filter_by(
 			platform_id=platform_record.id,
