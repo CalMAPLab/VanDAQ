@@ -740,6 +740,20 @@ CREATE INDEX idx_alarm_type_id ON public.alarm_type USING btree (id) WITH (dedup
 
 
 --
+-- Name: idx_geolocation_sample_time_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_geolocation_sample_time_id ON public.geolocation USING btree (sample_time_id) WITH (deduplicate_items='true');
+
+
+--
+-- Name: idx_geolocation_time_platform_instrument_ids; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_geolocation_time_platform_instrument_ids ON public.geolocation USING btree (sample_time_id, platform_id, instrument_id) WITH (deduplicate_items='true');
+
+
+--
 -- Name: idx_instrument_id; Type: INDEX; Schema: public; Owner: postgres
 --
 
