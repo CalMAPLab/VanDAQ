@@ -1,0 +1,6 @@
+directory: "/home/vandaq/vandaq/filers/files/day/"
+platforms:
+  - van1
+van1:
+  timezone: "US/Pacific"
+  subdir: van1
