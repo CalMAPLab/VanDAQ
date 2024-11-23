@@ -1,6 +1,7 @@
 import sys
 import serial
 import socket
+import zmq
 import yaml
 import numpy as np
 import logging
@@ -237,6 +238,7 @@ class SerialPolledAcquirer(SerialStreamAcquirer):
     def run(self):
         while True:
             if (datetime.now() - self.lastPolled).total_seconds() >= self.config['data_freq_secs']:
+                self.lastPolled =datetime.now()
                 if self.check_serial_open():
                     if 'poll' in self.config:
                         for key in self.config['poll']:
@@ -284,7 +286,6 @@ class SerialPolledAcquirer(SerialStreamAcquirer):
                                     if value_string:                                        
                                         messages = self.parse_simple_string_to_record(value_string,config_dict=self.config['poll'][key])
                                         self.send_measurement_to_queue(messages)
-                                        self.lastPolled =datetime.now()
                                 except Exception as e:
                                     self.logger.error('cannot proccess response string: '+original_resp_string+' :' + str(e))
 
@@ -299,13 +300,12 @@ class NetworkAcquirer(Acquirer):
     def check_socket_open(self):
         host = self.config['network']['address']
         port = self.config['network']['port']
+
         if not self.socket or not self.socket_open:
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            context = zmq.Context()
+            self.socket = context.socket(zmq.PULL)  # Reply socket
             try:
-                self.socket.bind((host, port))
-                self.socket.listen()
-                # Accept a connection
-                self.conn, self.addr = self.socket.accept()
+                self.socket.bind('tcp://*:'+str(port))
                 self.socket_open = True
             except Exception as e:
                 self.socket_open = False
@@ -316,26 +316,13 @@ class NetworkAcquirer(Acquirer):
         # Receive data from the client
         success = False
         while  not success:
-            self.logger.debug('About to recieve length from network socket '+str(self.config['network']['port']))
-            length_data = self.conn.recv(1024)
-            if len(length_data) != 4:
-                self.logger.error('Error receiving message length, len = '+str(len(length_data)))
-                continue
-            self.logger.debug('received length = '+ str(int.from_bytes(length_data, 'big')))
-            if length_data:
-                message_length = int.from_bytes(length_data, 'big')
-                received_data = b""
-                while len(received_data) < message_length:
-                    chunk = self.conn.recv(1024)
-                    self.logger.debug('received chunk of length = '+ str(len(chunk)))
-                    if chunk:
-                        if len(chunk) == 4 and len(received_data) + len(chunk) != message_length:
-                            # We've slipped a frame, restart with this data chunk as length
-                            message_length = int.from_bytes(chunk, 'big')
-                            continue
-                        else:
-                            received_data += chunk
-                if len(received_data) >= message_length:
+            received_data = b''
+            if self.check_socket_open():
+                try:
+                    received_data = self.socket.recv()    
+                except Exception as e:
+                    self.logger.error('Error receiving message from zmq socket,'+' err:' + str(e))
+                else:
                     try:
                         message = pickle.loads(received_data)
                         self.logger.debug('pickled message of length = '+ str(len(received_data)))

@@ -101,8 +101,8 @@ def create_grid_cell(graph,text):
     cell = html.Div(
             style={
                 "position": "relative",
-                "width": "30%",
-                "padding-bottom": "30%",
+                "width": "48%",
+                "padding-bottom": "15%",
                 "display": "inline-block",
                 "margin": "10px",
 				"background-color": "black"
@@ -124,14 +124,14 @@ def create_grid_cell(graph,text):
                     children=text,
                     style={
                         "position": "absolute",
-                        "top": "50%",
-                        "left": "50%",
-                        "transform": "translate(-50%, -50%)",
+                        #"top": "50%",
+                        #"left": "50%",
+                        #"transform": "translate(-50%, -50%)",
                         "color": "white",
 						"font-family": "sans-serif",
   #                      "font-size": "24px",
   #                      "font-weight": "bold",
-  #                      "text-align": "left",
+                         #"text-align": "left",
                     },
                 ),
             ],
@@ -147,7 +147,7 @@ def get_list_of_items():
     measurements, df = get_instrument_measurements(engine)
     after_query = datetime.datetime.now()
     #print('query completes '+after_query.strftime('%Y%m%d_%H%M%S'))
-    #print('Query took '+str((after_query-before_query).total_seconds())+' seconds')
+    print('Query took '+str((after_query-before_query).total_seconds())+' seconds')
     sample_time = measurements[0]
     items = []
     for instrument in measurements:
@@ -201,7 +201,7 @@ local_styles ={
     'color':'white'
 }
 
-refresh_secs = 1
+refresh_secs = 5
 
 # Define the layout of the app
 app.layout = html.Div(children=[ 
