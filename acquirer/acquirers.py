@@ -358,12 +358,22 @@ class NetworkStreamingAcquirer(NetworkAcquirer):
                     if message:
                         dicts = self.config['dictionaries'].split(',')
                         for dict in dicts:
-                            values_dict = message[dict]
-                            values_string = self.measurement_dict_to_text_line(values_dict, self.config[dict]['keys'])
-                            if values_string:
-                                dataMessage = self.parse_simple_string_to_record(values_string,config_dict=self.config[dict])
-                                if len(dataMessage) > 0:
-                                    self.send_measurement_to_queue(dataMessage)
+                            if dict in message: 
+                                values_dict = message[dict]
+                                if 'keys' in self.config[dict]:
+                                    values_string = self.measurement_dict_to_text_line(values_dict, self.config[dict]['keys'])
+                                else:
+                                    items = self.config[dict]['items'].split(',')
+                                    try:
+                                        values = [values_dict[item] for item in items]
+                                        values_string = ','.join(values)
+                                    except Exception as e:
+                                        self.logger.error('bad message found while acquiring: {}'.format(str(dict)))
+                                        values_string = None
+                                if values_string: 
+                                    dataMessage = self.parse_simple_string_to_record(values_string,config_dict=self.config[dict])
+                                    if len(dataMessage) > 0:
+                                        self.send_measurement_to_queue(dataMessage)
             else:
                 sleep(1)
 
