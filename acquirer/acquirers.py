@@ -340,8 +340,12 @@ class NetworkStreamingAcquirer(NetworkAcquirer):
     def measurement_dict_to_text_line(self, dict, keys):
         if isinstance(keys, str):
             keys = list(map(int,keys.split(',')))
-        value_strings = [str(dict[k]) for k in keys]
-        return ','.join(value_strings)                
+        try:
+            value_strings = [str(dict[k]) for k in keys]
+            return ','.join(value_strings)  
+        except Exception as e:
+            self.logger.error('Error converting measurement dict to string, err:' + str(e))
+            return None
         
     def run(self):
         while True:
@@ -349,16 +353,17 @@ class NetworkStreamingAcquirer(NetworkAcquirer):
                 try:
                     message = self.read_message_from_socket()
                 except Exception as e:
-                    self.logger.error('Error reading from network socket '+int(self.config['network']['port'])+' :'+ e)
+                    self.logger.error('Error reading from network socket '+int(self.config['network']['port'])+' :'+ str(e))
                 else:
                     if message:
                         dicts = self.config['dictionaries'].split(',')
                         for dict in dicts:
                             values_dict = message[dict]
                             values_string = self.measurement_dict_to_text_line(values_dict, self.config[dict]['keys'])
-                            dataMessage = self.parse_simple_string_to_record(values_string,config_dict=self.config[dict])
-                            if len(dataMessage) > 0:
-                                self.send_measurement_to_queue(dataMessage)
+                            if values_string:
+                                dataMessage = self.parse_simple_string_to_record(values_string,config_dict=self.config[dict])
+                                if len(dataMessage) > 0:
+                                    self.send_measurement_to_queue(dataMessage)
             else:
                 sleep(1)
 
