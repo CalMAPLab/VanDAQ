@@ -303,6 +303,7 @@ sumbission_start_time = datetime.now()
 
 
 while True:
+    message = []
     if collector_input == 'queue':
         try:
             message = queue.get()
