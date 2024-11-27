@@ -10,3 +10,4 @@ ARCHIVE_DIR: "/home/vandaq/vandaq/collector/submission/submitted"  # Directory t
 REMOTE_PATH: "/home/vandaq/vandaq/collector/submission/"
 PING_HOST: "central.example.org"              # Host to ping for network check
 CHECK_INTERVAL: 10                # Time in seconds to wait between checks
+
