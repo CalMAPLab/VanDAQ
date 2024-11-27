@@ -11,3 +11,4 @@ REMOTE_PATH: "/home/vandaq/vandaq/collector/submission/"
 PING_HOST: "169.229.157.7"              # Host to ping for network check
 CHECK_INTERVAL: 10                # Time in seconds to wait between checks
 
+

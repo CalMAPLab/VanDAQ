@@ -81,6 +81,7 @@ def main():
 
 config_file_name = '/home/vandaq/vandaq/submitter/vandaq_submitter.yaml'
 
+
 if len(sys.argv) > 1:
     config_file_name = sys.argv[1]    
 
