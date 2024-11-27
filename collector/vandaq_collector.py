@@ -2,10 +2,14 @@ from ipcqueue import posixmq
 from datetime import datetime, timedelta
 import os
 import sys
+import time
 import yaml
 import logging
 import lzma
 import pickle
+import operator
+import shutil
+from glob import glob
 from logging.handlers import TimedRotatingFileHandler
 from sqlalchemy import create_engine, and_
 from sqlalchemy.exc import IntegrityError
@@ -210,17 +214,49 @@ def open_queue(config, logger):
 	queue._maxsize = attribs['max_size']
 	return queue
 
+def get_submission_files(directory,file_pattern):
+    pattern = os.path.join(directory,file_pattern)
+    files = glob(pattern)
+    if files:
+        current_time = time.time()
+        files = [{'filename':file, 'age_seconds':current_time - os.path.getmtime(file)} for file in files]
+        files.sort(key=operator.itemgetter('age_seconds'), reverse=True)    
+    return files
+     
+
+def load_config_file(filename):
+	try:
+		configfile = open(filename)
+		config = yaml.load(configfile, Loader=yaml.FullLoader)
+		configfile.close()
+		return config
+	except:
+		print("Cannot load config file "+sys.argv[1])
+		return None
+
+def get_messages_from_file(filename):
+    messages = []
+    with lzma.open(filename,'rb') as file:
+        messages = pickle.load(file)
+    return messages    
+
+def move_file_to_submitted(filename, submitted_path):
+    try:
+        if not os.path.exists(submitted_path):
+            os.makedirs(submitted_path)
+        shutil.move(filename, submitted_path)
+    except Exception as e:
+        logger.error("error moving file {} to {}, err = {}".format(filename, submitted_path,str(e)))
 
 # load configuration file
 if len(sys.argv) < 2:
     print("Error: Must supply a configuration file")
     exit()
+    
+config_file_name = sys.argv[1]    
 
-try:
-    configfile = open(sys.argv[1],'r')
-    config = yaml.load(configfile, Loader=yaml.FullLoader)
-    configfile.close()
-except:
+config = load_config_file(config_file_name)
+if not config:
     print("Cannot load config file "+sys.argv[1])
     exit()
 
@@ -240,9 +276,23 @@ handler = TimedRotatingFileHandler(log_file, when="midnight", interval=1, backup
 handler.setLevel(logging.INFO)
 logger.addHandler(handler)
 
-logger.info('Starting collector')
-queue = open_queue(config, logger)
+collector_input = None
+submit_file_directory = None
+submitted_file_directory = None
+submit_file_pattren = None
 
+logger.info('Starting collector')
+if 'queue' in config:
+	queue = open_queue(config, logger)
+	if queue:
+		collector_input = 'queue'
+else:
+    if 'submissions' in config:
+        collector_input = 'submissions'
+        submission_file_directory = config['submissions']['submit_file_dir']
+        submitted_file_directory = config['submissions']['submitted_file_dir']
+        submit_file_pattren = config['submissions']['submit_file_pattern']
+        
 engine = create_engine(config['connect_string'], echo=False)
 
 Session = sessionmaker(bind=engine)
@@ -251,23 +301,36 @@ session = Session()
 submissions = []
 sumbission_start_time = datetime.now()
 
+
 while True:
-	try:
-		message = queue.get()
-	except Exception as e:
-		logger.error("exception in get from queue")
-		logger.error(e)
-	else:
-		logger.debug(str(message))
-		for measurement in message:
-			if 'acquisition_type' in measurement.keys():
-				success = insert_measurment_into_database(session, measurement)
-				if success:
-					logger.debug("Measurement inserted successfully.")
-				else:
-					logger.error("Measurement insertion failed: "+str(measurement))
-				#print(str(len(submissions))+'submissions to '+sumbission_start_time.strftime("%Y-%m-%d %H:%M:%S"))
-				if submit_measurement(measurement, sumbission_start_time, config):
-					sumbission_start_time = datetime.now()
+    if collector_input == 'queue':
+        try:
+            message = queue.get()
+        except Exception as e:
+            logger.error("exception in get from queue")
+            logger.error(e)
+        else:
+            logger.debug(str(message))
+    elif collector_input == 'submissions':
+        files = get_submission_files(submission_file_directory, submit_file_pattren) 
+        if files:
+            file = files[0]
+            files.remove(file)
+            message = get_messages_from_file(file['filename']) 
+            move_file_to_submitted(file['filename'], submitted_file_directory) 
+            logger.debug('Moved submission file {} to {}'.format(file['filename'], submitted_file_directory))
+                        
+    for measurement in message:
+        if 'acquisition_type' in measurement.keys():
+            success = insert_measurment_into_database(session, measurement)
+            if success:
+                #logger.debug("Measurement inserted successfully.")
+                pass
+            else:
+                logger.error("Measurement insertion failed: "+str(measurement))
+            #print(str(len(submissions))+'submissions to '+sumbission_start_time.strftime("%Y-%m-%d %H:%M:%S"))
+            if collector_input == 'queue':
+                if submit_measurement(measurement, sumbission_start_time, config):
+                    sumbission_start_time = datetime.now()
 					
 
