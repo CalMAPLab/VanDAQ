@@ -319,10 +319,14 @@ while True:
         files = get_submission_files(submission_file_directory, submit_file_pattren) 
         if files:
             file = files[0]
-            files.remove(file)
-            message = get_messages_from_file(file['filename']) 
-            move_file_to_submitted(file['filename'], submitted_file_directory) 
-            logger.debug('Moved submission file {} to {}'.format(file['filename'], submitted_file_directory))
+            try:
+                message = get_messages_from_file(file['filename'])
+            except Exception as e:
+                logger.error('Could not unpickle {}, error = {}'.format(file['filename'], str(e)))
+            else:     
+                files.remove(file)
+                move_file_to_submitted(file['filename'], submitted_file_directory) 
+                logger.debug('Moved submission file {} to {}'.format(file['filename'], submitted_file_directory))
                         
     for measurement in message:
         if 'acquisition_type' in measurement.keys():
