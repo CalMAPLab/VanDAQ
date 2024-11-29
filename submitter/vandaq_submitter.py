@@ -21,7 +21,6 @@ def load_config_file(filename):
 		print("Cannot load config file "+sys.argv[1])
 		return None
 
-
 def is_network_available(host = '0.0.0.0', timeout=2):
     """Check if the network is available by pinging a public server."""
     try:
