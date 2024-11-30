@@ -245,10 +245,15 @@ def get_messages_from_file(filename):
     return messages    
 
 def move_file_to_submitted(filename, submitted_path):
+    file_dir = os.path.dirname(filename)
+    file_name = os.path.basename(filename)
     try:
         if not os.path.exists(submitted_path):
             os.makedirs(submitted_path)
-        shutil.move(filename, submitted_path)
+        if os.path.exists(os.path.join(submitted_path,file_name)):
+            os.remove(filename)
+        else:
+            shutil.move(filename, submitted_path)
     except Exception as e:
         logger.error("error moving file {} to {}, err = {}".format(filename, submitted_path,str(e)))
 
@@ -317,12 +322,14 @@ while True:
             logger.debug(str(message))
     elif collector_input == 'submissions':
         files = get_submission_files(submission_file_directory, submit_file_pattren) 
+        time.sleep(0.5)
         if files:
             file = files[0]
             try:
                 message = get_messages_from_file(file['filename'])
             except Exception as e:
                 logger.error('Could not unpickle {}, error = {}'.format(file['filename'], str(e)))
+                move_file_to_submitted(file['filename'], submitted_file_directory+'rejected/')
             else:     
                 files.remove(file)
                 move_file_to_submitted(file['filename'], submitted_file_directory) 
