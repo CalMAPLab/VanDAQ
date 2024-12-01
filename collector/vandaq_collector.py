@@ -180,8 +180,8 @@ def submit_measurement(measurement, submit_time, config):
         # write to temp file then rename so partial 
         # files are not picked up by the submitter 
         temp_file_name = filename+'.temp'
-        with lzma.open(filename,'wb') as file:
-            pickle.dump(submissions,temp_file_name)
+        with lzma.open(temp_file_name,'wb') as file:
+            pickle.dump(submissions,file)
         shutil.move(temp_file_name, filename)
         submissions = []
         changed_file = True
