@@ -6,7 +6,6 @@ import shutil
 import keyring
 import yaml
 import paramiko
-from fabric import Connection
 import subprocess
 from pathlib import Path
 
@@ -65,24 +64,6 @@ def transfer_files():
     except Exception as e:
         print(f"Error in SFTP connection: {e}")
 
-def transfer_files_2():
-    """Transfer new files to the stationary host and archive them."""
-    # Establish SFTP connection
-    try:
-        uname = keyring.get_password(config['KEYRING_HOST_KEY'],'username')
-        pw = keyring.get_password(config['KEYRING_HOST_KEY'],'password')
-        conn = Connection(host='hostname', user=uname, connect_kwargs={"password": pw})
- 
-        for file in Path(config['DATA_DIR']).glob(config['SUBMIT_FILE_PATTERN']):
-            if file.is_file():
-                try:
-                    remote_path = config['REMOTE_PATH'] +file.name # Adjust remote path as needed
-                    conn.put(str(file), remote=remote_path)
-                    print(f"Transferred: {file}")
-                    shutil.move(str(file), os.path.join(config['ARCHIVE_DIR'], file.name))
-                except Exception as e:
-                    print(f"Failed to transfer {file}: {e}")
-        conn.close()
 
     except Exception as e:
         print(f"Error in SFTP connection: {e}")
