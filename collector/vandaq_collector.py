@@ -124,11 +124,15 @@ def insert_measurment_into_database(session, message):
             session.add(inst_meas_record)
             session.flush()
 
+        measurementString = None
+        measurementValue = None
+
         if 'string' in message.keys():
             measurementString = message['string']
-        else:
-            measurementString = None
 
+        if 'value' in message.keys():
+            measurementValue = message['value']
+            
         # Insert the measurement with the dimension IDs
         if inst_has_timestamp:
             measurement_record = FactMeasurement(
@@ -141,7 +145,7 @@ def insert_measurment_into_database(session, message):
                 instrument_time_id=inst_time_record.id,
                 sample_time_id=sample_time_record.id,
                 sample_time=message['sample_time'],
-                value=message['value'],
+                value=measurementValue,
                 string=measurementString
             )
         else:
@@ -154,7 +158,7 @@ def insert_measurment_into_database(session, message):
                 acquisition_time_id=acq_time_record.id,
                 sample_time_id=sample_time_record.id,
                 sample_time=message['sample_time'],
-                value=message['value'],
+                value=measurementValue,
                 string=measurementString
             )
 

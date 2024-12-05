@@ -6,7 +6,6 @@ import shutil
 import keyring
 import yaml
 import paramiko
-from fabric import Connection
 import subprocess
 from pathlib import Path
 
