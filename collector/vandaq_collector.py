@@ -10,6 +10,7 @@ import pickle
 import operator
 import shutil
 from glob import glob
+from datetime import datetime, timedelta
 from logging.handlers import TimedRotatingFileHandler
 from sqlalchemy import create_engine, and_
 from sqlalchemy.exc import IntegrityError
@@ -19,13 +20,18 @@ from vandaq_schema import *
 def insert_measurment_into_database(session, message):
     try:        
         # Check if the platform already exists, otherwise insert it
+        sttime = datetime.now()
         platform_record = session.query(DimPlatform).filter_by(
             platform=message['platform'],).first()
         if not platform_record:
             platform_record = DimPlatform(platform=message['platform'])
             session.add(platform_record)
             session.flush()  # Ensure the ID is generated
+        platform_us = (datetime.now()-sttime).microseconds
+        print('Platform query took {} microseconds'.format(str(platform_us)))
 
+
+        sttime = datetime.now()
         # Check if the instrument already exists, otherwise insert it
         instrument_record = session.query(DimInstrument).filter_by(
             instrument=message['instrument'],).first()
@@ -34,13 +40,20 @@ def insert_measurment_into_database(session, message):
             session.add(instrument_record)
             session.flush()  # Ensure the ID is generated
 
+        instrument_us = (datetime.now()-sttime).microseconds
+        print('Instrument query took {} microseconds'.format(str(instrument_us)))
+
          # Check if the parameter already exists, otherwise insert it
+        sttime = datetime.now()
         parameter_record = session.query(DimParameter).filter_by(
             parameter=message['parameter']).first()
         if not parameter_record:
             parameter_record = DimParameter(parameter=message['parameter'])
             session.add(parameter_record)
             session.flush()  # Ensure the ID is generated
+
+        parameter_us = (datetime.now()-sttime).microseconds
+        print('Parameter query took {} microseconds'.format(str(parameter_us)))
 
         # Check if the unit already exists, otherwise insert it
         unit_record = session.query(DimUnit).filter_by(
@@ -161,6 +174,8 @@ def insert_measurment_into_database(session, message):
                 value=measurementValue,
                 string=measurementString
             )
+        measurement_us = (datetime.now()-sttime).microseconds
+        print('Measuremment insert took {} microseconds'.format(str(measurement_us)))
 
         session.add(measurement_record)
         session.commit()  # Commit the transaction
