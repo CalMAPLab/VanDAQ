@@ -100,6 +100,7 @@ class Acquirer:
             units = config_dict['units'].split(',')
             acqTypes = config_dict['acqTypes'].split(',')
             res_values = []
+            res_strings = []
             res_parameters = []
             res_units = []
             res_acqTypes = []
@@ -109,19 +110,26 @@ class Acquirer:
             next_day = False
             for i in range(0,len(parts)):
                  if items[i] != 'x':
-                    if formats[i] in 'fh':
+                    if formats[i] in 'fhs':
+                        item_string = None
                         part = parts[i]
                         try:
                             if formats[i] == 'h':
                                 if '0x' not in part.lower():
                                     part = '0x'+part
                                 fl = float(int(part,0))
-                            else:
+                            elif formats[i] == 's':
+                                item_string = part
+                                fl = None
+                            elif formats[i] == 'f':                            
                                 fl = float(part)
+                            else:
+                                self.logger.error('bad format '+items[i]+'='+formats[i]+' in line \"'+line+'\"')                                
                         except:
                             self.logger.error('bad item '+items[i]+'='+parts[i]+' in line \"'+line+'\"')
                         else:
                             res_values.append(fl)
+                            res_strings.append(item_string)
                             res_parameters.append(items[i])
                             res_units.append(units[i])
                             res_acqTypes.append(acqTypes[i])
@@ -160,8 +168,11 @@ class Acquirer:
                     'acquisition_type':res_acqTypes[i],
                     'acquisition_time':acquisition_time,
                     'sample_time':sample_time,
-                    'instrument_time':instTime,
-                    'value':res_values[i]} 
+                    'instrument_time':instTime} 
+                if res_values[i] is not None:
+                    resultDict['value'] = res_values[i]
+                if res_strings[i] is not None:
+                    resultDict['string'] = res_strings[i]
                 resultList.append(resultDict)
         return resultList 
 
