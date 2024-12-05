@@ -2,8 +2,8 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 14.13 (Ubuntu 14.13-0ubuntu0.22.04.1)
--- Dumped by pg_dump version 14.13 (Ubuntu 14.13-0ubuntu0.22.04.1)
+-- Dumped from database version 14.15 (Ubuntu 14.15-0ubuntu0.22.04.1)
+-- Dumped by pg_dump version 14.15 (Ubuntu 14.15-0ubuntu0.22.04.1)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -201,10 +201,10 @@ CREATE TABLE public.measurement (
     parameter_id integer NOT NULL,
     unit_id integer NOT NULL,
     acquisition_type_id integer NOT NULL,
-    value double precision NOT NULL,
+    value double precision,
     string character varying(100),
-    platform_id integer,
-    sample_time timestamp without time zone
+    platform_id integer NOT NULL,
+    sample_time timestamp without time zone NOT NULL
 );
 
 
