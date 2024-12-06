@@ -1,5 +1,6 @@
 from ipcqueue import posixmq
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import pytz
 import os
 import sys
 import time
@@ -194,7 +195,14 @@ def submit_measurement(measurement, submit_time, config):
         # Time to write the submission file
         filename = os.path.join(config['submissions']['submit_file_dir'], 
                         config['submissions']['submit_file_basename'])
-        filename += submit_time.strftime('%Y%m%d_%H%M%S')
+        timezone = None
+        if 'submit_file_timezone' in config['submissions']:
+            timezone = config['submissions']['submit_file_timezone']
+            filename += submit_time.astimezone(pytz.timezone(timezone)).strftime('%Y%m%d_%H%M%S')
+            if 'submit_file_tz_abbr' in config['submissions']:
+                filename += '_' + config['submissions']['submit_file_tz_abbr']+'_'
+        else:
+            filename += submit_time.strftime('%Y%m%d_%H%M%S')
         filename += '.sbm'
         # write to temp file then rename so partial 
         # files are not picked up by the submitter 
