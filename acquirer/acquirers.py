@@ -176,8 +176,35 @@ class Acquirer:
                 resultList.append(resultDict)
         return resultList 
 
-
-
+    def apply_alarms(self, messages_in):
+        if 'alarms' in self.config:
+            alarms = self.config['alarms']
+            messages_out = []
+            for message in messages_in:
+                if message['parameter'] in alarms:
+                    message_alarms = []
+                    for alarm_rule in alarms[message['parameter']]:
+                        for alarm_key in alarm_rule.keys():
+                            if alarm_key == 'value_<':
+                                if message['value'] < alarm_rule[alarm_key]['value']:
+                                    alarm = {'level': alarm_rule[alarm_key]['alarm_level'], 'type': alarm_rule[alarm_key]['alarm_type'], 'message':alarm_rule[alarm_key]['alarm_message']}
+                                    message_alarms.append(alarm)
+                            if alarm_key == 'value_>':
+                                if message['value'] > alarm_rule[alarm_key]['value']:
+                                    alarm = {'level': alarm_rule[alarm_key]['alarm_level'], 'type': alarm_rule[alarm_key]['alarm_type'], 'message':alarm_rule[alarm_key]['alarm_message']}
+                                    message_alarms.append(alarm)
+                            if alarm_key == 'substr_is':
+                                if 'string' in message and message['string']:
+                                    substr = message['string'][alarm_rule[alarm_key]['substr_begin']:alarm_rule[alarm_key]['substr_end']]
+                                    if substr == alarm_rule[alarm_key]['value']:
+                                        alarm = {'level': alarm_rule[alarm_key]['alarm_level'], 'type': alarm_rule[alarm_key]['alarm_type'], 'message':alarm_rule[alarm_key]['alarm_message']}
+                                        message_alarms.append(alarm)
+                    if message_alarms:
+                        message['alarms'] = alarms
+                messages_out.append(message)
+        else:
+            messages_out = messages_in
+        return messages_out        
   
     def time(self):
         # Called to give some processing time to the acquirer
@@ -236,6 +263,7 @@ class SerialStreamAcquirer(Acquirer):
                 else:
                     if len(line.split(self.config['stream']['item_delimiter'])) == self.num_items_per_line:
                         dataMessage = self.parse_simple_string_to_record(line,config_dict=self.config['stream'])
+                        dataMessage = self.apply_alarms(dataMessage)
                         if len(dataMessage) > 0:
                             self.send_measurement_to_queue(dataMessage)
             else:
@@ -296,6 +324,7 @@ class SerialPolledAcquirer(SerialStreamAcquirer):
                                            
                                     if value_string:                                        
                                         messages = self.parse_simple_string_to_record(value_string,config_dict=self.config['poll'][key])
+                                        messages = self.apply_alarms(messages)
                                         self.send_measurement_to_queue(messages)
                                 except Exception as e:
                                     self.logger.error('cannot proccess response string: '+original_resp_string+' :' + str(e))
@@ -383,6 +412,7 @@ class NetworkStreamingAcquirer(NetworkAcquirer):
                                         values_string = None
                                 if values_string: 
                                     dataMessage = self.parse_simple_string_to_record(values_string,config_dict=self.config[dict])
+                                    dataMessage = self.apply_alarms(dataMessage)
                                     if len(dataMessage) > 0:
                                         self.send_measurement_to_queue(dataMessage)
             else:
@@ -504,6 +534,7 @@ class SimulatedAcquirer(Acquirer):
         while True:
             line = self.make_data_line()
             record = self.parse_simple_string_to_record(line,config_dict=self.config['stream'])
+            record = self.apply_alarms(record)
             self.send_measurement_to_queue(record)
             time_since_last_cycle = datetime.now() - cycle_time
             to = (cycle_interval.seconds * 1000 - time_since_last_cycle.microseconds) / 1000
