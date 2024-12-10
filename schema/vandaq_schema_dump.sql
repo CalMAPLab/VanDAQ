@@ -76,7 +76,7 @@ CREATE TABLE public.alarm (
     id bigint DEFAULT nextval('public.alarm_id_seq'::regclass) NOT NULL,
     platform_id integer NOT NULL,
     instrument_id integer NOT NULL,
-    acquisition_time_id bigint NOT NULL,
+    sample_time_id bigint NOT NULL,
     alarm_severity_id integer NOT NULL,
     alarm_type_id integer NOT NULL,
     parameter_id integer,
@@ -1020,6 +1020,45 @@ ALTER TABLE ONLY public.alarm
 
 ALTER TABLE ONLY public.alarm
     ADD CONSTRAINT platform_id_fk FOREIGN KEY (platform_id) REFERENCES public.platform(id);
+
+
+--
+-- PostgreSQL database dump complete
+--
+
+--
+-- PostgreSQL database dump
+--
+
+-- Dumped from database version 14.15 (Ubuntu 14.15-0ubuntu0.22.04.1)
+-- Dumped by pg_dump version 14.15 (Ubuntu 14.15-0ubuntu0.22.04.1)
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- Data for Name: alarm_level; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.alarm_level (id, alarm_level) FROM stdin;
+1	warning
+2	alarm
+\.
+
+
+--
+-- Name: alarm_level_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.alarm_level_id_seq', 2, true);
 
 
 --
