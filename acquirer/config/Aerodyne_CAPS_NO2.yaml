@@ -25,3 +25,43 @@ logs:
   log_file: "acquirer_CAPS_NO2.log"
   log_level: "INFO"
   logger_name: "CAPS_NO2"
+
+alarms:
+  NO2:
+    - value_<:
+        value: 0
+        alarm_level: alarm
+        alarm_type: underrange
+        alarm_message: "NO2 below zero"
+        impacts_data: true
+    - value_>:
+        value: 30
+        alarm_level: warning
+        alarm_type: overrange
+        alarm_message: "NO2 above possible threshold"
+        impacts_data: false
+  Status:
+    - substr_is:
+        substr_begin: 0
+        substr_end: 1
+        value: "3"
+        alarm_level: alarm
+        alarm_type: instrument_auto_cal
+        alarm_message: "Internal filter inline"
+        impacts_data: true
+    - substr_is:
+        substr_begin: 1
+        substr_end: 2
+        value: "1"
+        alarm_level: alarm
+        alarm_type: instrument_auto_cal
+        alarm_message: "Internal baseline flush period"
+        impacts_data: true
+    - substr_is:
+        substr_begin: 1
+        substr_end: 2
+        value: "2"
+        alarm_level: alarm
+        alarm_type: instrument_auto_cal
+        alarm_message: "Internal baseline measurement period"
+        impacts_data: true

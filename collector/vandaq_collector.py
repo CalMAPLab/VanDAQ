@@ -31,7 +31,6 @@ def insert_measurment_into_database(session, message):
         platform_us = (datetime.now()-sttime).microseconds
         print('Platform query took {} microseconds'.format(str(platform_us)))
 
-
         sttime = datetime.now()
         # Check if the instrument already exists, otherwise insert it
         instrument_record = session.query(DimInstrument).filter_by(
@@ -46,12 +45,15 @@ def insert_measurment_into_database(session, message):
 
          # Check if the parameter already exists, otherwise insert it
         sttime = datetime.now()
-        parameter_record = session.query(DimParameter).filter_by(
-            parameter=message['parameter']).first()
-        if not parameter_record:
-            parameter_record = DimParameter(parameter=message['parameter'])
-            session.add(parameter_record)
-            session.flush()  # Ensure the ID is generated
+        # in case an instrument non-response alarm comes in (no paramater)
+        parameter_record = None
+        if 'parameter' in message:
+            parameter_record = session.query(DimParameter).filter_by(
+                parameter=message['parameter']).first()
+            if not parameter_record:
+                parameter_record = DimParameter(parameter=message['parameter'])
+                session.add(parameter_record)
+                session.flush()  # Ensure the ID is generated
 
         parameter_us = (datetime.now()-sttime).microseconds
         print('Parameter query took {} microseconds'.format(str(parameter_us)))
@@ -146,40 +148,83 @@ def insert_measurment_into_database(session, message):
 
         if 'value' in message.keys():
             measurementValue = message['value']
-            
-        # Insert the measurement with the dimension IDs
-        if inst_has_timestamp:
-            measurement_record = FactMeasurement(
-                platform_id=platform_record.id,
-                instrument_id=instrument_record.id,
-                parameter_id=parameter_record.id,
-                unit_id=unit_record.id,
-                acquisition_type_id=acquisition_type_record.id,
-                acquisition_time_id=acq_time_record.id,
-                instrument_time_id=inst_time_record.id,
-                sample_time_id=sample_time_record.id,
-                sample_time=message['sample_time'],
-                value=measurementValue,
-                string=measurementString
-            )
-        else:
-            measurement_record = FactMeasurement(
-                platform_id=platform_record.id,
-                instrument_id=instrument_record.id,
-                parameter_id=parameter_record.id,
-                unit_id=unit_record.id,
-                acquisition_type_id=acquisition_type_record.id,
-                acquisition_time_id=acq_time_record.id,
-                sample_time_id=sample_time_record.id,
-                sample_time=message['sample_time'],
-                value=measurementValue,
-                string=measurementString
-            )
-        measurement_us = (datetime.now()-sttime).microseconds
-        print('Measuremment insert took {} microseconds'.format(str(measurement_us)))
+        measurement_record = None
+        sttime = datetime.now()
+        if measurementValue or measurementValue:          
+            # Insert the measurement with the dimension IDs
+            if inst_has_timestamp:
+                measurement_record = FactMeasurement(
+                    platform_id=platform_record.id,
+                    instrument_id=instrument_record.id,
+                    parameter_id=parameter_record.id,
+                    unit_id=unit_record.id,
+                    acquisition_type_id=acquisition_type_record.id,
+                    acquisition_time_id=acq_time_record.id,
+                    instrument_time_id=inst_time_record.id,
+                    sample_time_id=sample_time_record.id,
+                    sample_time=message['sample_time'],
+                    value=measurementValue,
+                    string=measurementString
+                )
+            else:
+                measurement_record = FactMeasurement(
+                    platform_id=platform_record.id,
+                    instrument_id=instrument_record.id,
+                    parameter_id=parameter_record.id,
+                    unit_id=unit_record.id,
+                    acquisition_type_id=acquisition_type_record.id,
+                    acquisition_time_id=acq_time_record.id,
+                    sample_time_id=sample_time_record.id,
+                    sample_time=message['sample_time'],
+                    value=measurementValue,
+                    string=measurementString
+                )
+            session.add(measurement_record)
+            session.flush()  # Commit the transaction
+            measurement_us = (datetime.now()-sttime).microseconds
+            print('Measuremment insert took {} microseconds'.format(str(measurement_us)))
 
-        session.add(measurement_record)
-        session.commit()  # Commit the transaction
+        if 'alarms' in message:
+            for alarm in message['alarms']:
+                # Check if the alarm type already exists, otherwise insert it
+                alarm_type_record = session.query(DimAlarmType).filter_by(
+                    alarm_type=alarm['alarm_type']).first()
+                if not alarm_type_record:
+                    alarm_type_record = DimAlarmType(alarm_type=alarm['alarm_type'])
+                    session.add(alarm_type_record)
+                    session.flush()  # Ensure the ID is generated
+
+                # Check if the alarm level already exists, otherwise insert it
+                alarm_level_record = session.query(DimAlarmLevel).filter_by(
+                    alarm_level=alarm['alarm_level']).first()
+                if not alarm_level_record:
+                    alarm_level_record = DimAlarmLevel(alarm_level=alarm['alarm_level'])
+                    session.add(alarm_level_record)
+                    session.flush()  # Ensure the ID is generated
+                
+                alarm_message = alarm['alarm_message']
+                parameter_id_local = None
+                if parameter_record:
+                    parameter_id_local = parameter_record.id
+                measurement_id_local = None
+                if measurement_record:
+                    measurement_id_local = measurement_record.id
+
+                alarm_record = FactAlarm(
+                    platform_id=platform_record.id,
+                    measurement_id=measurement_id_local,
+                    instrument_id=instrument_record.id,
+                    parameter_id=parameter_id_local,
+                    sample_time_id=sample_time_record.id,
+                    alarm_type_id=alarm_type_record.id,
+                    alarm_level_id=alarm_level_record.id,
+                    data_impacted=alarm['data_impacted'],
+                    message=alarm['alarm_message']
+                )
+                session.add(alarm_record)
+                session.flush()  # Commit the transaction
+        session.commit()
+                
         return True
 
     except IntegrityError:
@@ -343,6 +388,7 @@ while True:
     if collector_input == 'queue':
         try:
             message = queue.get()
+            #continue
         except Exception as e:
             logger.error("exception in get from queue")
             logger.error(e)
