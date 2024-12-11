@@ -32,13 +32,13 @@ alarms:
         value: 0
         alarm_level: alarm
         alarm_type: underrange
-        alarm_message: "NO2 below zero"
+        alarm_message: "NO2 negative"
         impacts_data: true
     - value_>:
-        value: 30
+        value: 200
         alarm_level: warning
         alarm_type: overrange
-        alarm_message: "NO2 above possible threshold"
+        alarm_message: "NO2 above threshold of 200 ppb"
         impacts_data: false
   Status:
     - substr_is:

@@ -1,5 +1,5 @@
 from sqlalchemy.orm import aliased
-from sqlalchemy import select, func, and_
+from sqlalchemy import create_engine, select, func, and_, case
 from datetime import datetime, timedelta
 import pandas as pd
 from vandaq_schema import *
@@ -58,7 +58,7 @@ def get_2step_query(engine, start_time, end_time=None, platform=None):
         .join(DimUnit, subquery.c.unit_id == DimUnit.id)
         .join(DimAcquisitionType, subquery.c.acquisition_type_id == DimAcquisitionType.id)
         .join(DimPlatform, subquery.c.platform_id == DimPlatform.id)
-    )
+        )
 
 
     compiled_query = query.compile(session.bind, compile_kwargs={"literal_binds": True})
@@ -106,5 +106,133 @@ def get_2step_query(engine, start_time, end_time=None, platform=None):
 
     return df_pivot
 
-# Execute the query
-#results = session.execute(query).all()
+def get_2step_query_with_alarms(engine, start_time, end_time=None, platform=None):
+    session = sessionmaker(bind=engine)()
+
+    if not end_time:
+        end_time = datetime.now()
+
+    platform_id = None
+
+    if platform:
+        platform_query = (
+            select(DimPlatform)
+            .where(DimPlatform.platform == platform))
+        compiled_query = platform_query.compile(session.bind, compile_kwargs={"literal_binds": True})
+
+        pdf = pd.read_sql(str(compiled_query), session.bind)
+        if pdf.shape[0]:
+            platform_id = int(pdf['id'][0])
+
+    # Step 1: Subquery to get the time frame of measurements
+    if platform_id:
+        measurement_subquery = (
+            select(FactMeasurement)
+            .where(and_((FactMeasurement.sample_time >= start_time),
+                        (FactMeasurement.sample_time <= end_time),
+                        (FactMeasurement.platform_id == platform_id)))
+            .subquery()
+        )
+    else:
+        measurement_subquery = (
+            select(FactMeasurement)
+            .where(and_((FactMeasurement.sample_time >= start_time),
+                        (FactMeasurement.sample_time <= end_time)))
+            .subquery()
+        )
+
+    # Step 2: Scoped alarm aggregation
+    alarm_aggregation = (
+        select(
+            FactAlarm.measurement_id,
+            func.count(FactAlarm.id).label("alarm_count"),
+            func.max(FactAlarm.alarm_level_id).label("max_alarm_level"),
+            func.string_agg(FactAlarm.message, "|").label("concatenated_messages")
+        )
+        .where(FactAlarm.measurement_id.in_(
+            select(measurement_subquery.c.id)
+        ))
+        .group_by(FactAlarm.measurement_id)
+        .subquery()
+    )
+
+    # Step 3: Main query
+    query = (
+        select(
+            measurement_subquery.c.id,
+            measurement_subquery.c.sample_time,
+            measurement_subquery.c.value,
+            measurement_subquery.c.string,
+            DimInstrument.instrument,
+            DimParameter.parameter,
+            DimUnit.unit,
+            DimAcquisitionType.acquisition_type,
+            DimPlatform.platform,
+            func.coalesce(alarm_aggregation.c.alarm_count, 0).label("alarm_count"),
+            func.coalesce(alarm_aggregation.c.max_alarm_level, 0).label("max_alarm_level"),
+            func.coalesce(alarm_aggregation.c.concatenated_messages, "").label("alarm_messages")
+        )
+        .join(DimInstrument, measurement_subquery.c.instrument_id == DimInstrument.id)
+        .join(DimParameter, measurement_subquery.c.parameter_id == DimParameter.id)
+        .join(DimUnit, measurement_subquery.c.unit_id == DimUnit.id)
+        .join(DimAcquisitionType, measurement_subquery.c.acquisition_type_id == DimAcquisitionType.id)
+        .join(DimPlatform, measurement_subquery.c.platform_id == DimPlatform.id)
+        .outerjoin(alarm_aggregation, measurement_subquery.c.id == alarm_aggregation.c.measurement_id)
+    )
+
+    compiled_query = query.compile(session.bind, compile_kwargs={"literal_binds": True})
+
+    # Use pandas to execute the compiled query and load it into a DataFrame
+    df = pd.read_sql(str(compiled_query), session.bind)
+
+    # Create a column name from the combination of instrument, parameter, unit, and acquisition_type
+    df['measurement'] = (
+        df['instrument'] + ' | ' + df['parameter'] + ' | ' + df['unit'] + ' | ' + df['acquisition_type']
+    )
+
+    # Pivot the DataFrame
+    df_pivot = df.pivot(index='sample_time', columns='measurement', values=[
+        'value', 'string', 'alarm_count', 'max_alarm_level', 'alarm_messages'
+    ])
+
+    # Flatten the multi-index columns
+    df_pivot.columns = [' | '.join(col).strip() for col in df_pivot.columns.values]
+
+    # Drop rows with no measurements (all NaNs in "value" columns)
+    value_columns = [col for col in df_pivot.columns if 'value' in col]
+    df_pivot.dropna(subset=value_columns, how='all', inplace=True)
+
+    # Sort columns by instrument and parameter, and reorder within each measurement group
+    def column_sort_key(col_name):
+        parts = col_name.split(" | ")
+        measurement_part = " | ".join(parts[1:3])  # Instrument and Parameter
+        column_type = parts[0]  # value, string, etc.
+        column_order = ['value', 'string', 'alarm_count', 'max_alarm_level', 'alarm_messages']
+        return (measurement_part, column_order.index(column_type) if column_type in column_order else 99)
+
+    df_pivot = df_pivot[sorted(df_pivot.columns, key=column_sort_key)]
+
+    # Add the time index as the first column
+    df_pivot['sample_time'] = df_pivot.index
+    cols = df_pivot.columns.tolist()
+    cols = cols[-1:] + cols[:-1]
+    df_pivot = df_pivot[cols]
+
+    # Close the session
+    session.close()
+
+    return df_pivot
+
+
+
+# Run the app
+if __name__ == '__main__':
+
+    startTime = datetime.now() - timedelta(minutes=5)
+    endTime = datetime.now()
+    # Database connection
+    engine = create_engine('postgresql://vandaq:p3st3r@localhost:5432/vandaq-dev', echo=False)
+
+    df = get_2step_query_with_alarms(engine, startTime, end_time=endTime)
+    print(df)
+ 
