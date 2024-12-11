@@ -185,22 +185,29 @@ class Acquirer:
                     message_alarms = []
                     for alarm_rule in alarms[message['parameter']]:
                         for alarm_key in alarm_rule.keys():
+                            alarm = {} 
+                            alarm_tripped = False                           
                             if alarm_key == 'value_<':
                                 if message['value'] < alarm_rule[alarm_key]['value']:
-                                    alarm = {'level': alarm_rule[alarm_key]['alarm_level'], 'type': alarm_rule[alarm_key]['alarm_type'], 'message':alarm_rule[alarm_key]['alarm_message']}
-                                    message_alarms.append(alarm)
+                                    alarm_tripped = True
                             if alarm_key == 'value_>':
                                 if message['value'] > alarm_rule[alarm_key]['value']:
-                                    alarm = {'level': alarm_rule[alarm_key]['alarm_level'], 'type': alarm_rule[alarm_key]['alarm_type'], 'message':alarm_rule[alarm_key]['alarm_message']}
-                                    message_alarms.append(alarm)
+                                    alarm_tripped = True
                             if alarm_key == 'substr_is':
                                 if 'string' in message and message['string']:
                                     substr = message['string'][alarm_rule[alarm_key]['substr_begin']:alarm_rule[alarm_key]['substr_end']]
                                     if substr == alarm_rule[alarm_key]['value']:
-                                        alarm = {'level': alarm_rule[alarm_key]['alarm_level'], 'type': alarm_rule[alarm_key]['alarm_type'], 'message':alarm_rule[alarm_key]['alarm_message']}
-                                        message_alarms.append(alarm)
+                                        alarm_tripped = True
+                            if alarm_tripped:
+                                alarm = {'alarm_level': alarm_rule[alarm_key]['alarm_level'], 'alarm_type': alarm_rule[alarm_key]['alarm_type'], 'alarm_message':alarm_rule[alarm_key]['alarm_message']}
+                                if 'impacts_data' in alarm_rule[alarm_key] and not alarm_rule[alarm_key]['impacts_data']:
+                                    alarm['data_impacted'] = False
+                                else:
+                                    alarm['data_impacted'] = True
+                                message_alarms.append(alarm)
+                                
                     if message_alarms:
-                        message['alarms'] = alarms
+                        message['alarms'] = message_alarms
                 messages_out.append(message)
         else:
             messages_out = messages_in
