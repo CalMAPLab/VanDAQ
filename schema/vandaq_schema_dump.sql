@@ -16,6 +16,20 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
+--
+-- Name: pg_partman; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pg_partman WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION pg_partman; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION pg_partman IS 'Extension to manage partitioned tables by time or ID';
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -77,21 +91,34 @@ CREATE TABLE public.alarm (
     platform_id integer NOT NULL,
     instrument_id integer NOT NULL,
     sample_time_id bigint NOT NULL,
-    alarm_severity_id integer NOT NULL,
+    alarm_level_id integer NOT NULL,
     alarm_type_id integer NOT NULL,
     parameter_id integer,
     data_impacted boolean NOT NULL,
-    message character varying
+    message character varying,
+    measurement_id bigint
 );
 
 
 ALTER TABLE public.alarm OWNER TO postgres;
 
 --
--- Name: alarm_severity_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: alarm_level; Type: TABLE; Schema: public; Owner: postgres
 --
 
-CREATE SEQUENCE public.alarm_severity_id_seq
+CREATE TABLE public.alarm_level (
+    id integer NOT NULL,
+    alarm_level character varying NOT NULL
+);
+
+
+ALTER TABLE public.alarm_level OWNER TO postgres;
+
+--
+-- Name: alarm_level_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.alarm_level_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -99,19 +126,14 @@ CREATE SEQUENCE public.alarm_severity_id_seq
     CACHE 1;
 
 
-ALTER TABLE public.alarm_severity_id_seq OWNER TO postgres;
+ALTER TABLE public.alarm_level_id_seq OWNER TO postgres;
 
 --
--- Name: alarm_severity; Type: TABLE; Schema: public; Owner: postgres
+-- Name: alarm_level_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
 --
 
-CREATE TABLE public.alarm_severity (
-    id integer DEFAULT nextval('public.alarm_severity_id_seq'::regclass) NOT NULL,
-    alarm_type character varying NOT NULL
-);
+ALTER SEQUENCE public.alarm_level_id_seq OWNED BY public.alarm_level.id;
 
-
-ALTER TABLE public.alarm_severity OWNER TO postgres;
 
 --
 -- Name: alarm_type; Type: TABLE; Schema: public; Owner: postgres
@@ -498,6 +520,13 @@ ALTER TABLE ONLY public.acquisition_type ALTER COLUMN id SET DEFAULT nextval('pu
 
 
 --
+-- Name: alarm_level id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.alarm_level ALTER COLUMN id SET DEFAULT nextval('public.alarm_level_id_seq'::regclass);
+
+
+--
 -- Name: alarm_type id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
@@ -570,6 +599,22 @@ ALTER TABLE ONLY public.acquisition_type
 
 
 --
+-- Name: alarm_level alarm_level_alarm_level_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.alarm_level
+    ADD CONSTRAINT alarm_level_alarm_level_key UNIQUE (alarm_level);
+
+
+--
+-- Name: alarm_level alarm_level_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.alarm_level
+    ADD CONSTRAINT alarm_level_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: alarm alarm_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -578,19 +623,19 @@ ALTER TABLE ONLY public.alarm
 
 
 --
--- Name: alarm_severity alarm_severity_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.alarm_severity
-    ADD CONSTRAINT alarm_severity_pkey PRIMARY KEY (id);
-
-
---
 -- Name: alarm_type alarm_type_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.alarm_type
     ADD CONSTRAINT alarm_type_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: alarm_type alarm_type_unique; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.alarm_type
+    ADD CONSTRAINT alarm_type_unique UNIQUE (alarm_type);
 
 
 --
@@ -726,17 +771,17 @@ CREATE INDEX idx_alarm_id ON public.alarm USING btree (id) WITH (deduplicate_ite
 
 
 --
--- Name: idx_alarm_severity_id; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_alarm_level_id; Type: INDEX; Schema: public; Owner: postgres
 --
 
-CREATE INDEX idx_alarm_severity_id ON public.alarm_severity USING btree (id) WITH (deduplicate_items='true');
+CREATE INDEX idx_alarm_level_id ON public.alarm_level USING btree (id) WITH (deduplicate_items='false');
 
 
 --
 -- Name: idx_alarm_type_id; Type: INDEX; Schema: public; Owner: postgres
 --
 
-CREATE INDEX idx_alarm_type_id ON public.alarm_type USING btree (id) WITH (deduplicate_items='true');
+CREATE INDEX idx_alarm_type_id ON public.alarm_type USING btree (id) WITH (deduplicate_items='false');
 
 
 --
@@ -835,7 +880,7 @@ CREATE INDEX idx_unit_id ON public.unit USING btree (id);
 --
 
 ALTER TABLE ONLY public.alarm
-    ADD CONSTRAINT acq_time_fk FOREIGN KEY (acquisition_time_id) REFERENCES public."time"(id);
+    ADD CONSTRAINT acq_time_fk FOREIGN KEY (sample_time_id) REFERENCES public."time"(id);
 
 
 --
@@ -851,7 +896,7 @@ ALTER TABLE ONLY public.measurement_alarm
 --
 
 ALTER TABLE ONLY public.alarm
-    ADD CONSTRAINT alarm_severity_id_fk FOREIGN KEY (alarm_severity_id) REFERENCES public.alarm_severity(id);
+    ADD CONSTRAINT alarm_severity_id_fk FOREIGN KEY (alarm_level_id) REFERENCES public.alarm_level(id);
 
 
 --
@@ -956,6 +1001,14 @@ ALTER TABLE ONLY public.measurement
 
 ALTER TABLE ONLY public.measurement_alarm
     ADD CONSTRAINT measurement_id_fk FOREIGN KEY (measurement_id) REFERENCES public.measurement(id);
+
+
+--
+-- Name: alarm measurement_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.alarm
+    ADD CONSTRAINT measurement_id_fk FOREIGN KEY (measurement_id) REFERENCES public.measurement(id) NOT VALID;
 
 
 --
