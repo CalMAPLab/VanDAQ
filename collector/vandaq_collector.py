@@ -150,7 +150,7 @@ def insert_measurment_into_database(session, message):
             measurementValue = message['value']
         measurement_record = None
         sttime = datetime.now()
-        if measurementValue or measurementString:          
+        if (measurementValue is not None) or measurementString:          
             # Insert the measurement with the dimension IDs
             if inst_has_timestamp:
                 measurement_record = FactMeasurement(
