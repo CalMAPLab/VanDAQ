@@ -82,99 +82,75 @@ class Acquirer:
             else:
                 self.logger.debug('not queuing %s', str(measurements))
         
-    def parse_simple_string_to_record(self,line,config_dict=None, item_delimiter = ','):
-        # parses a string record as acquared from the instrument
-        # and returns a list fo dictionaries, one dict for each parameter
-        # read by the instrument
-        # this clearly needs a rewrite 
+    def parse_simple_string_to_record(self, line, config_dict=None, item_delimiter=','):
+        """Parses a string record from the instrument and returns a list of dictionaries."""
         if not config_dict:
             config_dict = self.config['stream']
-        if 'item_delimiter' in config_dict:
-            item_delimiter = config_dict['item_delimiter']
+        
+        item_delimiter = config_dict.get('item_delimiter', item_delimiter)
         parts = line.strip().split(item_delimiter)
         items = config_dict['items'].split(',')
-        resultList = []
+        formats = config_dict['formats'].split(',')
+        units = config_dict['units'].split(',')
+        acq_types = config_dict['acqTypes'].split(',')
+        
+        if len(parts) != len(items):
+            self.logger.error(f"Mismatch in parts and items count: {line}")
+            return []
 
-        if len(parts) == len(items):
-            formats = config_dict['formats'].split(',')
-            units = config_dict['units'].split(',')
-            acqTypes = config_dict['acqTypes'].split(',')
-            res_values = []
-            res_strings = []
-            res_parameters = []
-            res_units = []
-            res_acqTypes = []
-            time = None
-            date = None
-            instTime = None
-            next_day = False
-            for i in range(0,len(parts)):
-                 if items[i] != 'x':
-                    if formats[i] in 'fhs':
-                        item_string = None
-                        part = parts[i]
-                        try:
-                            if formats[i] == 'h':
-                                if '0x' not in part.lower():
-                                    part = '0x'+part
-                                fl = float(int(part,0))
-                            elif formats[i] == 's':
-                                item_string = part
-                                fl = None
-                            elif formats[i] == 'f':                            
-                                fl = float(part)
-                            else:
-                                self.logger.error('bad format '+items[i]+'='+formats[i]+' in line \"'+line+'\"')                                
-                        except:
-                            self.logger.error('bad item '+items[i]+'='+parts[i]+' in line \"'+line+'\"')
-                        else:
-                            res_values.append(fl)
-                            res_strings.append(item_string)
-                            res_parameters.append(items[i])
-                            res_units.append(units[i])
-                            res_acqTypes.append(acqTypes[i])
-                    elif items[i] == 'inst_date':
-                        parsed = datetime.strptime(parts[i], formats[i])
-                        date = parsed.date()
-                    elif items[i] == 'inst_time':
-                        # BUG HERE: some instruments deliver 24:00:00, python doesn't handle
-                        timestr = parts[i]
-                        if timestr[0:3] == '24:':
-                            timestr = '00:'+timestr[3:]
-                            next_day = True
-                        parsed = datetime.strptime(timestr, formats[i])
-                        time = parsed.time()
-                    elif items[i] == 'inst_datetime':
-                        if ' 24:' in parts[i]:
-                            parts[i].replace(' 24:', ' 00:')
-                            parsed = datetime.strptime(parts[i], formats[i]) + timedelta(days=1)
-                        else:
-                            parsed = datetime.strptime(parts[i], formats[i])
-                        instTime = parsed
-                    if time and date:
-                        if next_day:
-                            date += timedelta(days=1)
-                        instTime = datetime.combine(date, time)
-            
-            acquisition_time = datetime.now().replace(microsecond=0)
-            sample_time = acquisition_time - timedelta(seconds = self.measurement_delay)
+        result_list = []
+        inst_time = None
+        acquisition_time = datetime.now().replace(microsecond=0)
+        sample_time = acquisition_time - timedelta(seconds=self.measurement_delay)
 
-            for i in range(0,len(res_values)):		
-                resultDict = {
-                    'platform':self.config['platform'],
-                    'instrument':self.config['instrument'],
-                    'parameter':res_parameters[i],
-                    'unit':res_units[i],
-                    'acquisition_type':res_acqTypes[i],
-                    'acquisition_time':acquisition_time,
-                    'sample_time':sample_time,
-                    'instrument_time':instTime} 
-                if res_values[i] is not None:
-                    resultDict['value'] = res_values[i]
-                if res_strings[i] is not None:
-                    resultDict['string'] = res_strings[i]
-                resultList.append(resultDict)
-        return resultList 
+        def parse_value(part, fmt):
+            """Helper to parse individual values based on the format."""
+            try:
+                if fmt == 'f':  # Float
+                    return float(part), None
+                elif fmt == 'h':  # Hexadecimal
+                    return float(int(part, 0)), None
+                elif fmt == 's':  # String
+                    return None, part
+                else:
+                    self.logger.error(f"Unsupported format: {fmt}")
+            except ValueError as e:
+                self.logger.error(f"Parsing error for part '{part}' with format '{fmt}': {e}")
+            return None, None
+
+        def parse_datetime(part, fmt):
+            """Helper to handle datetime parsing."""
+            if '24:' in part:
+                part = part.replace(' 24:', ' 00:')
+                return datetime.strptime(part, fmt) + timedelta(days=1)
+            return datetime.strptime(part, fmt)
+
+        for idx, (part, item, fmt, unit, acq_type) in enumerate(zip(parts, items, formats, units, acq_types)):
+            if item == 'x':
+                continue
+
+            if item == 'inst_datetime':
+                inst_time = parse_datetime(part, fmt)
+            elif item in ('inst_date', 'inst_time'):
+                continue  # These are handled within inst_datetime
+            else:
+                value, string = parse_value(part, fmt)
+                if value is None and string is None:
+                    continue
+                result_list.append({
+                    'platform': self.config['platform'],
+                    'instrument': self.config['instrument'],
+                    'parameter': item,
+                    'unit': unit,
+                    'acquisition_type': acq_type,
+                    'acquisition_time': acquisition_time,
+                    'sample_time': sample_time,
+                    'instrument_time': inst_time,
+                    'value': value,
+                    'string': string
+                })
+
+        return result_list
 
     def apply_alarms(self, messages_in):
         if 'alarms' in self.config:
@@ -192,6 +168,9 @@ class Acquirer:
                                     alarm_tripped = True
                             if alarm_key == 'value_>':
                                 if message['value'] > alarm_rule[alarm_key]['value']:
+                                    alarm_tripped = True
+                            if alarm_key == 'value_=':
+                                if message['value'] == alarm_rule[alarm_key]['value']:
                                     alarm_tripped = True
                             if alarm_key == 'substr_is':
                                 if 'string' in message and message['string']:
@@ -488,6 +467,7 @@ class SerialNmeaGPSAcquirer(SerialStreamAcquirer):
                         line = line.strip()
                         if line.startswith('$'):
                             message = self.process_nmea_sentence(line)
+                            message = self.apply_alarms(message)
                             if message:
                                 self.send_measurement_to_queue(message)
 
