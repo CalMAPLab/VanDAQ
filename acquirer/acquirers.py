@@ -206,14 +206,16 @@ class Acquirer:
       
       
 class SerialStreamAcquirer(Acquirer):
-    baudrate = 19200
-    serial_port = None
-    num_items_per_line = 0
-    serial_open = False
-    serial_open_error_logged = False
     
     def __init__(self, configdict):
         Acquirer.__init__(self,configdict)
+        self.baudrate = 19200
+        self.serial_port = None
+        self.num_items_per_line = 0
+        self.serial_open = False
+        self.serial_open_error_logged = False
+        self.line_buffer = []
+        self.partial_line = ""
         if 'stream' in self.config:
             if 'items' in self.config['stream']:
                 try:
@@ -238,16 +240,38 @@ class SerialStreamAcquirer(Acquirer):
                     self.serial_open_error_logged = True
         return self.serial_open
                
+    def getline(self):
+        """Retrieve the next complete line, keeping incomplete lines in a buffer."""
+        self.check_serial_open()
+
+        # Read available bytes from the serial buffer
+        if self.serial_port.in_waiting > 0:
+            data = self.serial_port.read(self.serial_port.in_waiting).decode(errors='replace')
+            # Add new data to the existing partial line
+            self.partial_line += data
+            
+            # Split into complete lines and update the buffer
+            lines = self.partial_line.split('\n')
+            self.line_buffer.extend(line.strip() for line in lines[:-1])
+            self.partial_line = lines[-1]  # Store incomplete line
+
+        # Return the oldest line from the buffer if available
+        if self.line_buffer:
+            return self.line_buffer.pop(0)
+
+        return None  # No complete line available
                 
     def run(self):
         while True:
             if self.check_serial_open():
                 try:
-                    line = self.serial_port.readline().decode()
+                    #line = self.serial_port.readline().decode()
+                    line = self.getline()
                 except Exception as e:
-                    self.logger.error('Error reading serial port '+config['serial']['device']+' :'+ e)
+                    self.logger.error('Error reading serial port '+self.config['serial']['device']+' :'+ str(e))
                 else:
-                    if len(line.split(self.config['stream']['item_delimiter'])) == self.num_items_per_line:
+
+                    if line and len(line.split(self.config['stream']['item_delimiter'])) == self.num_items_per_line:
                         dataMessage = self.parse_simple_string_to_record(line,config_dict=self.config['stream'])
                         dataMessage = self.apply_alarms(dataMessage)
                         if len(dataMessage) > 0:
@@ -450,6 +474,7 @@ class SerialNmeaGPSAcquirer(SerialStreamAcquirer):
 
     def run(self):
         buffer = ""
+        timer = datetime.now()
         while True:
             if self.check_serial_open():
                 try:
@@ -458,6 +483,7 @@ class SerialNmeaGPSAcquirer(SerialStreamAcquirer):
                     
                     # Append data to the buffer
                     buffer += data
+                    buffer = buffer.replace('\n','')
 
                     # Split buffer by carriage return '\r'
                     lines = buffer.split('\r')
@@ -467,9 +493,12 @@ class SerialNmeaGPSAcquirer(SerialStreamAcquirer):
                         line = line.strip()
                         if line.startswith('$'):
                             message = self.process_nmea_sentence(line)
-                            message = self.apply_alarms(message)
                             if message:
-                                self.send_measurement_to_queue(message)
+                                print('got message at '+ datetime.now().isoformat())
+                                message = self.apply_alarms(message)
+                                if (datetime.now() - timer).total_seconds() >= 1:
+                                    self.send_measurement_to_queue(message)
+                                    timer = datetime.now()
 
                     # Keep the last incomplete sentence in the buffer
                     buffer = lines[-1] if lines[-1] else ""
