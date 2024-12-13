@@ -1,0 +1,30 @@
+body {
+    font-family: sans-serif;
+}
+h1, h2, h3, h4, h5, h6 {
+    color: rgb(242, 243, 182)
+}
+
+.ambient_reading {
+	font-size: 20px;
+	font-weight: bold;
+	color: white;
+}
+
+.engineering_reading {
+	font-size: 14px;
+	font-weight: bold;
+	color: yellow;
+}
+
+@keyframes flash {
+    0%, 100% { outline-color: red; }
+    50% { outline-color: transparent; }
+}
+
+.flashing-box-text {
+    outline: 2px solid red;
+    display: inline-block;
+    padding: 5px;
+    animation: flash 1s infinite;
+}
