@@ -4,6 +4,7 @@ import os
 from glob import glob
 import subprocess
 import psutil
+from  ipcqueue import posixmq
 
 args = sys.argv
 if 'python' in args[0]:
@@ -101,7 +102,25 @@ def status():
 			line += p.status()
 			print(line)
 
-commands = {'startup':startup, 'stop':stop, 'status':status}
+queue_name = '/dev-measurements'    
+
+def clear_queue():
+    try:
+        queue = posixmq.Queue(queue_name,  maxsize=50, maxmsgsize=8000)
+        num = queue.qsize()
+        for i in range(0,num):
+            print('.')
+            message = queue.get()
+        queue.close()
+    except Exception as e:
+        print('error clearing queue: {}'.format(str(e)))
+    else:
+        print(f'queue cleared of {num} messages.')
+        
+    
+        
+    
+commands = {'startup':startup, 'stop':stop, 'status':status, 'clearqueue': clear_queue}
 
 if len(args) >= 2 and args[1] in commands.keys():
 	command = commands[args[1]]
