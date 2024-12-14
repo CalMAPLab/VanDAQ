@@ -8,6 +8,14 @@ display_params:
       - "CH4"
       - "C2H6"
       - "H2O"
+  Aeris_N2O_CO:
+    graph:
+      - "N2O"
+      - "CO"
+    display:
+      - "N2O"
+      - "H2O"
+      - "CO"
   DMS_PAX_BlackCarbon:
     graph:
       - "BC_mass"
