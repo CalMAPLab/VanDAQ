@@ -8,7 +8,7 @@ import plotly.graph_objs as go
 import pandas as pd
 import datetime
 import yaml
-from vandaq_measurements_query import get_measurements
+#from vandaq_measurements_query import get_measurements
 from vandaq_2step_measurements_query import get_2step_query
 from sqlalchemy import create_engine, and_
 
