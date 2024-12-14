@@ -138,6 +138,12 @@ def create_grid_cell(graph,text):
         )
     return cell
 
+flashing_text = {
+            "outline": "2px solid red",    # Red outline
+            "display": "inline-block",    # Ensures outline hugs the text
+            "padding": "5px",             # Optional spacing
+            "animation": "flash 1s infinite"  # Flash animation
+        }
 
 # Function that returns a list of objects (in this case, strings)
 def get_list_of_items():
@@ -165,7 +171,7 @@ def get_list_of_items():
             if not col:        
                 col = ' | '.join([instrument['instrument'],instrument['readings'][0]['parameter'],instrument['readings'][0]['unit'],instrument['readings'][0]['type']])
             graph = create_trend_plot(graph_columns)
-            instrument_name = html.H2(instrument['instrument'].replace('_',' '))
+            instrument_name = html.H2(instrument['instrument'].replace('_',' '), className=None)
             reading_cells = [instrument_name]
             do_display = True
             for reading in instrument['readings']:
@@ -201,7 +207,8 @@ local_styles ={
     'color':'white'
 }
 
-refresh_secs = 5
+refresh_secs = 1
+
 
 # Define the layout of the app
 app.layout = html.Div(children=[ 
