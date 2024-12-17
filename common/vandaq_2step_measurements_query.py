@@ -3,6 +3,7 @@ from sqlalchemy import create_engine, select, func, and_, case
 from datetime import datetime, timedelta
 import pandas as pd
 from vandaq_schema import *
+from collections import defaultdict
 
 def get_2step_query(engine, start_time, end_time=None, platform=None):
     session = sessionmaker(bind=engine)()
@@ -106,7 +107,7 @@ def get_2step_query(engine, start_time, end_time=None, platform=None):
 
     return df_pivot
 
-def get_2step_query_with_alarms(engine, start_time, end_time=None, platform=None):
+def get_2step_query_with_alarms(engine, start_time, end_time=None, platform=None, wide=True):
     session = sessionmaker(bind=engine)()
 
     if not end_time:
@@ -131,6 +132,7 @@ def get_2step_query_with_alarms(engine, start_time, end_time=None, platform=None
             .where(and_((FactMeasurement.sample_time >= start_time),
                         (FactMeasurement.sample_time <= end_time),
                         (FactMeasurement.platform_id == platform_id)))
+            .order_by(FactMeasurement.sample_time)
             .subquery()
         )
     else:
@@ -138,6 +140,7 @@ def get_2step_query_with_alarms(engine, start_time, end_time=None, platform=None
             select(FactMeasurement)
             .where(and_((FactMeasurement.sample_time >= start_time),
                         (FactMeasurement.sample_time <= end_time)))
+            .order_by(FactMeasurement.sample_time)
             .subquery()
         )
 
@@ -185,54 +188,109 @@ def get_2step_query_with_alarms(engine, start_time, end_time=None, platform=None
     # Use pandas to execute the compiled query and load it into a DataFrame
     df = pd.read_sql(str(compiled_query), session.bind)
 
-    # Create a column name from the combination of instrument, parameter, unit, and acquisition_type
-    df['measurement'] = (
-        df['instrument'] + ' | ' + df['parameter'] + ' | ' + df['unit'] + ' | ' + df['acquisition_type']
-    )
+    df.set_index('sample_time', inplace=True, drop=False)
+    if wide:
 
-    # Pivot the DataFrame
-    df_pivot = df.pivot(index='sample_time', columns='measurement', values=[
-        'value', 'string', 'alarm_count', 'max_alarm_level', 'alarm_messages'
-    ])
+        # Create a column name from the combination of instrument, parameter, unit, and acquisition_type
+        df['measurement'] = (
+            df['instrument'] + ' | ' + df['parameter'] + ' | ' + df['unit'] + ' | ' + df['acquisition_type']
+        )
 
-    # Flatten the multi-index columns
-    df_pivot.columns = [' | '.join(col).strip() for col in df_pivot.columns.values]
+        # Pivot the DataFrame
+        df_pivot = df.pivot(index='sample_time', columns='measurement', values=[
+            'value', 'string', 'alarm_count', 'max_alarm_level', 'alarm_messages'
+        ])
 
-    # Drop rows with no measurements (all NaNs in "value" columns)
-    value_columns = [col for col in df_pivot.columns if 'value' in col]
-    df_pivot.dropna(subset=value_columns, how='all', inplace=True)
+        # Flatten the multi-index columns
+        df_pivot.columns = [' | '.join(col).strip() for col in df_pivot.columns.values]
 
-    # Sort columns by instrument and parameter, and reorder within each measurement group
-    def column_sort_key(col_name):
-        parts = col_name.split(" | ")
-        measurement_part = " | ".join(parts[1:3])  # Instrument and Parameter
-        column_type = parts[0]  # value, string, etc.
-        column_order = ['value', 'string', 'alarm_count', 'max_alarm_level', 'alarm_messages']
-        return (measurement_part, column_order.index(column_type) if column_type in column_order else 99)
+        # Drop rows with no measurements (all NaNs in "value" columns)
+        value_columns = [col for col in df_pivot.columns if 'value' in col]
+        df_pivot.dropna(subset=value_columns, how='all', inplace=True)
 
-    df_pivot = df_pivot[sorted(df_pivot.columns, key=column_sort_key)]
+        # Sort columns by instrument and parameter, and reorder within each measurement group
+        def column_sort_key(col_name):
+            parts = col_name.split(" | ")
+            measurement_part = " | ".join(parts[1:3])  # Instrument and Parameter
+            column_type = parts[0]  # value, string, etc.
+            column_order = ['value', 'string', 'alarm_count', 'max_alarm_level', 'alarm_messages']
+            return (measurement_part, column_order.index(column_type) if column_type in column_order else 99)
 
-    # Add the time index as the first column
-    df_pivot['sample_time'] = df_pivot.index
-    cols = df_pivot.columns.tolist()
-    cols = cols[-1:] + cols[:-1]
-    df_pivot = df_pivot[cols]
+        df_pivot = df_pivot[sorted(df_pivot.columns, key=column_sort_key)]
+
+        # Add the time index as the first column
+        df_pivot['sample_time'] = df_pivot.index
+        cols = df_pivot.columns.tolist()
+        cols = cols[-1:] + cols[:-1]
+        df_pivot = df_pivot[cols]
+        df = df_pivot
 
     # Close the session
     session.close()
 
-    return df_pivot
+    return df
 
+def transform_instrument_dataframe(df, use_dataframes=True):
+    """
+    Transforms a pandas DataFrame into a nested data structure grouped by instrument and parameter.
 
+    Parameters:
+    - df (pd.DataFrame): Input DataFrame with columns ['sample_time', 'value', 'string', 'instrument', 'parameter', 'unit',
+      'acquisition_type', 'alarm_count', 'max_alarm_level', 'alarm_messages'].
+    - use_dataframes (bool): If True, packages measurement lists as pandas DataFrames. Otherwise, uses lists of dictionaries.
+
+    Returns:
+    - list: Nested data structure as described.
+    """
+    # Initialize the structure to hold the results
+    result = []
+    
+    # Group by instrument and parameter
+    grouped = df.groupby(['instrument', 'parameter', 'unit', 'acquisition_type'])
+    
+    # Create a dictionary to hold data by instrument
+    instrument_dict = defaultdict(list)
+
+    for (instrument, parameter, unit, acquisition_type), group in grouped:
+        # Extract measurements for the current parameter group
+        if use_dataframes:
+            measurements = group[['sample_time', 'value', 'string', 'alarm_count', 'max_alarm_level', 'alarm_messages']]
+        else:
+            measurements = group[['sample_time', 'value', 'string', 'alarm_count', 'max_alarm_level', 'alarm_messages']]
+            measurements = measurements.to_dict(orient='records')
+        
+        # Create a parameter entry
+        parameter_entry = {
+            'parameter': parameter,
+            'unit': unit,
+            'acquisition_type': acquisition_type,
+            'measurements': measurements
+        }
+
+        # Add this parameter entry to the corresponding instrument
+        instrument_dict[instrument].append(parameter_entry)
+
+    # Convert the dictionary to the desired list structure
+    for instrument, parameters in instrument_dict.items():
+        result.append({instrument: parameters})
+
+    return result
+
+def get_alarm_table(engine, start_time, end_time=None, platform=None):
+    pass
 
 # Run the app
 if __name__ == '__main__':
 
-    startTime = datetime.now() - timedelta(minutes=5)
-    endTime = datetime.now()
+#"2024-12-14 17:26:25"
+    startTime = datetime(2024,12,14,17,26,25) 
+    endTime = startTime + timedelta(minutes=5)
+    #startTime = datetime.now() - timedelta(minutes=5)
+    #endTime = datetime.now()
     # Database connection
     engine = create_engine('postgresql://vandaq:p3st3r@localhost:5432/vandaq-dev', echo=False)
 
-    df = get_2step_query_with_alarms(engine, startTime, end_time=endTime)
+    df = get_2step_query_with_alarms(engine, startTime, end_time=endTime, wide=False)
+    struct = transform_instrument_dataframe(df)
     print(df)
  

@@ -9,7 +9,8 @@ import pandas as pd
 import datetime
 import yaml
 #from vandaq_measurements_query import get_measurements
-from vandaq_2step_measurements_query import get_2step_query
+from vandaq_2step_measurements_query import get_2step_query_with_alarms
+from vandaq_2step_measurements_query import transform_instrument_dataframe
 from sqlalchemy import create_engine, and_
 
 # Initialize the Dash app
@@ -29,39 +30,17 @@ engine = create_engine('postgresql://vandaq:p3st3r@localhost:5432/vandaq-dev', e
 
 sample_time = datetime.datetime.now()
 
-def get_last_valid_value(dataList, column):
-    for row in reversed(dataList):
-        if not isnan(row[column]):
-            return row['sample_time'], row[column] 
+def get_last_valid_value(df, column):
+    last_valid_index = df[column].last_valid_index()
+    last_valid_value = df[column][last_valid_index]
+    return last_valid_value
 
 def get_instrument_measurements(engine):
     # Fetch the latest measurement set
     #df = get_measurements(engine, start_time=datetime.datetime.now()-datetime.timedelta(minutes=5))
-    df = get_2step_query(engine, datetime.datetime.now()-datetime.timedelta(minutes=5))
-    outlist = []
-    data = df.to_dict('records')
-    instrument = ''
-    instrument_rec = {}
-    reading = {}
-    sample_time = datetime.datetime.now()
-    for col in df.columns:
-        if 'sample_time' in col:
-            sample_time = data[-1][col]
-            outlist.append(sample_time)
-        if '|' in col:
-            rowtime, rowval = get_last_valid_value(data,col)
-            items = col.split(' | ')
-            if instrument != items[0]:
-                if instrument_rec:
-                    outlist.append(instrument_rec)
-                instrument = items[0]
-                instrument_rec = {'instrument':instrument,'readings':[]}
-            reading = {'parameter':items[1],'value':rowval,'unit':items[2],'type':items[3]}
-            reading['seconds_ago'] = (sample_time - rowtime).total_seconds() 
-            instrument_rec['readings'].append(reading)
-    if instrument_rec:
-        outlist.append(instrument_rec)
-    return outlist, df          
+    df = get_2step_query_with_alarms(engine, datetime.datetime.now()-datetime.timedelta(minutes=5),wide=False)
+    data = transform_instrument_dataframe(df)
+    return data          
 
 graph_line_colors = ["rgba(0, 123, 255, 0.8)",# light blue line with transparency
                      "rgba(182, 10, 10, 0.8)",# light red line with transparency
@@ -69,16 +48,18 @@ graph_line_colors = ["rgba(0, 123, 255, 0.8)",# light blue line with transparenc
                      "rgba(140, 18, 189, 0.8)",# light purple line with transparency
                      "rgba(161, 159, 9, 0.8)"]# light yellow line with transparency
             
-def create_trend_plot(instrument_data_list):
+def create_trend_plot_old(instrument_data_list):
     graphs = []
     i = 0
     num = len(instrument_data_list)
     for instrument_data in instrument_data_list:
-        instrument_data = instrument_data.dropna()
+        name = instrument_data['parameter']
+        data = instrument_data['measurements']
+        #data = data.dropna()
         graph = go.Scatter(
-            x=instrument_data.index,
-            y=instrument_data.values,
-            text = instrument_data.name,
+            x=data.index,
+            y=data['value'],
+            text = name,
             mode="lines",
             line=dict(color=graph_line_colors[i]),  
         )
@@ -93,6 +74,60 @@ def create_trend_plot(instrument_data_list):
         yaxis=dict(visible=False),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
+        showlegend=False  # Hides the legend
+    )
+
+def create_trend_plot(instrument_data_list):
+    graphs = []
+    shapes = []  # List to hold the background shapes for alarm levels
+    i = 0
+    num = len(instrument_data_list)
+
+    for instrument_data in instrument_data_list:
+        name = instrument_data['parameter']
+        data = instrument_data['measurements']
+        # data = data.dropna()
+
+        # Add line plot
+        graph = go.Scatter(
+            x=data.index,
+            y=data['value'],
+            text=name,
+            mode="lines",
+            line=dict(color=graph_line_colors[i]),
+        )
+        graphs.append(graph)
+
+        # Add background shapes for max_alarm_level > 0
+        if 'max_alarm_level' in data.columns:
+            alarm_intervals = data[data['max_alarm_level'] > 0]
+            for idx, row in alarm_intervals.iterrows():
+                color = 'rgba(255,0,0,0.6)' if row['max_alarm_level'] == 2 else 'rgba(255,255,0,0.6)'
+                shapes.append({
+                    'type': 'rect',
+                    'xref': 'x',  # Use x-axis as reference
+                    'yref': 'paper',  # Use the paper height as reference for full y-axis coverage
+                    'x0': idx,  # Start time of the interval
+                    'x1': idx + pd.Timedelta(seconds=1),  # End time of the interval
+                    'y0': 0,
+                    'y1': 1,
+                    'fillcolor': color,
+                    'opacity': 0.6,
+                    'layer': 'below',  # Ensure it appears below the line plot
+                    'line_width': 0
+                })
+
+        i += 1
+
+    return go.Figure(
+        graphs
+    ).update_layout(
+        margin=dict(l=0, r=0, t=0, b=0),
+        xaxis=dict(visible=False),  # Make x-axis visible for easier alignment
+        yaxis=dict(visible=False),  # Make y-axis visible for easier understanding
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        shapes=shapes,  # Add the shapes to the layout
         showlegend=False  # Hides the legend
     )
 
@@ -150,39 +185,34 @@ def get_list_of_items():
     global sample_time 
     before_query = datetime.datetime.now()
     #print('query starts '+before_query.strftime('%Y%m%d_%H%M%S'))
-    measurements, df = get_instrument_measurements(engine)
+    measurements = get_instrument_measurements(engine)
     after_query = datetime.datetime.now()
     #print('query completes '+after_query.strftime('%Y%m%d_%H%M%S'))
     print('Query took '+str((after_query-before_query).total_seconds())+' seconds')
-    sample_time = measurements[0]
     items = []
     for instrument in measurements:
         seconds_ago = 0
-        if 'dict' in str(type(instrument)):
-            instrument_text = instrument['instrument']
-            graph_columns = []
-            col = None
-            if instrument_text in config['display_params']:
-                columns = df.columns.tolist()
-                for graph_col in config['display_params'][instrument_text]['graph']:
-                    graph_columns += [df[c] for c in columns if instrument_text in c and ('| '+graph_col+' |') in c]
-                if col:
-                    col = col[0]
-            if not col:        
-                col = ' | '.join([instrument['instrument'],instrument['readings'][0]['parameter'],instrument['readings'][0]['unit'],instrument['readings'][0]['type']])
-            graph = create_trend_plot(graph_columns)
-            instrument_name = html.H2(instrument['instrument'].replace('_',' '), className=None)
-            reading_cells = [instrument_name]
-            do_display = True
-            for reading in instrument['readings']:
+        instrument_text = list(instrument.keys())[0]
+        graph_params = config['display_params'][instrument_text]['graph']
+        graph_data = [{'parameter':param['parameter'], 'measurements':param['measurements']} for param in instrument[instrument_text] if param['parameter'] in graph_params]
+        graph = create_trend_plot(graph_data)
+        alarm_level = max([max(list(data['measurements']['max_alarm_level'][-5:])) for data in graph_data])
+        alarm_box_style = None
+        if alarm_level == 2:
+            alarm_box_style = 'flashing-box-alarm'
+        elif alarm_level == 1:
+            alarm_box_style = 'flashing-box-warning'
+        instrument_name = html.H2(instrument_text.replace('_',' '), className=alarm_box_style)
+        
+        reading_cells = [instrument_name]
+        for parameter in instrument[instrument_text]:
+            parameter_text = parameter['parameter']
+            do_display = False
+            if parameter_text in config['display_params'][instrument_text]['display']:
                 do_display = True
-                if instrument_text in config['display_params']:
-                    if config['display_params'][instrument_text]['display']:
-                        if not str(reading['parameter']) in config['display_params'][instrument_text]['display']:
-                            do_display = False
-                reading_string = reading['parameter'] + ': ' + '{:.4f}'.format(reading['value']) + ' '+ reading['unit']
+                reading_string = parameter_text + ': ' + '{:.4f}'.format(get_last_valid_value(parameter['measurements'],'value')) + ' '+ parameter['unit']
                 reading_line = None
-                if 'engineering' in reading['type']:
+                if 'engineering' in parameter['acquisition_type']:
 #                   reading_line = html.Div(reading_string,className='engineering_reading')  
                     reading_line = None  
                 else:
@@ -192,12 +222,13 @@ def get_list_of_items():
                         reading_line = None
                 if reading_line:
                     reading_cells.append(reading_line)
-                if 'seconds_ago' in reading.keys():
-                    seconds_ago = reading['seconds_ago']
-            if seconds_ago > 1:
-                reading_cells.insert(1,'as of '+str(seconds_ago)+' seconds ago')
-            items.append(create_grid_cell(graph,reading_cells))
-                
+                sample_time = get_last_valid_value(parameter['measurements'],'sample_time')
+                #if 'seconds_ago' in reading.keys():
+                #    seconds_ago = reading['seconds_ago']
+            #if seconds_ago > 1:
+            #    reading_cells.insert(1,'as of '+str(seconds_ago)+' seconds ago')
+        items.append(create_grid_cell(graph,reading_cells))
+
     return items, sample_time
 
 
@@ -207,7 +238,7 @@ local_styles ={
     'color':'white'
 }
 
-refresh_secs = 1
+refresh_secs = 2
 
 
 # Define the layout of the app
