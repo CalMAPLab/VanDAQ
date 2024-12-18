@@ -1,4 +1,22 @@
 display_params:
+  CAPS_NO2:
+    graph:
+      - "NO2"
+    display:
+      - 'NO2'
+  PseudoTech_Bozometer:
+    graph:
+      - "Bozons"
+    display:
+      - 'Bozons'
+  Aeris_N2O_CO:
+    graph:
+      - "N2O"
+      - "CO"
+    display:
+      - "N2O"
+      - "CO"
+      - "H2O"
   Aeris_CH4_C2H6:
     graph:
       - "CH4"

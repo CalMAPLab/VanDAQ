@@ -38,14 +38,22 @@ def layout_alarm_table():
         dash_table.DataTable(
             id='alarm-table',
             columns = get_alarm_columns(engine),
-            style_table={'overflowX': 'auto', 'background':'black', 'color':'white'},
+            style_table={
+                'height': '400px',  # Limit height for the scrollable area
+                'overflowY': 'auto',  # Ensure smooth vertical scrolling
+                'overflowX': 'auto',  # Allow horizontal scrolling if needed
+                'border': '1px solid #444',  # Ensure clear boundaries
+                'background': 'black',
+                'color': 'white'
+            },
             style_cell={'textAlign': 'left', 'background':'black', 'color':'white'},
-            style_filter={'textAlign': 'left', 'background':'black', 'color':'white', 'textColor':'white'},
+            style_filter={'textAlign': 'left', 'background':'black', 'color':'white', 'textColor':'yellow'},
             filter_action='native',
             sort_action='native',
             page_action='native',
             page_current=0,
             page_size=10,
+            fixed_rows={'headers': True},  # Keep headers fixed while scrolling
             sort_by=[{'column_id': 'time', 'direction': 'desc'}]
         )
     ])
