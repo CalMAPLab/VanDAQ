@@ -17,14 +17,51 @@ h1, h2, h3, h4, h5, h6 {
 	color: yellow;
 }
 
-@keyframes flash {
+@keyframes flash-alarm {
     0%, 100% { outline-color: red; }
     50% { outline-color: transparent; }
 }
 
-.flashing-box-text {
+@keyframes flash-warning {
+    0%, 100% { outline-color: yellow; }
+    50% { outline-color: transparent; }
+}
+
+.flashing-box-alarm {
     outline: 2px solid red;
     display: inline-block;
     padding: 5px;
-    animation: flash 1s infinite;
+    animation: flash-alarm 1s infinite;
+}
+
+.flashing-box-warning {
+    outline: 2px solid yellow;
+    display: inline-block;
+    padding: 5px;
+    animation: flash-warning 1s infinite;
+}
+
+/* Tabs */
+.tab {
+    background-color: #f0f0f0;
+    color: #333;
+    padding: 10px;
+    border: 1px solid #ccc;
+}
+
+.tab--selected {
+    background-color: #007BFF;
+    color: white;
+    border-bottom: 2px solid #007BFF;
+}
+
+/* DataTable */
+.dataTable {
+    font-family: Arial, sans-serif;
+}
+
+#alarm-table .dataTable .dash-header .bungHole {
+    background-color: black;
+    color: white;
+    font-weight: bold;
 }

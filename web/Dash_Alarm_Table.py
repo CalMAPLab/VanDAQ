@@ -2,55 +2,68 @@ import dash
 from dash import Dash, dcc, html, Input, Output, State, dash_table
 import pandas as pd
 import datetime
-from vandaq_2step_measurements_query import get_alarms
+from vandaq_2step_measurements_query import get_alarm_table
 
 # Initialize the Dash app
 app = dash.Dash(__name__)
 
+engine = None
+
 # Define a placeholder DataFrame for the alarm table (replace with your database query results)
-def get_alarm_data():
-    data = [
-        {"id": 1, "time": datetime.datetime.utcnow(), "type": "High", "description": "Temperature exceeded threshold"},
-        {"id": 2, "time": datetime.datetime.utcnow(), "type": "Low", "description": "Pressure below threshold"}
-    ]
-    return pd.DataFrame(data)
+def get_alarm_data(engine):
+    data = get_alarm_table(engine,start_time = datetime.datetime.now()-datetime.timedelta(minutes=5))
+    return data
+
+def get_alarm_columns(engine):
+    cols = get_alarm_table(engine, column_names_only=True)
+    return [{'name':col.replace('_',' '), 'id': col} for col in cols]
+
+
 
 # Layout for the alarm table page
 def layout_alarm_table():
     return html.Div([
         html.H1('Alarm Table', style={'text-align': 'left'}),
-        html.Button('Suspend Updates', id='suspend-updates', n_clicks=0),
-        html.Button('Resume Updates', id='resume-updates', n_clicks=0),
+        dcc.Checklist(
+            options=[{'label': 'Suspend updates', 'value': 'suspend'}],
+            id='suspend-updates',
+            value=[],  # Default: updates are not suspended
+            style={'margin-bottom': '10px'}
+        ),
+        dcc.Interval(
+            id='update-interval',
+            interval=1000,  # 1-second interval
+            n_intervals=0
+        ),
         dash_table.DataTable(
             id='alarm-table',
-            columns=[
-                {'name': 'ID', 'id': 'id'},
-                {'name': 'Time', 'id': 'time'},
-                {'name': 'Type', 'id': 'type'},
-                {'name': 'Description', 'id': 'description'}
-            ],
-            style_table={'overflowX': 'auto'},
-            style_cell={'textAlign': 'left'},
+            columns = get_alarm_columns(engine),
+            style_table={'overflowX': 'auto', 'background':'black', 'color':'white'},
+            style_cell={'textAlign': 'left', 'background':'black', 'color':'white'},
+            style_filter={'textAlign': 'left', 'background':'black', 'color':'white', 'textColor':'white'},
             filter_action='native',
             sort_action='native',
             page_action='native',
             page_current=0,
-            page_size=10
+            page_size=10,
+            sort_by=[{'column_id': 'time', 'direction': 'desc'}]
         )
     ])
 
+
+
 # Callback for the alarm table page
-def update_alarm_table(app, engine, config):
+def update_alarm_table(app, sqlengine, config):
     @app.callback(
         Output('alarm-table', 'data'),
-        [Input('resume-updates', 'n_clicks')],
-        [State('suspend-updates', 'n_clicks')],
-        prevent_initial_call=True
+        [Input('update-interval', 'n_intervals'),
+         Input('suspend-updates', 'value')]
     )
-    def update_alarm_table(resume_clicks, suspend_clicks):
-        ctx = dash.callback_context
-        if ctx.triggered and ctx.triggered[0]['prop_id'] == 'suspend-updates.n_clicks':
+    def update_alarm_table_callback(n_intervals, suspend_updates):
+        # Check if updates are suspended
+        if 'suspend' in suspend_updates:
             return dash.no_update
-        alarm_data = get_alarm_data(engine)
-        return alarm_data.to_dict('records')
 
+        # Fetch data from the database (simulated here)
+        alarm_data = get_alarm_data(sqlengine)
+        return alarm_data.to_dict('records')

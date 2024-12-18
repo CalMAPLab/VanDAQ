@@ -238,7 +238,8 @@ def update_dashboard(app, engine, config):
     @app.callback(
         Output('grid-container', 'children'),
         Output('sample_timestamp', 'children'),
-        Input('interval-component', 'n_intervals')
+        Input('interval-component', 'n_intervals'),
+        suppress_callback_exceptions=True
     )
     def update_grid(n):
         items, sample_time = get_list_of_items(engine, config)
