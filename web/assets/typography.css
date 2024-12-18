@@ -60,8 +60,13 @@ h1, h2, h3, h4, h5, h6 {
     font-family: Arial, sans-serif;
 }
 
-#alarm-table .dataTable .dash-header .bungHole {
+#alarm-table .dash-table-container .dataTable .dash-header {
     background-color: black;
     color: white;
+    --text-color: yellow;
     font-weight: bold;
+}
+
+.dash-table-container .dash-filter {
+    --text-color: yellow; /* Change filter text to yellow */
 }
