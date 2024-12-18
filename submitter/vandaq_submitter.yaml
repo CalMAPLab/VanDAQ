@@ -3,6 +3,7 @@ STATIONARY_HOST: "169.229.157.7"  # Replace with the static IP of the stationary
 SSH_PORT: 22
 USERNAME: "vandaq"         # Replace with your SSH username
 PASSWORD: "cre8L1fe"         # Replace with your SSH password (or use key-based auth)
+USE_KEYRING: False
 KEYRING_HOST_KEY: "vandaq_central_sftp"
 SUBMIT_FILE_PATTERN: "submit_*.sbm"
 DATA_DIR: "/home/vandaq/vandaq/collector/submission/"         # Directory containing files to transfer

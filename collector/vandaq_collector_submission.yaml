@@ -8,3 +8,4 @@ submissions:
   submit_file_dir: "/home/vandaq/vandaq/collector/submission"
   submitted_file_dir: "/home/vandaq/vandaq/collector/submission/submitted/"
   submit_file_pattern: submit_*.sbm
+  submit_file_timezone: "America/Los_Angeles"

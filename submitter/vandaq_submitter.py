@@ -45,8 +45,13 @@ def transfer_files():
     # Establish SFTP connection
     try:
         transport = paramiko.Transport((config['STATIONARY_HOST'], config['SSH_PORT']))
-        uname = keyring.get_password(config['KEYRING_HOST_KEY'],'username')
-        pw = keyring.get_password(config['KEYRING_HOST_KEY'],'password')
+        if 'USE_KEYRING' in config and config['USE_KEYRING']:
+            uname = keyring.get_password(config['KEYRING_HOST_KEY'],'username')
+            pw = keyring.get_password(config['KEYRING_HOST_KEY'],'password')
+        else:
+            # Shouldn't do this, but having trouble with Keyring
+            uname = config['USERNAME']
+            pw = config['PASSWORD']
         transport.connect(username=uname, password=pw)
         sftp = paramiko.SFTPClient.from_transport(transport)
 
