@@ -18,7 +18,7 @@ from Dash_Alarm_Table import *
 from Dash_Dashboard import *
 
 # Initialize the Dash app
-app = dash.Dash(__name__)
+app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
 configfile_name = '/home/vandaq/vandaq/web/DashPlay.yaml'
 try:
@@ -44,17 +44,20 @@ app.layout = html.Div([
 # Callback to update tab content
 @app.callback(
     Output('tab-content', 'children'),
-    Input('tabs', 'value')
+    Input('tabs', 'value'),
+    suppress_callback_exceptions=True
 )
 def render_tab(tab_name):
     if tab_name == 'dashboard':
         return layout_dashboard()
     elif tab_name == 'alarm-table':
-        return layout_alarm_table()
+        ret = layout_alarm_table()
+        return ret
 
 
-update_alarm_table(app, engine, config)
+
 update_dashboard(app, engine, config)
+update_alarm_table(app, engine, config)
 
 # Run the app
 server = app.server
