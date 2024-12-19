@@ -16,20 +16,6 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
---
--- Name: pg_partman; Type: EXTENSION; Schema: -; Owner: -
---
-
-CREATE EXTENSION IF NOT EXISTS pg_partman WITH SCHEMA public;
-
-
---
--- Name: EXTENSION pg_partman; Type: COMMENT; Schema: -; Owner: 
---
-
-COMMENT ON EXTENSION pg_partman IS 'Extension to manage partitioned tables by time or ID';
-
-
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -169,36 +155,6 @@ ALTER SEQUENCE public.alarm_type_id_seq OWNED BY public.alarm_type.id;
 
 
 --
--- Name: geolocation_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.geolocation_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER TABLE public.geolocation_id_seq OWNER TO postgres;
-
---
--- Name: geolocation; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.geolocation (
-    id bigint DEFAULT nextval('public.geolocation_id_seq'::regclass) NOT NULL,
-    sample_time_id bigint NOT NULL,
-    platform_id integer,
-    instrument_id integer NOT NULL,
-    latitude double precision,
-    longitude double precision
-);
-
-
-ALTER TABLE public.geolocation OWNER TO postgres;
-
---
 -- Name: instrument; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -255,6 +211,74 @@ CREATE TABLE public.platform (
 
 
 ALTER TABLE public.platform OWNER TO postgres;
+
+--
+-- Name: time; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public."time" (
+    id bigint NOT NULL,
+    "time" timestamp without time zone NOT NULL
+);
+
+
+ALTER TABLE public."time" OWNER TO postgres;
+
+--
+-- Name: alarms_view; Type: VIEW; Schema: public; Owner: vandaq
+--
+
+CREATE VIEW public.alarms_view AS
+ SELECT ti."time",
+    p.platform,
+    i.instrument,
+    pa.parameter,
+    l.alarm_level,
+    t.alarm_type,
+    a.data_impacted,
+    a.message,
+    m.value
+   FROM (((((((public.alarm a
+     JOIN public.instrument i ON ((a.instrument_id = i.id)))
+     JOIN public.parameter pa ON ((a.parameter_id = pa.id)))
+     JOIN public.platform p ON ((a.platform_id = p.id)))
+     JOIN public.alarm_level l ON ((a.alarm_level_id = l.id)))
+     JOIN public.alarm_type t ON ((a.alarm_type_id = t.id)))
+     JOIN public."time" ti ON ((a.sample_time_id = ti.id)))
+     JOIN public.measurement m ON ((a.measurement_id = m.id)));
+
+
+ALTER TABLE public.alarms_view OWNER TO vandaq;
+
+--
+-- Name: geolocation_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.geolocation_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.geolocation_id_seq OWNER TO postgres;
+
+--
+-- Name: geolocation; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.geolocation (
+    id bigint DEFAULT nextval('public.geolocation_id_seq'::regclass) NOT NULL,
+    sample_time_id bigint NOT NULL,
+    platform_id integer,
+    instrument_id integer NOT NULL,
+    latitude double precision,
+    longitude double precision
+);
+
+
+ALTER TABLE public.geolocation OWNER TO postgres;
 
 --
 -- Name: geolocation_view; Type: VIEW; Schema: public; Owner: postgres
@@ -338,30 +362,6 @@ ALTER TABLE public.instrument_measurements_id_seq OWNER TO postgres;
 
 ALTER SEQUENCE public.instrument_measurements_id_seq OWNED BY public.instrument_measurements.id;
 
-
---
--- Name: measurement_alarm; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.measurement_alarm (
-    measurement_id bigint NOT NULL,
-    alarm_id bigint NOT NULL
-);
-
-
-ALTER TABLE public.measurement_alarm OWNER TO postgres;
-
---
--- Name: time; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public."time" (
-    id bigint NOT NULL,
-    "time" timestamp without time zone NOT NULL
-);
-
-
-ALTER TABLE public."time" OWNER TO postgres;
 
 --
 -- Name: unit; Type: TABLE; Schema: public; Owner: postgres
@@ -778,6 +778,20 @@ CREATE INDEX idx_alarm_level_id ON public.alarm_level USING btree (id) WITH (ded
 
 
 --
+-- Name: idx_alarm_measurement_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_alarm_measurement_id ON public.alarm USING btree (measurement_id) WITH (deduplicate_items='true');
+
+
+--
+-- Name: idx_alarm_sample_time_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_alarm_sample_time_id ON public.alarm USING btree (sample_time_id) WITH (deduplicate_items='false');
+
+
+--
 -- Name: idx_alarm_type_id; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -884,14 +898,6 @@ ALTER TABLE ONLY public.alarm
 
 
 --
--- Name: measurement_alarm alarm_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.measurement_alarm
-    ADD CONSTRAINT alarm_id_fk FOREIGN KEY (alarm_id) REFERENCES public.alarm(id);
-
-
---
 -- Name: alarm alarm_severity_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -993,14 +999,6 @@ ALTER TABLE ONLY public.measurement
 
 ALTER TABLE ONLY public.measurement
     ADD CONSTRAINT measurement_acquisition_type_id_fkey FOREIGN KEY (acquisition_type_id) REFERENCES public.acquisition_type(id);
-
-
---
--- Name: measurement_alarm measurement_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.measurement_alarm
-    ADD CONSTRAINT measurement_id_fk FOREIGN KEY (measurement_id) REFERENCES public.measurement(id);
 
 
 --
