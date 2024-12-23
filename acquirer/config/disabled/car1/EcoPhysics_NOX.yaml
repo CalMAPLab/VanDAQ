@@ -1,0 +1,27 @@
+---
+platform: car1
+instrument: EcoPhysics_NOX
+type: simpleSerial
+#verbose: 1
+queue:
+  name: "/dev-measurements"
+  max_msg_size: 8000
+  max_msgs: 50
+connection: serial
+serial:
+  device: "/dev/usb_serial_EcoPhysics_NOX"
+  baud: 9600
+measurement_delay_secs: 0 
+stream:
+  line_delimiter: "\r\n"
+  item_delimiter: ","
+  items: "x,NOx,NO,x,NO2,x,x,x,x,x,x,x,x,x,x,x,x,x,x"
+  formats: "x,f,f,x,f,x,x,x,x,x,x,x,x,x,x,x,x,x,x" 
+  units: "x,ppb,ppb,x,ppb,x,x,x,x,x,x,x,x,x,x,x,x,x,x"
+  acqTypes: "x,measurement_calibrated,measurement_calibrated,x,measurement_calibrated,x,x,x,x,x,x,x,x,x,x,x,x,x,x"
+  
+logs:
+  log_dir: "/home/vandaq/vandaq/acquirer/log"
+  log_file: "acquirer_EcoPhysics_NOX.log"
+  log_level: "INFO"
+  logger_name: "EcoPhysics_NOX"

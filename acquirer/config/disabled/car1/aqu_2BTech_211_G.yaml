@@ -1,0 +1,25 @@
+---
+platform: car1
+instrument: 2BTech_211_G
+type: simpleSerial
+connection: serial
+serial:
+  device: "/dev/usb_serial_2BTECH_211G_O3"
+  baud: 19200
+queue:
+  name: "/dev-measurements"
+  max_msg_size: 8000
+  max_msgs: 50
+measurement_delay_secs: 0 
+stream:
+  line_delimiter: "\r\n"
+  item_delimiter: ","
+  items: "O3,cell_T,cell_P,cell_a_flow,cell_b_flow,scrubber_T,inst_date,inst_time"
+  formats: "f,f,f,f,f,f,%d/%m/%y,%H:%M:%S"
+  units: "ppb,temp_C,mbar,cc/min,cc/min,temp_C,date,time"
+  acqTypes: "measurement_calibrated,engineering,engineering,engineering,engineering,engineering,inst_date,inst_time"
+logs:
+  log_dir: "/home/vandaq/vandaq/acquirer/log"
+  log_file: "acquirer_2BTech_211_G.log"
+  log_level: "INFO"
+  logger_name: "acquirer_2BTech_211_G"
