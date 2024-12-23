@@ -1,6 +1,6 @@
 from sqlalchemy.orm import aliased
 from sqlalchemy import create_engine, select, func, and_, case
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import pandas as pd
 from vandaq_schema import *
 from collections import defaultdict
@@ -181,6 +181,7 @@ def get_2step_query_with_alarms(engine, start_time, end_time=None, platform=None
         .join(DimAcquisitionType, measurement_subquery.c.acquisition_type_id == DimAcquisitionType.id)
         .join(DimPlatform, measurement_subquery.c.platform_id == DimPlatform.id)
         .outerjoin(alarm_aggregation, measurement_subquery.c.id == alarm_aggregation.c.measurement_id)
+#        .order_by(FactMeasurement.sample_time)
     )
 
     compiled_query = query.compile(session.bind, compile_kwargs={"literal_binds": True})
@@ -276,21 +277,74 @@ def transform_instrument_dataframe(df, use_dataframes=True):
 
     return result
 
-def get_alarm_table(engine, start_time, end_time=None, platform=None):
-    pass
+def get_alarm_table(engine, start_time=date.today(), end_time=None, platform=None, column_names_only=False):
+
+    if not end_time:
+        end_time = datetime.now()
+
+    platform_id = None
+
+    if platform:
+        platform_query = (
+            select(DimPlatform)
+            .where(DimPlatform.platform == platform))
+        compiled_query = platform_query.compile(session.bind, compile_kwargs={"literal_binds": True})
+
+        pdf = pd.read_sql(str(compiled_query), session.bind)
+        if pdf.shape[0]:
+            platform_id = int(pdf['id'][0])
+
+
+    # Step 3: Main query
+    query = (
+        select(
+            DimPlatform.platform,
+            DimTime.time,
+            DimInstrument.instrument,
+            DimAlarmLevel.alarm_level,
+            DimAlarmType.alarm_type,
+            DimParameter.parameter,
+            FactAlarm.message,
+            FactAlarm.data_impacted,
+            FactMeasurement.value,
+            FactMeasurement.string
+        )
+        .join(DimTime, FactAlarm.sample_time_id == DimTime.id)
+        .join(DimInstrument, FactAlarm.instrument_id == DimInstrument.id)
+        .join(DimParameter, FactAlarm.parameter_id == DimParameter.id)
+        .join(DimPlatform, FactAlarm.platform_id == DimPlatform.id)
+        .join(DimAlarmLevel, FactAlarm.alarm_level_id == DimAlarmLevel.id)
+        .join(DimAlarmType, FactAlarm.alarm_type_id == DimAlarmType.id)
+        .join(FactMeasurement, FactAlarm.measurement_id == FactMeasurement.id)
+        .where(and_((DimTime.time >= start_time),
+                    (DimTime.time <= end_time)))
+        .order_by(DimTime.time)
+    )
+
+    if column_names_only:
+        return [col.name for col in query.exported_columns]
+    
+    session = sessionmaker(bind=engine)()
+    compiled_query = query.compile(session.bind, compile_kwargs={"literal_binds": True})
+
+    # Use pandas to execute the compiled query and load it into a DataFrame
+    df = pd.read_sql(str(compiled_query), session.bind)
+
+    return df
+
 
 # Run the app
 if __name__ == '__main__':
 
 #"2024-12-14 17:26:25"
-    startTime = datetime(2024,12,14,17,26,25) 
+    startTime = datetime.now() 
     endTime = startTime + timedelta(minutes=5)
     #startTime = datetime.now() - timedelta(minutes=5)
     #endTime = datetime.now()
     # Database connection
     engine = create_engine('postgresql://vandaq:p3st3r@localhost:5432/vandaq-dev', echo=False)
 
-    df = get_2step_query_with_alarms(engine, startTime, end_time=endTime, wide=False)
-    struct = transform_instrument_dataframe(df)
+    df = get_alarm_table(engine, startTime, end_time=endTime)
+#    struct = transform_instrument_dataframe(df)
     print(df)
  
