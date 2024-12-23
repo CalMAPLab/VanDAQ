@@ -1,0 +1,45 @@
+---
+platform: car1
+instrument: PseudoTech_Bozometer
+type: simulated
+connection: none
+queue:
+  name: "/dev-measurements"
+  max_msg_size: 8000
+  max_msgs: 50
+measurement_delay_secs: 0 
+stream:
+  line_delimiter: "\r\n"
+  item_delimiter: ","
+  items: "Bozons"
+  formats: "f"
+  units: "bpm"
+  acqTypes: "measurement_calibrated"
+simulate:
+  cycle_secs: 1
+  Bozons:
+    signal: random
+    min: 300
+    max: 600
+    period: 127
+logs:
+  log_dir: "/home/vandaq/vandaq/acquirer/log"
+  log_file: "PseudoTech_Bozometer.log"
+  log_level: "INFO"
+  logger_name: "PseudoTech_Bozometer"
+
+alarms:
+  Bozons:
+    - value_<:
+        value: 0
+        alarm_level: alarm
+        alarm_type: underrange
+        alarm_message: "Bozons have gone negative"
+        impacts_data: true
+    - value_>:
+        value: 2000
+        alarm_level: warning
+        alarm_type: high_reading
+        alarm_message: "Bozons are unsually high > 500"
+        impacts_data: true
+

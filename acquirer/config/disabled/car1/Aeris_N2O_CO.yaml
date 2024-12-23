@@ -1,0 +1,26 @@
+---
+platform: car1
+instrument: Aeris_N2O_CO
+type: simpleSerial
+queue:
+  name: "/dev-measurements"
+  max_msg_size: 8000
+  max_msgs: 50
+connection: serial
+serial:
+  device: "/dev/usb_serial_AERIS_N2O_CO"
+  baud: 9600
+measurement_delay_secs: 0 
+stream:
+  line_delimiter: "\r\n"
+  item_delimiter: ","
+  items: "inst_datetime,Inlet_Number,P,T0,T1,T2,T5,Tgas,CO,H2O,N2O,amb_T,amb_P,latitude,longitude"
+  formats: "%m/%d/%Y %H:%M:%S.%f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,x,x" 
+  units: "datetime,count,mbar,deg_c,deg_c,deg_c,deg_c,deg_c,ppm,ppm,ppb,deg_C,torr,lat,lon"
+  acqTypes: "inst_datetime,engineering,engineering,engineering,engineering,engineering,engineering,engineering,measurement_calibrated,measurement_calibrated,measurement_calibrated,engineering,engineering,GPS,GPS"
+  
+logs:
+  log_dir: "/home/vandaq/vandaq/acquirer/log"
+  log_file: "acquirer_Aeris_N2O_CO.log"
+  log_level: "INFO"
+  logger_name: "Aeris_N2O_CO"

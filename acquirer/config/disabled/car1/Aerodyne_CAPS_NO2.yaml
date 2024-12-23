@@ -1,0 +1,67 @@
+---
+platform: car1
+instrument: CAPS_NO2
+type: simpleSerial
+#verbose: 1
+queue:
+  name: "/dev-measurements"
+  max_msg_size: 8000
+  max_msgs: 50
+connection: serial
+serial:
+  device: "/dev/usb_serial_CAPS_NO2"
+  baud: 9600
+measurement_delay_secs: 0 
+stream:
+  line_delimiter: "\r\n"
+  item_delimiter: ","
+  items: "timesecs,NO2,Loss,Pressure,Temperature,Signal_Level,Calibration,Status,Last_Baseline"
+  formats: "f,f,f,f,f,f,f,s,f" 
+  units: "seconds,ppb,Mm-1,torr,temp_k,units,units,units,Mm-1"
+  acqTypes: "engineering,measurement_calibrated,engineering,engineering,engineering,engineering,engineering,engineering,engineering"
+  
+logs:
+  log_dir: "/home/vandaq/vandaq/acquirer/log"
+  log_file: "acquirer_CAPS_NO2.log"
+  log_level: "INFO"
+  logger_name: "CAPS_NO2"
+
+alarms:
+  NO2:
+    - value_<:
+        value: 0
+        alarm_level: alarm
+        alarm_type: underrange
+        alarm_message: "NO2 negative"
+        impacts_data: true
+    - value_>:
+        value: 200
+        alarm_level: warning
+        alarm_type: overrange
+        alarm_message: "NO2 above threshold of 200 ppb"
+        impacts_data: false
+  Status:
+    - substr_is:
+        substr_begin: 0
+        substr_end: 1
+        value: "3"
+        alarm_level: alarm
+        alarm_type: instrument_auto_cal
+        alarm_message: "Internal filter inline"
+        impacts_data: true
+    - substr_is:
+        substr_begin: 1
+        substr_end: 2
+        value: "1"
+        alarm_level: alarm
+        alarm_type: instrument_auto_cal
+        alarm_message: "Internal baseline flush period"
+        impacts_data: true
+    - substr_is:
+        substr_begin: 1
+        substr_end: 2
+        value: "2"
+        alarm_level: alarm
+        alarm_type: instrument_auto_cal
+        alarm_message: "Internal baseline measurement period"
+        impacts_data: true

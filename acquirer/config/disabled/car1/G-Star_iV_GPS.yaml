@@ -1,0 +1,37 @@
+---
+platform: car1
+instrument: G-Star_IV_GPS
+type: serial_nmea_GPS
+#verbose: 1
+queue:
+  name: "/dev-measurements"
+  max_msg_size: 8000
+  max_msgs: 50
+connection: serial
+serial:
+  device: "/dev/ttyUSB4"
+  baud: 4800
+measurement_delay_secs: 0 
+  
+logs:
+  log_dir: "/home/vandaq/vandaq/acquirer/log"
+  log_file: "G-Star_IV_GPS.log"
+  log_level: "INFO"
+  logger_name: "G-Star_IV_GPS"
+
+alarms:
+  longitude:
+    - value_=:
+        value: 0
+        alarm_level: alarm
+        alarm_type: zero_lon
+        alarm_message: "longitude reads zero"
+        impacts_data: false
+  latitude:
+    - value_=:
+        value: 0
+        alarm_level: alarm
+        alarm_type: zero_lat
+        alarm_message: "latitude reads zero"
+        impacts_data: false
+        
