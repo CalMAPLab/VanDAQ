@@ -1,3 +1,5 @@
+dashboard_refresh_secs: 5
+alarm_shapes: 1
 display_params:
   CAPS_NO2:
     graph:
@@ -64,6 +66,14 @@ display_params:
   G-Mouse_GPS:
     graph:
       - "latitude"
+      - "longitude"
+    display:
+      - "latitude"
+      - "longitude"
+  G-Star_IV_GPS:
+    graph:
+      - "latitude"
+      - "longitude"
     display:
       - "latitude"
       - "longitude"

@@ -21,7 +21,7 @@ def get_alarm_columns(engine):
 
 
 # Layout for the alarm table page
-def layout_alarm_table():
+def layout_alarm_table(config):
     return html.Div([
         html.H1('Alarm Table', style={'text-align': 'left'}),
         dcc.Checklist(
