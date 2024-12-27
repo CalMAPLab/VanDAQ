@@ -15,6 +15,203 @@ doqueue = True
 if doqueue:
     from  ipcqueue import posixmq
 
+from collections import defaultdict
+from statistics import mean
+from datetime import datetime, timedelta
+
+class RecordParser:
+    def __init__(self, config):
+        self.config = config
+        self.buffer = defaultdict(lambda: defaultdict(list))
+        self.last_aggregate_time = {}  # Tracks the last aggregation timestamp for each instrument
+
+    def parse_simple_string_to_record(self, line, config_dict=None, item_delimiter=','):
+        if not config_dict:
+            config_dict = self.config['stream']
+
+        if 'item_delimiter' in config_dict:
+            item_delimiter = config_dict['item_delimiter']
+
+        aggregate_seconds = config_dict.get('aggregate_seconds')
+        aggregate_items = config_dict.get('aggregate_items')
+
+        # Check for an instrument datetime
+        instrument_datetime = None
+        instrument_date = None
+        instrument_time = None
+        next_day = False
+        items = config_dict['items'].split(config_dict['item_delimiter'])
+        parts = line.split(config_dict['item_delimiter'])
+        formats = config_dict['formats'].split(config_dict['item_delimiter'])
+        if 'inst_datetime' in items:
+            idx = items.index('inst_datetime')
+            dt_string = parts[idx]
+            if '24:' in dt_string:
+                next_day = True
+                dt_string = dt_string.replace('24:','00:')
+            instrument_datetime = datetime.strptime(dt_string, formats[idx])
+            if next_day:
+                instrument_datetime += timedelta(days=1)
+            instrument_datetime = instrument_datetime.replace(microsecond=0)
+        elif 'inst_date' in items:
+            idx = items.index('inst_date')
+            instrument_date = datetime.strptime(parts[idx], formats[idx]).date()
+        if 'inst_time' in items:
+            idx = items.index('inst_time')
+            dt_string = parts[idx]
+            if '24:' in dt_string:
+                next_day = True
+                dt_string = dt_string.replace('24:','00:')
+            instrument_time = datetime.strptime(dt_string, formats[idx]).time()
+        if instrument_time and instrument_date:
+            instrument_datetime = datetime.combine(instrument_date, instrument_time)        
+            instrument_datetime = instrument_datetime.replace(microsecond=0)
+        elif instrument_time and not instrument_date:
+            instrument_datetime = datetime.combine(datetime(1900, 1, 1, 0, 0, 0).date(), instrument_time)  
+            instrument_datetime = instrument_datetime.replace(microsecond=0)
+            if next_day:
+                instrument_datetime += timedelta(days=1)
+                                      
+
+        # Bypass aggregation if no aggregate settings
+        if not aggregate_seconds or not aggregate_items:
+            return self._parse_direct(line, config_dict, item_delimiter, instrument_datetime)
+
+        instrument_key = self.config['instrument']
+        current_time = datetime.now()
+
+        # Parse the line into parts
+        parts = line.strip().split(item_delimiter)
+        items = config_dict['items'].split(',')
+
+        # Buffer the data
+        for i, part in enumerate(parts):
+            if items[i] != 'x':
+                try:
+                    if config_dict['formats'].split(',')[i] in ['f', 'h']:
+                        self.buffer[instrument_key][items[i]].append(float(part))
+                    elif config_dict['formats'].split(',')[i] == 's':
+                        self.buffer[instrument_key][items[i]].append(part)
+                except ValueError:
+                    self.buffer[instrument_key][items[i]].append(None)
+
+        # Check if aggregation interval has elapsed
+        if instrument_key not in self.last_aggregate_time:
+            self.last_aggregate_time[instrument_key] = current_time            
+        time_so_far = (current_time - self.last_aggregate_time[instrument_key]).total_seconds()
+        if time_so_far >= aggregate_seconds:
+            if instrument_datetime:
+                # if we are aggregating, the instrument time should be the beginning of the aggregation period
+                instrument_datetime -= timedelta(seconds = aggregate_seconds)
+            result = self._aggregate_buffer(instrument_key, config_dict, instrument_datetime)
+            self.last_aggregate_time[instrument_key] = current_time
+            return result
+
+        return None
+
+    def _parse_direct(self, line, config_dict, item_delimiter, instrument_datetime):
+        parts = line.strip().split(item_delimiter)
+        items = config_dict['items'].split(',')
+        formats = config_dict['formats'].split(',')
+        units = config_dict['units'].split(',')
+        acqTypes = config_dict['acqTypes'].split(',')
+        
+        resultList = []
+        acquisition_time = datetime.now().replace(microsecond=0)
+        sample_time = acquisition_time - timedelta(seconds=self.config.get('measurement_delay_secs', 0))
+        
+        for i in range(len(parts)):
+            if items[i] != 'x':
+                try:
+                    value = None
+                    string = None
+                    if formats[i] in ['f', 'h']:
+                        value = float(parts[i])
+                    elif formats[i] == 's':
+                        string = parts[i]
+                    
+                    resultDict = {
+                        'platform': self.config['platform'],
+                        'instrument': self.config['instrument'],
+                        'parameter': items[i],
+                        'unit': units[i],
+                        'acquisition_type': acqTypes[i],
+                        'acquisition_time': acquisition_time,
+                        'sample_time': sample_time,
+                        'instrument_time': instrument_datetime
+                    }
+                    if value is not None:
+                        resultDict['value'] = value
+                    if string is not None:
+                        resultDict['string'] = string
+
+                    resultList.append(resultDict)
+                except ValueError:
+                    continue
+
+        return resultList
+
+    def _aggregate_buffer(self, instrument_key, config_dict, instrument_datetime):
+        aggregate_items = config_dict['aggregate_items'].split(',')
+        items = config_dict['items'].split(',')
+        formats = config_dict['formats'].split(',')
+        units = config_dict['units'].split(',')
+        acqTypes = config_dict['acqTypes'].split(',')
+
+        resultList = []
+        acquisition_time = datetime.now().replace(microsecond=0)
+        sample_time = acquisition_time - timedelta(seconds=self.config.get('measurement_delay_secs', 0))
+
+
+        for i, item in enumerate(items):
+            if item != 'x':
+                values = self.buffer[instrument_key][item]
+                if not values:
+                    continue
+
+                agg_method = aggregate_items[i]
+                aggregated_value = None
+                if formats[i] in ['f', 'h']:
+                    if agg_method == 'mean':
+                        aggregated_value = mean(values)
+                    elif agg_method == 'min':
+                        aggregated_value = min(values)
+                    elif agg_method == 'max':
+                        aggregated_value = max(values)
+                    elif agg_method == 'first':
+                        aggregated_value = values[0]
+                    elif agg_method == 'last':
+                        aggregated_value = values[-1]
+                elif formats[i] == 's':
+                    if agg_method == 'first':
+                        aggregated_value = values[0]
+                    elif agg_method == 'last':
+                        aggregated_value = values[-1]
+
+                resultDict = {
+                    'platform': self.config['platform'],
+                    'instrument': self.config['instrument'],
+                    'parameter': item,
+                    'unit': units[i],
+                    'acquisition_type': acqTypes[i],
+                    'acquisition_time': acquisition_time,
+                    'sample_time': sample_time,
+                    'instrument_time': instrument_datetime,  # Assumes current time for instrument_time
+                }
+                if aggregated_value is not None:
+                    if formats[i] in ['f', 'h']:
+                        resultDict['value'] = aggregated_value
+                    elif formats[i] == 's':
+                        resultDict['string'] = aggregated_value
+
+                resultList.append(resultDict)
+
+                # Clear buffer for the item
+                self.buffer[instrument_key][item].clear()
+
+        return resultList
+
+
 class Acquirer:
     def __init__(self, config_dict):  
         self.verbose = False  
@@ -22,6 +219,7 @@ class Acquirer:
         self.secs_since_last_acquire = 0
         self.measurements = []
         self.queue = None
+        self.rp = RecordParser(config_dict)
         # Initialize static variables for the 'random' signal
         self.sim_previous_value = 0
         self.sim_direction = 1
@@ -73,7 +271,8 @@ class Acquirer:
         return 'not a valid record'
     
     def send_measurement_to_queue(self, measurements):
-        if len(measurements) > 0:
+
+        if measurements and len(measurements) > 0:
             if doqueue:
                 #self.logger.debug('queuing %s', str(measurements))
                 self.queue.put(measurements)
@@ -83,77 +282,10 @@ class Acquirer:
                 self.logger.debug('not queuing %s', str(measurements))
         
     def parse_simple_string_to_record(self, line, config_dict=None, item_delimiter=','):
-        """Parses a string record from the instrument and returns a list of dictionaries."""
-        if not config_dict:
-            config_dict = self.config['stream']
-        
-        item_delimiter = config_dict.get('item_delimiter', item_delimiter)
-        parts = line.strip().split(item_delimiter)
-        items = config_dict['items'].split(',')
-        formats = config_dict['formats'].split(',')
-        units = config_dict['units'].split(',')
-        acq_types = config_dict['acqTypes'].split(',')
-        
-        if len(parts) != len(items):
-            self.logger.error(f"Mismatch in parts and items count: {line}")
-            return []
-
-        result_list = []
-        inst_time = None
-        acquisition_time = datetime.now().replace(microsecond=0)
-        sample_time = acquisition_time - timedelta(seconds=self.measurement_delay)
-
-        def parse_value(part, fmt):
-            """Helper to parse individual values based on the format."""
-            try:
-                if fmt == 'f':  # Float
-                    return float(part), None
-                elif fmt == 'h':  # Hexadecimal
-                    return float(int(part, 0)), None
-                elif fmt == 's':  # String
-                    return None, part
-                else:
-                    self.logger.error(f"Unsupported format: {fmt}")
-            except ValueError as e:
-                self.logger.error(f"Parsing error for part '{part}' with format '{fmt}': {e}")
-            return None, None
-
-        def parse_datetime(part, fmt):
-            """Helper to handle datetime parsing."""
-            if '24:' in part:
-                part = part.replace(' 24:', ' 00:')
-                return datetime.strptime(part, fmt) + timedelta(days=1)
-            return datetime.strptime(part, fmt)
-
-        for idx, (part, item, fmt, unit, acq_type) in enumerate(zip(parts, items, formats, units, acq_types)):
-            if item == 'x':
-                continue
-
-            if item == 'inst_datetime':
-                inst_time = parse_datetime(part, fmt)
-            elif item in ('inst_date', 'inst_time'):
-                continue  # These are handled within inst_datetime
-            else:
-                value, string = parse_value(part, fmt)
-                if value is None and string is None:
-                    continue
-                result_list.append({
-                    'platform': self.config['platform'],
-                    'instrument': self.config['instrument'],
-                    'parameter': item,
-                    'unit': unit,
-                    'acquisition_type': acq_type,
-                    'acquisition_time': acquisition_time,
-                    'sample_time': sample_time,
-                    'instrument_time': inst_time,
-                    'value': value,
-                    'string': string
-                })
-
-        return result_list
+        return self.rp.parse_simple_string_to_record(line, config_dict=None, item_delimiter=',')
 
     def apply_alarms(self, messages_in):
-        if 'alarms' in self.config:
+        if messages_in and 'alarms' in self.config:
             alarms = self.config['alarms']
             messages_out = []
             for message in messages_in:
@@ -374,8 +506,10 @@ class NetworkAcquirer(Acquirer):
                     self.logger.error('Error receiving message from zmq socket,'+' err:' + str(e))
                 else:
                     try:
+                        message_length = 0
                         message = pickle.loads(received_data)
-                        self.logger.debug('pickled message of length = '+ str(len(received_data)))
+                        message_length = len(message)
+                        self.logger.debug('pickled message of length = '+ str(message_length))
                         success = True
                     except Exception as e:
                         self.logger.error('Error converting message from socket, message len='+str(message_length)+' err:' + str(e))
@@ -494,7 +628,6 @@ class SerialNmeaGPSAcquirer(SerialStreamAcquirer):
                         if line.startswith('$'):
                             message = self.process_nmea_sentence(line)
                             if message:
-                                print('got message at '+ datetime.now().isoformat())
                                 message = self.apply_alarms(message)
                                 if (datetime.now() - timer).total_seconds() >= 1:
                                     self.send_measurement_to_queue(message)
@@ -554,7 +687,7 @@ class SimulatedAcquirer(Acquirer):
             self.send_measurement_to_queue(record)
             time_since_last_cycle = datetime.now() - cycle_time
             to = (cycle_interval.seconds * 1000 - time_since_last_cycle.microseconds) / 1000
-            sleep(cycle_interval.seconds)
+            sleep(cycle_interval.total_seconds())
             cycle_time = datetime.now()
 
 class AquirerFactory():
