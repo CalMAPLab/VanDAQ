@@ -323,19 +323,23 @@ def update_dashboard(app, engine, config):
         for t in ctx.triggered:
             if t['value']:
                 tr = json.loads(t['prop_id'].replace('.n_clicks',''))
-                print(tr['index'])
                 return tr['index']
         raise PreventUpdate
 
     @app.callback(
         Output('instrument_zoom', 'data', allow_duplicate=True),
+        Output('grid-container', 'children', allow_duplicate=True),
         Input('zoom_back_button', 'n_clicks'),
         prevent_initial_call=True    
     )
     def zoom_back_clicked(clicks):
         if clicks > 0:
-            return None
+            global latest_page
+            with lock:
+                page = latest_page
+            return None, page
         raise PreventUpdate
+
     
     @app.callback(
         [
