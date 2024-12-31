@@ -21,6 +21,7 @@ sample_time = datetime.datetime.now()
 config = None
 engine = None
 
+
 def get_last_valid_value(df, column):
     last_valid_index = df[column].last_valid_index()
     if last_valid_index:
@@ -73,6 +74,13 @@ def create_trend_plot_old(instrument_data_list, show_axes=False):
         showlegend=False  # Hides the legend
     )
 
+def is_consistently_increasing(column):
+    """
+    Test if a Pandas Series of datetimes consistently increases.
+    """
+    diffs = column.diff().total_seconds().dropna()
+    return (diffs >= 0).all()  # No negative differences
+
 def create_trend_plot(instrument_data_list, config, zoomed=False, show_axes=False ):
     graphs = []
     shapes = []  # List to hold the background shapes for alarm levels
@@ -82,12 +90,14 @@ def create_trend_plot(instrument_data_list, config, zoomed=False, show_axes=Fals
     for instrument_data in instrument_data_list:
         name = instrument_data['parameter']
         data = instrument_data['measurements']
-        # data = data.dropna()
-
+        graphdata = data[['value']]
+        graphdata = graphdata.dropna(axis='index')
+        if not is_consistently_increasing(data.index):
+            print('Got a hairball!')
         # Add line plot
         graph = go.Scatter(
-            x=data.index,
-            y=data['value'],
+            x=graphdata.index,
+            y=graphdata['value'],
             text=name,
             mode="lines",
             line=dict(color=graph_line_colors[i]),
@@ -298,6 +308,12 @@ def layout_dashboard(config):
         dcc.Store(id="instrument_zoom", data = None),
         html.H1('VanDAQ Operator Dashboard', style={'text-align': 'left'}, id='clickhere', n_clicks=0),
         html.Div(id='sample_timestamp'),
+        dcc.Checklist(
+            options=[{'label': 'Freeze', 'value': 'suspend'}],
+            id='suspend-updates',
+            value=[],  # Default: updates are not suspended
+            style={'margin-bottom': '10px'}
+        ),
         html.Div(id='grid-container', children=['Awaiting data...'])
     ])
 
@@ -350,41 +366,45 @@ def update_dashboard(app, engine, config):
         [
             Input("interval", "n_intervals"),
             Input('instrument_zoom', 'data'),
+            Input('suspend-updates', 'value'),
             State("cache-timestamp", "data")
         ],
         prevent_initial_call=True
     )
-    def update_page(n_intervals, instrument_zoom, last_seen_timestamp):
+    def update_page(n_intervals, instrument_zoom, suspend_updates, last_seen_timestamp):
         global latest_page
         global latest_page_time
         global latest_sample_time
         global latest_measurements_dict
         
-        if instrument_zoom and 'instrument_zoom' in ctx.triggered[0]['prop_id']:
-            with lock:
-               last_measurements = copy.copy(latest_measurements_dict)
-               cached_timestamp = latest_page_time
-            items, sample_time, dataFrame, measurements = build_page_contents(engine, config, measurements=last_measurements, zoom_to_instrument=instrument_zoom)
-            sample_timestamp = f'Last sample time: {sample_time.strftime("%m/%d/%Y, %H:%M:%S")}'
-            return items, sample_timestamp, cached_timestamp
-
-        if isinstance(last_seen_timestamp, str):
-            last_seen_timestamp = datetime.datetime.strptime(last_seen_timestamp,'%Y-%m-%dT%H:%M:%S.%f')
-        with lock:
-            cached_timestamp = latest_page_time
-        if cached_timestamp and ((last_seen_timestamp is None) or (cached_timestamp > last_seen_timestamp)):
-            with lock:
-                cached_timestamp = latest_page_time
-                cached_page = copy.copy(latest_page)
-                cached_sample_time = latest_sample_time
-                last_measurements = copy.copy(latest_measurements_dict)
-            if instrument_zoom:
+        if 'suspend' in suspend_updates:
+            raise PreventUpdate
+        else:
+            if instrument_zoom and 'instrument_zoom' in ctx.triggered[0]['prop_id']:
+                with lock:
+                    last_measurements = copy.copy(latest_measurements_dict)
+                    cached_timestamp = latest_page_time
                 items, sample_time, dataFrame, measurements = build_page_contents(engine, config, measurements=last_measurements, zoom_to_instrument=instrument_zoom)
                 sample_timestamp = f'Last sample time: {sample_time.strftime("%m/%d/%Y, %H:%M:%S")}'
                 return items, sample_timestamp, cached_timestamp
-                            
-            sample_timestamp = f'Last sample time: {cached_sample_time.strftime("%m/%d/%Y, %H:%M:%S")}'
-            return cached_page, sample_timestamp, cached_timestamp
+
+            if isinstance(last_seen_timestamp, str):
+                last_seen_timestamp = datetime.datetime.strptime(last_seen_timestamp,'%Y-%m-%dT%H:%M:%S.%f')
+            with lock:
+                cached_timestamp = latest_page_time
+            if cached_timestamp and ((last_seen_timestamp is None) or (cached_timestamp > last_seen_timestamp)):
+                with lock:
+                    cached_timestamp = latest_page_time
+                    cached_page = copy.copy(latest_page)
+                    cached_sample_time = latest_sample_time
+                    last_measurements = copy.copy(latest_measurements_dict)
+                if instrument_zoom:
+                    items, sample_time, dataFrame, measurements = build_page_contents(engine, config, measurements=last_measurements, zoom_to_instrument=instrument_zoom)
+                    sample_timestamp = f'Last sample time: {sample_time.strftime("%m/%d/%Y, %H:%M:%S")}'
+                    return items, sample_timestamp, cached_timestamp
+                                
+                sample_timestamp = f'Last sample time: {cached_sample_time.strftime("%m/%d/%Y, %H:%M:%S")}'
+                return cached_page, sample_timestamp, cached_timestamp
         raise PreventUpdate
 
 # Periodically regenerate the page content in the background
