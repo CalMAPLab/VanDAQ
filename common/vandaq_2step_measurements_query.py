@@ -231,6 +231,13 @@ def get_2step_query_with_alarms(engine, start_time, end_time=None, platform=None
 
     return df
 
+def is_consistently_increasing(column):
+    """
+    Test if a Pandas Series of datetimes consistently increases.
+    """
+    diffs = column.diff().total_seconds().dropna()
+    return (diffs >= 0).all()  # No negative differences
+
 def transform_instrument_dataframe(df, use_dataframes=True):
     """
     Transforms a pandas DataFrame into a nested data structure grouped by instrument and parameter.
@@ -256,6 +263,9 @@ def transform_instrument_dataframe(df, use_dataframes=True):
         # Extract measurements for the current parameter group
         if use_dataframes:
             measurements = group[['sample_time', 'value', 'string', 'alarm_count', 'max_alarm_level', 'alarm_messages']]
+            # Occasionally observation times get scrambled during groupby 
+            if not is_consistently_increasing(measurements.index):
+                measurements = measurements.sort_index()
         else:
             measurements = group[['sample_time', 'value', 'string', 'alarm_count', 'max_alarm_level', 'alarm_messages']]
             measurements = measurements.to_dict(orient='records')
