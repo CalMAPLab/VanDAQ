@@ -25,7 +25,7 @@ def layout_alarm_table(config):
     return html.Div([
         html.H1('Alarm Table', style={'text-align': 'left'}),
         dcc.Checklist(
-            options=[{'label': 'Suspend updates', 'value': 'suspend'}],
+            options=[{'label': 'Freeze', 'value': 'suspend'}],
             id='suspend-updates',
             value=[],  # Default: updates are not suspended
             style={'margin-bottom': '10px'}
