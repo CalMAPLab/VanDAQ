@@ -18,61 +18,99 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker, relationship
 from vandaq_schema import *
 
+first_insert = True
+platform_dict = None
+instrument_dict = None
+parameter_dict = None
+unit_dict = None
+acquisition_type_dict = None
+alarm_type_dict = None
+alarm_level_dict = None
+
 def insert_measurment_into_database(session, message):
+    global first_insert
+    global platform_dict
+    global instrument_dict
+    global parameter_dict
+    global unit_dict
+    global acquisition_type_dict
+    global alarm_type_dict
+    global alarm_level_dict
     try:        
-        # Check if the platform already exists, otherwise insert it
-        sttime = datetime.now()
-        platform_record = session.query(DimPlatform).filter_by(
-            platform=message['platform'],).first()
-        if not platform_record:
+        # pre-query dimension tables into dicts
+        if first_insert:
+            platform_dict = {
+                record.platform: record.id for record in session.query(DimPlatform).all()
+            }
+            instrument_dict = {
+                record.instrument: record.id for record in session.query(DimInstrument).all()
+            }
+            parameter_dict = {
+                record.parameter: record.id for record in session.query(DimParameter).all()
+            }
+            unit_dict = {
+                record.unit: record.id for record in session.query(DimUnit).all()
+            }
+            acquisition_type_dict = {
+                record.acquisition_type: record.id for record in session.query(DimAcquisitionType).all()
+            }
+            alarm_type_dict = {
+                record.alarm_type: record.id for record in session.query(DimAlarmType).all()
+            }
+            alarm_level_dict = {
+                record.alarm_level: record.id for record in session.query(DimAlarmLevel).all()
+            }
+            first_insert = False
+            
+            
+
+        platform_id = platform_dict.get(message['platform'])
+        if not platform_id:
             platform_record = DimPlatform(platform=message['platform'])
             session.add(platform_record)
             session.flush()  # Ensure the ID is generated
-        platform_us = (datetime.now()-sttime).microseconds
-        print('Platform query took {} microseconds'.format(str(platform_us)))
+            platform_id = platform_record.id
+            platform_dict[message['platform']] = platform_id
 
-        sttime = datetime.now()
         # Check if the instrument already exists, otherwise insert it
-        instrument_record = session.query(DimInstrument).filter_by(
-            instrument=message['instrument'],).first()
-        if not instrument_record:
+        instrument_id = instrument_dict.get(message['instrument'])
+        if not instrument_id:
             instrument_record = DimInstrument(instrument=message['instrument'])
             session.add(instrument_record)
             session.flush()  # Ensure the ID is generated
+            instrument_id = instrument_record.id
+            instrument_dict[message['instrument']] = instrument_id
 
-        instrument_us = (datetime.now()-sttime).microseconds
-        print('Instrument query took {} microseconds'.format(str(instrument_us)))
 
-         # Check if the parameter already exists, otherwise insert it
-        sttime = datetime.now()
+        # Check if the parameter already exists, otherwise insert it
         # in case an instrument non-response alarm comes in (no paramater)
         parameter_record = None
         if 'parameter' in message:
-            parameter_record = session.query(DimParameter).filter_by(
-                parameter=message['parameter']).first()
-            if not parameter_record:
+            parameter_id = parameter_dict.get(message['parameter'])
+            if not parameter_id:
                 parameter_record = DimParameter(parameter=message['parameter'])
                 session.add(parameter_record)
                 session.flush()  # Ensure the ID is generated
-
-        parameter_us = (datetime.now()-sttime).microseconds
-        print('Parameter query took {} microseconds'.format(str(parameter_us)))
+                parameter_id = parameter_record.id
+                parameter_dict[message['parameter']] = parameter_id
 
         # Check if the unit already exists, otherwise insert it
-        unit_record = session.query(DimUnit).filter_by(
-            unit=message['unit']).first()
-        if not unit_record:
+        unit_id = unit_dict.get(message['unit'])
+        if not unit_id:
             unit_record = DimUnit(unit=message['unit'])
             session.add(unit_record)
             session.flush()  # Ensure the ID is generated
+            unit_id = unit_record.id
+            unit_dict[message['unit']] = unit_id
 
         # Check if the acquisition type already exists, otherwise insert it
-        acquisition_type_record = session.query(DimAcquisitionType).filter_by(
-            acquisition_type=message['acquisition_type']).first()
-        if not acquisition_type_record:
+        acquisition_type_id = acquisition_type_dict.get(message['acquisition_type'])
+        if not acquisition_type_id:
             acquisition_type_record = DimAcquisitionType(acquisition_type=message['acquisition_type'])
             session.add(acquisition_type_record)
             session.flush()  # Ensure the ID is generated
+            acquisition_type_id = acquisition_type_record.id
+            acquisition_type_dict[message['acquisition_type']] = acquisition_type_id
 
         # Check if the acquire time already exists, otherwise insert it
         acq_time_record = session.query(DimTime).filter_by(time=message['acquisition_time']).first()
@@ -102,16 +140,16 @@ def insert_measurment_into_database(session, message):
         # Check if the geolocation record already exists, otherwise insert it
             geolocation_record = session.query(DimGeolocation).filter(
                    and_(
-                      DimGeolocation.sample_time_id == sample_time_record.id,
-                    DimGeolocation.platform_id == platform_record.id,
-                    DimGeolocation.instrument_id == instrument_record.id
+                    DimGeolocation.sample_time_id == sample_time_record.id,
+                    DimGeolocation.platform_id == platform_id,
+                    DimGeolocation.instrument_id == instrument_id
                 )
             ).first()
 
             if not geolocation_record:
                 geolocation_record = DimGeolocation(sample_time_id = sample_time_record.id,
-                                            platform_id=platform_record.id,
-                                            instrument_id=instrument_record.id)
+                                            platform_id=platform_id,
+                                            instrument_id=instrument_id)
                 session.add(geolocation_record)
                 session.flush()
             if message['parameter'] == 'latitude':
@@ -125,18 +163,18 @@ def insert_measurment_into_database(session, message):
    
         # Add an instrument measurement record if not already there
         inst_meas_record = session.query(InstrumentMeasurements).filter_by(
-            platform_id=platform_record.id,
-            instrument_id=instrument_record.id,
-            acquisition_type_id=acquisition_type_record.id,
-            parameter_id=parameter_record.id,
-            unit_id=unit_record.id).first()
+            platform_id=platform_id,
+            instrument_id=instrument_id,
+            acquisition_type_id=acquisition_type_id,
+            parameter_id=parameter_id,
+            unit_id=unit_id).first()
         if not inst_meas_record:
             inst_meas_record = InstrumentMeasurements(
-                platform_id=platform_record.id,
-                instrument_id=instrument_record.id,
-                acquisition_type_id=acquisition_type_record.id,
-                parameter_id=parameter_record.id,
-                unit_id=unit_record.id)
+                platform_id=platform_id,
+                instrument_id=instrument_id,
+                acquisition_type_id=acquisition_type_id,
+                parameter_id=parameter_id,
+                unit_id=unit_id)
             session.add(inst_meas_record)
             session.flush()
 
@@ -149,16 +187,16 @@ def insert_measurment_into_database(session, message):
         if 'value' in message.keys():
             measurementValue = message['value']
         measurement_record = None
-        sttime = datetime.now()
+
         if (measurementValue is not None) or measurementString:          
             # Insert the measurement with the dimension IDs
             if inst_has_timestamp:
                 measurement_record = FactMeasurement(
-                    platform_id=platform_record.id,
-                    instrument_id=instrument_record.id,
-                    parameter_id=parameter_record.id,
-                    unit_id=unit_record.id,
-                    acquisition_type_id=acquisition_type_record.id,
+                    platform_id=platform_id,
+                    instrument_id=instrument_id,
+                    parameter_id=parameter_id,
+                    unit_id=unit_id,
+                    acquisition_type_id=acquisition_type_id,
                     acquisition_time_id=acq_time_record.id,
                     instrument_time_id=inst_time_record.id,
                     sample_time_id=sample_time_record.id,
@@ -168,11 +206,11 @@ def insert_measurment_into_database(session, message):
                 )
             else:
                 measurement_record = FactMeasurement(
-                    platform_id=platform_record.id,
-                    instrument_id=instrument_record.id,
-                    parameter_id=parameter_record.id,
-                    unit_id=unit_record.id,
-                    acquisition_type_id=acquisition_type_record.id,
+                    platform_id=platform_id,
+                    instrument_id=instrument_id,
+                    parameter_id=parameter_id,
+                    unit_id=unit_id,
+                    acquisition_type_id=acquisition_type_id,
                     acquisition_time_id=acq_time_record.id,
                     sample_time_id=sample_time_record.id,
                     sample_time=message['sample_time'],
@@ -181,26 +219,26 @@ def insert_measurment_into_database(session, message):
                 )
             session.add(measurement_record)
             session.flush()  # Commit the transaction
-            measurement_us = (datetime.now()-sttime).microseconds
-            print('Measuremment insert took {} microseconds'.format(str(measurement_us)))
 
         if 'alarms' in message:
             for alarm in message['alarms']:
                 # Check if the alarm type already exists, otherwise insert it
-                alarm_type_record = session.query(DimAlarmType).filter_by(
-                    alarm_type=alarm['alarm_type']).first()
-                if not alarm_type_record:
+                alarm_type_id = alarm_type_dict.get(alarm['alarm_type'])
+                if not alarm['alarm_type']:
                     alarm_type_record = DimAlarmType(alarm_type=alarm['alarm_type'])
                     session.add(alarm_type_record)
                     session.flush()  # Ensure the ID is generated
+                    alarm_type_id = alarm_type_record.id
+                    alarm_type_dict[alarm['alarm_type']] = alarm_type_id
 
                 # Check if the alarm level already exists, otherwise insert it
-                alarm_level_record = session.query(DimAlarmLevel).filter_by(
-                    alarm_level=alarm['alarm_level']).first()
-                if not alarm_level_record:
+                alarm_level_id = alarm_level_dict.get(alarm['alarm_level'])
+                if not alarm_level_id:
                     alarm_level_record = DimAlarmLevel(alarm_level=alarm['alarm_level'])
                     session.add(alarm_level_record)
                     session.flush()  # Ensure the ID is generated
+                    alarm_level_id = alarm_level_record.id
+                    alarm_level_dict[alarm['alarm_level']] = alarm_level_id
                 
                 alarm_message = alarm['alarm_message']
                 parameter_id_local = None
@@ -211,13 +249,13 @@ def insert_measurment_into_database(session, message):
                     measurement_id_local = measurement_record.id
 
                 alarm_record = FactAlarm(
-                    platform_id=platform_record.id,
-                    measurement_id=measurement_id_local,
-                    instrument_id=instrument_record.id,
-                    parameter_id=parameter_id_local,
+                    platform_id=platform_id,
+                    measurement_id=measurement_record.id,
+                    instrument_id=instrument_id,
+                    parameter_id=parameter_id,
                     sample_time_id=sample_time_record.id,
-                    alarm_type_id=alarm_type_record.id,
-                    alarm_level_id=alarm_level_record.id,
+                    alarm_type_id=alarm_type_id,
+                    alarm_level_id=alarm_level_id,
                     data_impacted=alarm['data_impacted'],
                     message=alarm['alarm_message']
                 )
@@ -409,9 +447,15 @@ while True:
                 move_file_to_submitted(file['filename'], submitted_file_directory) 
                 logger.debug('Moved submission file {} to {}'.format(file['filename'], submitted_file_directory))
                         
+    file_start_time = datetime.now()
+    
     for measurement in message:
         if 'acquisition_type' in measurement.keys():
+            #start_time = datetime.now()
             success = insert_measurment_into_database(session, measurement)
+            #end_time = datetime.now()
+            #exec_secs = (end_time - start_time).total_seconds()
+            #print(f'message insert took {exec_secs} seconds')
             if success:
                 #logger.debug("Measurement inserted successfully.")
                 pass
@@ -421,5 +465,7 @@ while True:
             if collector_input == 'queue':
                 if submit_measurement(measurement, sumbission_start_time, config):
                     sumbission_start_time = datetime.now()
-                    
+    file_end_seconds = (datetime.now()-file_start_time).total_seconds()
+    print(f'message cluster (submit file) length {len(message)} messages processed in {file_end_seconds} seconds')
+                   
 
