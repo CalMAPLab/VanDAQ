@@ -1,0 +1,13 @@
+directories:
+  acquirer_directory: "/home/vandaq/vandaq/acquirer/"
+  acquirer_log_directory: "/home/vandaq/vandaq/acquirer/log/"
+  collector_directory: "/home/vandaq/vandaq/collector/"
+  collector_log_directory: "/home/vandaq/vandaq/collector/log/"
+  submitter_directory: "/home/vandaq/vandaq/submitter/"
+  submitter_log_directory: "/home/vandaq/vandaq/submitter/log/"
+components:
+  launch_acquirers: true
+  launch_collector: true
+  launch_submitter: true
+  collector_config_file: "vandaq_collector.yaml" 
+  submitter_config_file: "vandaq_submitter.yaml" 
