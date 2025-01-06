@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 import sys
 import os
+import yaml
 from glob import glob
 import subprocess
 import psutil
@@ -8,99 +9,158 @@ from  ipcqueue import posixmq
 
 args = sys.argv
 if 'python' in args[0]:
-	args = args[1:]
+    args = args[1:]
 
 acqDir = '/home/vandaq/vandaq/acquirer/'
 acqLogDir = acqDir+'log/'
 collDir = '/home/vandaq/vandaq/collector/' 
 collLogDir = collDir+'log/'
+submDir =  '/home/vandaq/vandaq/submitter/'
+submLogDir = submDir+'log/'
 processes = []
 
+config_file_name = '/home/vandaq/vandaq/vandaq_admin.yaml' 
+config = None 
+
+try:
+    configfile = open(config_file_name,'r')
+    config = yaml.load(configfile, Loader=yaml.FullLoader)
+    configfile.close()
+except:
+    print("Cannot load config file "+sys.argv[1])
+    exit()
+    
+if config:
+    acqDir = config['directories']['acquirer_directory']
+    acqLogDir = config['directories']['acquirer_log_directory']
+    collDir = config['directories']['collector_directory']
+    collLogDir = config['directories']['collector_log_directory']
+
+
 def getAcquirerProcesses():
-	ps = []
-	for p in psutil.process_iter():
-		try:
-			status = p.status()
-		except Exception as e:
-			i=1
-		else: 
-			if p.status() != 'zombie':
-				cmdln = ' '.join(p.cmdline())
-				if 'vandaq_acquirer.py' in cmdln:
-					ps.append(p)
-	return ps
+    ps = []
+    for p in psutil.process_iter():
+        try:
+            status = p.status()
+        except Exception as e:
+            i=1
+        else: 
+            if p.status() != 'zombie':
+                cmdln = ' '.join(p.cmdline())
+                if 'vandaq_acquirer.py' in cmdln:
+                    ps.append(p)
+    return ps
 
 
 def getCollectorProcesses():
-	ps = []
-	for p in psutil.process_iter():
-		try:
-	  		status = p.status()
-		except Exception as e:
-			i=1
-		else: 
-			if p.status() != 'zombie':
-				cmdln = ' '.join(p.cmdline())
-				if 'vandaq_collector.py' in cmdln:
-					ps.append(p)
-	return ps
+    ps = []
+    for p in psutil.process_iter():
+        try:
+              status = p.status()
+        except Exception as e:
+            i=1
+        else: 
+            if p.status() != 'zombie':
+                cmdln = ' '.join(p.cmdline())
+                if 'vandaq_collector.py' in cmdln:
+                    ps.append(p)
+    return ps
+
+def getSubmitterProcesses():
+    ps = []
+    for p in psutil.process_iter():
+        try:
+              status = p.status()
+        except Exception as e:
+            i=1
+        else: 
+            if p.status() != 'zombie':
+                cmdln = ' '.join(p.cmdline())
+                if 'vandaq_submitter.py' in cmdln:
+                    ps.append(p)
+    return ps
 
 
 def startup():
-	print('starting VanDAQ processes')
-	if len(args) > 2:
-		basedir = args[2]
-	else:
-		basedir = acqDir+'config/'
-	
-	if basedir[-1] != '/':
-		basedir += '/'
+    print('starting VanDAQ processes')
+    if len(args) > 2:
+        basedir = args[2]
+    else:
+        basedir = acqDir+'config/'
+    
+    if basedir[-1] != '/':
+        basedir += '/'
 
-	this_env = os.environ.copy()
-	cmd = ['python3',collDir+'vandaq_collector.py', collDir+'vandaq_collector.yaml']
-	logFileName = collLogDir + 'collector.log'
-	configs = glob(basedir+'*.yaml')
-	logFile = open(logFileName,'a')
-	proc = subprocess.Popen(cmd, env=this_env, stdout=logFile, stderr=logFile)
-	#proc.wait()
-	print('Started collector '+str(cmd)+'   pid='+str(proc.pid))
-	processes.append({'cmd':cmd, 'pid':proc.pid})
-	if len(configs) > 0:
-		for config in configs:
-			logFileName = acqLogDir + os.path.basename(config.replace('.yaml',''))
-			logFile = open(logFileName,'a')
-			cmd = ['python3',acqDir+'vandaq_acquirer.py',config]
-			proc = subprocess.Popen(cmd, env=this_env, stdout=logFile, stderr=logFile)
-			#proc.wait()
-			pid = proc.pid
-			print('Started acquirer '+str(cmd)+'   pid='+str(pid))
-			processes.append({'cmd':cmd, 'pid':proc.pid})
+    this_env = os.environ.copy()
+    if config and config['components'] and config['components']['launch_collector']: 
+        collector_config = collDir+'vandaq_collector.yaml'
+        if config and ('components' in config) and ('collector_config_file' in config['components']):
+            collector_config = collDir+config['components']['collector_config_file']
+        cmd = ['python3',collDir+'vandaq_collector.py', collector_config]
+        logFileName = collLogDir + 'collector.log'
+        logFile = open(logFileName,'a')
+        proc = subprocess.Popen(cmd, env=this_env, stdout=logFile, stderr=logFile)
+        #proc.wait()
+        print('Started collector '+str(cmd)+'   pid='+str(proc.pid))
+        processes.append({'cmd':cmd, 'pid':proc.pid})
+
+    if config and config['components'] and config['components']['launch_acquirers']:
+        acq_configs = glob(basedir+'*.yaml')
+
+        if len(acq_configs) > 0:
+            for acq_config in acq_configs:
+                logFileName = acqLogDir + os.path.basename(acq_config.replace('.yaml',''))
+                logFile = open(logFileName,'a')
+                cmd = ['python3',acqDir+'vandaq_acquirer.py',acq_config]
+                proc = subprocess.Popen(cmd, env=this_env, stdout=logFile, stderr=logFile)
+                #proc.wait()
+                pid = proc.pid
+                print('Started acquirer '+str(cmd)+'   pid='+str(pid))
+                processes.append({'cmd':cmd, 'pid':proc.pid})
+
+    if config and config['components'] and config['components']['launch_submitter']: 
+        submitter_config = submDir+'vandaq_submitter.yaml'
+        if config and ('components' in config) and ('submitter_config_file' in config['components']):
+            submitter_config = submDir+config['components']['submitter_config_file']
+        cmd = ['python3',submDir+'vandaq_submitter.py', submitter_config]
+        logFileName = submLogDir + 'submitter.log'
+        logFile = open(logFileName,'a')
+        proc = subprocess.Popen(cmd, env=this_env, stdout=logFile, stderr=logFile)
+        #proc.wait()
+        print('Started submitter '+str(cmd)+'   pid='+str(proc.pid))
+        processes.append({'cmd':cmd, 'pid':proc.pid})
+
 
 def stop():
-	print('Stopping VanDAQ processes')
-	ps = getCollectorProcesses()
-	for p in ps:
-		print('stopping '+' '.join(p.cmdline())+' pid '+str(p.pid)) 
-		p.kill()
-		p.wait()
-	ps = getAcquirerProcesses()
-	for p in ps:
-		print('stopping '+' '.join(p.cmdline())+' pid '+str(p.pid)) 
-		p.kill()
-		p.wait()
+    print('Stopping VanDAQ processes')
+    ps = getCollectorProcesses()
+    for p in ps:
+        print('stopping '+' '.join(p.cmdline())+' pid '+str(p.pid)) 
+        p.kill()
+        p.wait()
+    ps = getAcquirerProcesses()
+    for p in ps:
+        print('stopping '+' '.join(p.cmdline())+' pid '+str(p.pid)) 
+        p.kill()
+        p.wait()
+    ps = getSubmitterProcesses()
+    for p in ps:
+        print('stopping '+' '.join(p.cmdline())+' pid '+str(p.pid)) 
+        p.kill()
+        p.wait()
 
 def status():
-	print('Looking for VanDAQ processes')
-	ps = getCollectorProcesses() + getAcquirerProcesses()
-	if not ps:
-		print('No VanDAQ process running')
-	else:
-		print('command \t pid \t status')
-		for p in ps:
-			line = ' '.join(p.cmdline())+'\t'
-			line += str(p.pid)+'\t'
-			line += p.status()
-			print(line)
+    print('Looking for VanDAQ processes')
+    ps = getCollectorProcesses() + getAcquirerProcesses() + getSubmitterProcesses()
+    if not ps:
+        print('No VanDAQ process running')
+    else:
+        print('command \t pid \t status')
+        for p in ps:
+            line = ' '.join(p.cmdline())+'\t'
+            line += str(p.pid)+'\t'
+            line += p.status()
+            print(line)
 
 queue_name = '/dev-measurements'    
 
@@ -123,9 +183,9 @@ def clear_queue():
 commands = {'startup':startup, 'stop':stop, 'status':status, 'clearqueue': clear_queue}
 
 if len(args) >= 2 and args[1] in commands.keys():
-	command = commands[args[1]]
-	command()
+    command = commands[args[1]]
+    command()
 else:
-	print('no command found')
+    print('no command found')
 
 
