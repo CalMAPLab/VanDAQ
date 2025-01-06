@@ -739,7 +739,7 @@ ALTER TABLE ONLY public.unit
 --
 
 ALTER TABLE ONLY public.instrument_measurements
-    ADD CONSTRAINT uq_instrument_measurements UNIQUE (instrument_id, parameter_id, unit_id, acquisition_type_id);
+    ADD CONSTRAINT uq_instrument_measurements UNIQUE (platform_id, instrument_id, parameter_id, unit_id, acquisition_type_id);
 
 
 --
