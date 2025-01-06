@@ -71,6 +71,7 @@ def insert_measurment_into_database(session, message):
             session.flush()  # Ensure the ID is generated
             platform_id = platform_record.id
             platform_dict[message['platform']] = platform_id
+            session.commit()
 
         # Check if the instrument already exists, otherwise insert it
         instrument_id = instrument_dict.get(message['instrument'])
@@ -80,6 +81,7 @@ def insert_measurment_into_database(session, message):
             session.flush()  # Ensure the ID is generated
             instrument_id = instrument_record.id
             instrument_dict[message['instrument']] = instrument_id
+            session.commit()
 
 
         # Check if the parameter already exists, otherwise insert it
@@ -93,6 +95,7 @@ def insert_measurment_into_database(session, message):
                 session.flush()  # Ensure the ID is generated
                 parameter_id = parameter_record.id
                 parameter_dict[message['parameter']] = parameter_id
+                session.commit()
 
         # Check if the unit already exists, otherwise insert it
         unit_id = unit_dict.get(message['unit'])
@@ -102,6 +105,7 @@ def insert_measurment_into_database(session, message):
             session.flush()  # Ensure the ID is generated
             unit_id = unit_record.id
             unit_dict[message['unit']] = unit_id
+            session.commit()
 
         # Check if the acquisition type already exists, otherwise insert it
         acquisition_type_id = acquisition_type_dict.get(message['acquisition_type'])
@@ -111,6 +115,7 @@ def insert_measurment_into_database(session, message):
             session.flush()  # Ensure the ID is generated
             acquisition_type_id = acquisition_type_record.id
             acquisition_type_dict[message['acquisition_type']] = acquisition_type_id
+            session.commit()
 
         # Check if the acquire time already exists, otherwise insert it
         acq_time_record = session.query(DimTime).filter_by(time=message['acquisition_time']).first()
@@ -224,12 +229,13 @@ def insert_measurment_into_database(session, message):
             for alarm in message['alarms']:
                 # Check if the alarm type already exists, otherwise insert it
                 alarm_type_id = alarm_type_dict.get(alarm['alarm_type'])
-                if not alarm['alarm_type']:
+                if not alarm_type_id:
                     alarm_type_record = DimAlarmType(alarm_type=alarm['alarm_type'])
                     session.add(alarm_type_record)
                     session.flush()  # Ensure the ID is generated
                     alarm_type_id = alarm_type_record.id
                     alarm_type_dict[alarm['alarm_type']] = alarm_type_id
+                    session.commit()
 
                 # Check if the alarm level already exists, otherwise insert it
                 alarm_level_id = alarm_level_dict.get(alarm['alarm_level'])
@@ -239,6 +245,7 @@ def insert_measurment_into_database(session, message):
                     session.flush()  # Ensure the ID is generated
                     alarm_level_id = alarm_level_record.id
                     alarm_level_dict[alarm['alarm_level']] = alarm_level_id
+                    session.commit()
                 
                 alarm_message = alarm['alarm_message']
                 parameter_id_local = None
@@ -265,9 +272,9 @@ def insert_measurment_into_database(session, message):
                 
         return True
 
-    except IntegrityError:
+    except IntegrityError as e:
         session.rollback()    # Roll back the transaction on error
-        logger.error("Failed to insert data due to integrity constraint violation.")
+        logger.error(f"Failed to insert data due to integrity constraint violation - {e}.")
         return False
 
 def submit_measurement(measurement, submit_time, config):
@@ -465,7 +472,8 @@ while True:
             if collector_input == 'queue':
                 if submit_measurement(measurement, sumbission_start_time, config):
                     sumbission_start_time = datetime.now()
-    file_end_seconds = (datetime.now()-file_start_time).total_seconds()
-    print(f'message cluster (submit file) length {len(message)} messages processed in {file_end_seconds} seconds')
+    if message:
+        file_end_seconds = (datetime.now()-file_start_time).total_seconds()
+        print(f'message cluster (submit file) length {len(message)} messages processed in {file_end_seconds} seconds')
                    
 
