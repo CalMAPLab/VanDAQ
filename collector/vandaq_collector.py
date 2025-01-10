@@ -157,12 +157,15 @@ def insert_measurment_into_database(session, message):
                                             instrument_id=instrument_id)
                 session.add(geolocation_record)
                 session.flush()
+                session.refresh(geolocation_record)  # Ensures the `id` is loaded from the database
             if message['parameter'] == 'latitude':
                 geolocation_record.latitude = message['value']
                 session.flush()
+                session.refresh(geolocation_record)
             if message['parameter'] == 'longitude':
                 geolocation_record.longitude = message['value']
                 session.flush()
+                session.refresh(geolocation_record)
 
 
    
@@ -452,7 +455,7 @@ while True:
             else:     
                 files.remove(file)
                 move_file_to_submitted(file['filename'], submitted_file_directory) 
-                logger.debug('Moved submission file {} to {}'.format(file['filename'], submitted_file_directory))
+                logger.info('Moved submission file {} to {}'.format(file['filename'], submitted_file_directory))
                         
     file_start_time = datetime.now()
     
@@ -474,6 +477,6 @@ while True:
                     sumbission_start_time = datetime.now()
     if message:
         file_end_seconds = (datetime.now()-file_start_time).total_seconds()
-        print(f'message cluster (submit file) length {len(message)} messages processed in {file_end_seconds} seconds')
+        logger.info(f'message cluster (submit file) length {len(message)} messages processed in {file_end_seconds} seconds')
                    
 

@@ -43,6 +43,7 @@ class DimAcquisitionType(Base):
 
 class DimGeolocation(Base):
     __tablename__ = 'geolocation'
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
     sample_time_id = Column(BigInteger, primary_key=True)
     platform_id = Column(Integer, primary_key=True)
     instrument_id = Column(Integer, primary_key=True)
