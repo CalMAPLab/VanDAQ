@@ -231,6 +231,141 @@ def get_2step_query_with_alarms(engine, start_time, end_time=None, platform=None
 
     return df
 
+def get_all_geolocations(engine):
+    session = sessionmaker(bind=engine)()
+
+    geo_query = (
+        select(DimGeolocation.id,
+               DimGeolocation.sample_time_id,
+               (DimTime.time).label('sample_time'),
+               DimGeolocation.platform_id,
+               DimPlatform.platform,
+               DimGeolocation.instrument_id,
+               DimInstrument.instrument,
+               DimGeolocation.latitude,
+               DimGeolocation.longitude
+               )
+        .join(DimTime, DimTime.id == DimGeolocation.sample_time_id)
+        .join(DimPlatform, DimPlatform.id == DimGeolocation.platform_id)
+        .join(DimInstrument, DimInstrument.id == DimGeolocation.instrument_id)
+        .where(and_((DimGeolocation.latitude != 0),(DimGeolocation.longitude != 0)))
+        .order_by(DimGeolocation.sample_time_id)        
+    )
+    compiled_query = geo_query.compile(session.bind, compile_kwargs={"literal_binds": True})
+
+    # Use pandas to execute the compiled query and load it into a DataFrame
+    df = pd.read_sql(str(compiled_query), session.bind)
+
+    df.set_index('sample_time', inplace=True, drop=False)
+
+    return df
+
+
+def get_measurements_with_alarms_and_locations(engine, start_time=None, gps_instrument=None, end_time=None, platform=None, after_id=None):
+    session = sessionmaker(bind=engine)()
+
+
+    platform_id = None
+
+    if platform:
+        platform_query = (
+            select(DimPlatform)
+            .where(DimPlatform.platform == platform))
+        compiled_query = platform_query.compile(session.bind, compile_kwargs={"literal_binds": True})
+
+        pdf = pd.read_sql(str(compiled_query), session.bind)
+        if pdf.shape[0]:
+            platform_id = int(pdf['id'][0])
+
+    gps_instrument_id = None
+
+    if gps_instrument:
+        platform_query = (
+            select(DimInstrument)
+            .where(DimInstrument.instrument == gps_instrument))
+        compiled_query = platform_query.compile(session.bind, compile_kwargs={"literal_binds": True})
+
+        pdf = pd.read_sql(str(compiled_query), session.bind)
+        if pdf.shape[0]:
+            gps_instrument_id = int(pdf['id'][0])
+
+    # Step 1: Subquery to get the time frame of measurements
+    measurement_query = (
+        select(FactMeasurement)
+        .order_by(FactMeasurement.sample_time)
+    )
+
+    if start_time:
+        measurement_query = measurement_query.where(FactMeasurement.sample_time >= start_time)
+    
+    if end_time:
+        measurement_query = measurement_query.where(FactMeasurement.sample_time  <= end_time)
+
+    if platform_id:
+        measurement_query = measurement_query.where(FactMeasurement.platform_id == platform_id)
+
+    if after_id:
+        measurement_query = measurement_query.where(FactMeasurement.id > after_id)
+
+    measurement_subquery = measurement_query.subquery()
+
+    # Step 2: Scoped alarm aggregation
+    alarm_aggregation = (
+        select(
+            FactAlarm.measurement_id,
+            func.count(FactAlarm.id).label("alarm_count"),
+            func.max(FactAlarm.alarm_level_id).label("max_alarm_level"),
+            func.string_agg(FactAlarm.message, "|").label("concatenated_messages")
+        )
+        .where(FactAlarm.measurement_id.in_(
+            select(measurement_subquery.c.id)
+        ))
+        .group_by(FactAlarm.measurement_id)
+        .subquery()
+    )
+
+    # Step 3: Main query
+    gps_inst_table = aliased(DimInstrument)
+    query = (
+        select(
+            measurement_subquery.c.id,
+            measurement_subquery.c.sample_time,
+            measurement_subquery.c.value,
+            measurement_subquery.c.string,
+            DimInstrument.instrument,
+            DimParameter.parameter,
+            DimUnit.unit,
+            DimAcquisitionType.acquisition_type,
+            DimPlatform.platform,
+            DimGeolocation.latitude,
+            DimGeolocation.longitude,
+            gps_inst_table.instrument.label('gps'),
+            func.coalesce(alarm_aggregation.c.alarm_count, 0).label("alarm_count"),
+            func.coalesce(alarm_aggregation.c.max_alarm_level, 0).label("max_alarm_level"),
+            func.coalesce(alarm_aggregation.c.concatenated_messages, "").label("alarm_messages")
+        )
+        .join(DimInstrument, measurement_subquery.c.instrument_id == DimInstrument.id)
+        .join(DimParameter, measurement_subquery.c.parameter_id == DimParameter.id)
+        .join(DimUnit, measurement_subquery.c.unit_id == DimUnit.id)
+        .join(DimAcquisitionType, measurement_subquery.c.acquisition_type_id == DimAcquisitionType.id)
+        .join(DimPlatform, measurement_subquery.c.platform_id == DimPlatform.id)
+        #.join(DimGeolocation, and_((measurement_subquery.c.sample_time_id == DimGeolocation.sample_time_id),(DimGeolocation.instrument_id == gps_instrument_id)))
+        .join(DimGeolocation, (measurement_subquery.c.sample_time_id == DimGeolocation.sample_time_id))
+        .join(gps_inst_table, DimGeolocation.instrument_id == gps_inst_table.id)
+        .outerjoin(alarm_aggregation,(measurement_subquery.c.id == alarm_aggregation.c.measurement_id))
+        .where(and_((DimGeolocation.latitude != 0),(DimGeolocation.longitude != 0)))
+        #.order_by(FactMeasurement.sample_time)
+    )
+
+    compiled_query = query.compile(session.bind, compile_kwargs={"literal_binds": True})
+
+    # Use pandas to execute the compiled query and load it into a DataFrame
+    df = pd.read_sql(str(compiled_query), session.bind)
+
+    df.set_index('sample_time', inplace=True, drop=False)
+
+    return df
+
 def is_consistently_increasing(column):
     """
     Test if a Pandas Series of datetimes consistently increases.
@@ -347,14 +482,15 @@ def get_alarm_table(engine, start_time=date.today(), end_time=None, platform=Non
 if __name__ == '__main__':
 
 #"2024-12-14 17:26:25"
-    startTime = datetime.now() 
-    endTime = startTime + timedelta(minutes=5)
+    #startTime = datetime.now()
+    startTime = datetime(2024,11,20,18,47,26) 
+    endTime = startTime + timedelta(hours=8)
     #startTime = datetime.now() - timedelta(minutes=5)
     #endTime = datetime.now()
     # Database connection
-    engine = create_engine('postgresql://vandaq:p3st3r@localhost:5432/vandaq-dev', echo=False)
+    engine = create_engine('postgresql://vandaq:p3st3r@localhost:5432/vandaq-test', echo=False)
 
-    df = get_alarm_table(engine, startTime, end_time=endTime)
+    df = get_measurements_with_alarms_and_locations(engine, startTime, 'Aeris_CH4_C2H6', end_time=endTime)
 #    struct = transform_instrument_dataframe(df)
     print(df)
  

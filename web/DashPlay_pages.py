@@ -10,6 +10,7 @@ from sqlalchemy import create_engine
 # import other dashboard pages
 from Dash_Alarm_Table import *
 from Dash_Dashboard import *
+from Dash_Mapper import *
 
 # Initialize the Dash app
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
@@ -25,20 +26,30 @@ def get_config():
         exit()
     return config
 
-# Database connection
-engine = create_engine('postgresql://vandaq:p3st3r@localhost:5432/vandaq-dev', echo=False)
+config = get_config()
 
+# Database connection
+if config and ('db_connect_string' in config):
+    connect_string = config['db_connect_string']
+else:
+    connect_string = 'postgresql://vandaq:p3st3r@localhost:5432/vandaq-dev'
+
+engine = create_engine(connect_string, echo=False)
+
+tabstyle = {'padding':'5px 25px'}
 # Main layout with tabs
 app.layout = html.Div([
     dcc.Tabs(id='tabs', value='dashboard', children=[
-        dcc.Tab(label='Dashboard', value='dashboard'),
-        dcc.Tab(label='Alarm Table', value='alarm-table')
+        dcc.Tab(label='Dashboard', value='dashboard', style=tabstyle, selected_style=tabstyle),
+        dcc.Tab(label='Alarm Table', value='alarm-table', style=tabstyle, selected_style=tabstyle),
+        dcc.Tab(label='Map', value='map-display', style=tabstyle, selected_style=tabstyle)
     ]),
     html.Div(id='tab-content')
 ])
 
 update_dashboard(app, engine, get_config())
 update_alarm_table(app, engine, get_config())
+update_map_page(app, engine, get_config())
 
 # Callback to update tab content
 @app.callback(
@@ -48,10 +59,12 @@ update_alarm_table(app, engine, get_config())
 )
 def render_tab(tab_name):
     if tab_name == 'dashboard':
-        return layout_dashboard(get_config())
+        ret = layout_dashboard(get_config())
     elif tab_name == 'alarm-table':
         ret = layout_alarm_table(get_config())
-        return ret
+    elif tab_name == 'map-display':
+        ret = layout_map_display(get_config())
+    return ret
 
 
 # Run the app

@@ -1,5 +1,6 @@
 dashboard_refresh_secs: 5
 alarm_shapes: 1
+db_connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-test"
 display_params:
   CAPS_NO2:
     graph:
@@ -7,6 +8,11 @@ display_params:
     display:
       - 'NO2'
   PseudoTech_Bozometer:
+    graph:
+      - "Bozons"
+    display:
+      - 'Bozons'
+  Hyper_Bozometer:
     graph:
       - "Bozons"
     display:

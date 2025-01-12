@@ -88,3 +88,48 @@ h1, h2, h3, h4, h5, h6 {
     font-size: 16px; /* Optional: adjust font size */
     padding: 20px; /* Optional: adjust padding */
 }
+
+.Select-control{
+    width: 100px;
+    color:yellow;
+    background-color:black;
+}
+
+.Select-value{
+    color: white;
+    background-color:rgb(250, 250, 247);
+}
+
+.Select-value-label{
+    color: black;
+    background-color:white;
+}
+.Select-menu-outer{
+    color: black;
+    background-color:white;
+
+}
+
+#gps-selector .Select-control {
+    width:150px;
+}
+
+#platform-selector .Select-control {
+    width:130px;
+}
+
+#parameter-selector .Select-control {
+    width:130px;
+}
+
+#instrument-selector .Select-control {
+    width:130px;
+}
+
+#map-graph{
+    height: 600px;
+}
+
+.tab .jsx-2137964197 {
+    padding:5px 25px;
+}
