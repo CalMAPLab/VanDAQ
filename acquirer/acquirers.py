@@ -282,7 +282,7 @@ class Acquirer:
                 self.logger.debug('not queuing %s', str(measurements))
         
     def parse_simple_string_to_record(self, line, config_dict=None, item_delimiter=','):
-        return self.rp.parse_simple_string_to_record(line, config_dict=None, item_delimiter=',')
+        return self.rp.parse_simple_string_to_record(line, config_dict, item_delimiter)
 
     def apply_alarms(self, messages_in):
         if messages_in and 'alarms' in self.config:
