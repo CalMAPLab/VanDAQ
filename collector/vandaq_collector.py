@@ -283,9 +283,10 @@ def insert_measurment_into_database(session, message):
         return False
 
 class Inserter:
-    def __init__(self, session, config):
+    def __init__(self, session, config, logger):
         self.session = session
         self.config = config
+        self.logger = logger
         self.dimension_cache = {
             'platform': {},
             'instrument': {},
@@ -674,7 +675,7 @@ session = Session()
 submissions = []
 sumbission_start_time = datetime.now()
 
-inserter = Inserter(session, config)
+inserter = Inserter(session, config, logger)
 times = inserter.get_or_create_time_dimension(datetime.now()-timedelta(days=5))
 
 batch_insert = True 
@@ -725,6 +726,9 @@ while True:
         end_time = datetime.now()
         exec_secs = (end_time - start_time).total_seconds()
         logger.info(f"{numRecords} inserted, insert took {exec_secs} seconds, {exec_secs/numRecords} secs per record")
+        if collector_input == 'queue':
+            if submit_measurement(message, sumbission_start_time, config):
+                sumbission_start_time = datetime.now()
     else:
 
         for measurement in message:
