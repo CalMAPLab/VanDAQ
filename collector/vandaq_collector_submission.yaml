@@ -1,4 +1,6 @@
 connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-test"
+insert_batch_seconds: 1
+cache_time_seconds: 3600
 logs:
   log_dir: "/home/vandaq/vandaq/collector/log"
   log_file: "collector_submit.log"

@@ -2,7 +2,10 @@ queue:
   name: "/dev-measurements"
   max_msg_size: 8000
   max_msgs: 50
-connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-dev"
+connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-test"
+insert_batch_seconds: 1
+cache_time_seconds: 3600
+queued_recs_to_batch: 1000
 logs:
   log_dir: "/home/vandaq/vandaq/collector/log"
   log_file: "collector.log"
@@ -10,7 +13,7 @@ logs:
   logger_name: "collector"
 submissions:
   submit_file_dir: "/home/vandaq/vandaq/collector/submission"
-  submit_file_basename: "submit_car1_"
+  submit_file_basename: "submit_HaleyCar_"
   submit_file_minutes: 1
   submit_file_timezone: "America/Los_Angeles"
   submit_file_tz_abbr: "PST"
