@@ -351,11 +351,11 @@ class Inserter:
         for time in times:
             sub_batch = [rec for rec in batch if rec['sample_time'].replace(microsecond=0) == time]
             batch = [rec for rec in batch if rec['sample_time'].replace(microsecond=0) != time]
-            if len(batch) > 0:
+            if len(sub_batch) > 0:
                 self.insert_subbatch(sub_batch)   
         exec_secs = (datetime.now()-time_start).total_seconds()
         self.logger.info(f"batch: {numRecords} inserted, insert took {exec_secs} seconds, {exec_secs/numRecords} secs per record")
-
+S
         
 def submit_measurement(measurement, submit_time, config):
     # collect measurements, and store into files at configured intervals  
