@@ -13,6 +13,7 @@ import shutil
 from glob import glob
 from datetime import datetime, timedelta
 from logging.handlers import TimedRotatingFileHandler
+import sqlalchemy
 from sqlalchemy import create_engine, and_, text, insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker, relationship
@@ -215,6 +216,9 @@ class Inserter:
 
         except IntegrityError as e:
             self.logger.error(f"batch_update_instrument_measurements integrity error: {str(e)}")
+        except sqlalchemy.exc.SQLAlchemyError as e:
+            self.session.rollback()
+            self.logger.error(f"SQLAlchemy error: {e} ")
         except Exception as e:
             self.logger.error(f"batch_update_instrument_measurements unknown error: {str(e)}")
 
@@ -301,7 +305,9 @@ class Inserter:
                 }
                 coordinates.append(coordinate)
         measurements = self.batch_insert_measurements(measurements)
-        self.batch_update_instrument_measurements(measurements)
+        # THE INSTRUMENT MEASUREMENT TABLE UPDATE IS NOT RIGHT
+        # DISABLING UNTIL IT'S FIXED
+        #self.batch_update_instrument_measurements(measurements)
         # Now that IDs have been assigned to the measurements, extracte and prep the alarms
         for measurement in measurements:            
             for alarm in measurement.get('alarms',[]):
@@ -345,7 +351,8 @@ class Inserter:
         for time in times:
             sub_batch = [rec for rec in batch if rec['sample_time'].replace(microsecond=0) == time]
             batch = [rec for rec in batch if rec['sample_time'].replace(microsecond=0) != time]
-            self.insert_subbatch(sub_batch)   
+            if len(batch) > 0:
+                self.insert_subbatch(sub_batch)   
         exec_secs = (datetime.now()-time_start).total_seconds()
         self.logger.info(f"batch: {numRecords} inserted, insert took {exec_secs} seconds, {exec_secs/numRecords} secs per record")
 
