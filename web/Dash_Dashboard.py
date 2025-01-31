@@ -1,4 +1,4 @@
-from dash import dcc, html, Input, Output, ALL, MATCH, ctx, State, dash_table
+from dash import dcc, html, Input, Output, ALL, MATCH, ctx, State, dash_table, no_update
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
 from dash.exceptions import PreventUpdate
@@ -153,8 +153,8 @@ def create_grid_cell(graph,text, instrument = None):
         "margin": "10px",
         "background-color": "black"
     }
-    cell_children=[
-        dcc.Graph(
+    if graph:
+        graph_cell =  dcc.Graph(
             figure=graph,
             config={"displayModeBar": False},
             style={
@@ -165,7 +165,19 @@ def create_grid_cell(graph,text, instrument = None):
                 "width": "100%",
                 "background-color": "black"
             },
-        ),
+        )
+    else:
+        graph_cell = html.Div([],            
+                style={
+                "position": "absolute",
+                "top": 0,
+                "left": 0,
+                "height": "100%",
+                "width": "100%",
+                "background-color": "black"
+            })
+    cell_children=[
+        graph_cell,
         html.Div(
             children=text,
             style={
@@ -196,9 +208,6 @@ def create_grid_cell(graph,text, instrument = None):
                 children=cell_children,
                 #n_clicks=0
             )
-         
-            
-
     return cell
 
 flashing_text = {
@@ -211,54 +220,68 @@ flashing_text = {
 # Function that returns a list of objects (in this case, strings)
 def build_page_contents(engine, config, measurements = None, dataFrame = None, zoom_to_instrument = None):
     global sample_time 
+    show_mute_instruments = config.get('show_mute_instruments')
+    instruments = []
     if measurements is None:
         measurements, dataFrame = get_instrument_measurements(engine,config)
+    if show_mute_instruments:
+        instruments = list(config['display_params'].keys())
+    else:
+        instruments = [list(m.keys())[0] for m in measurements]
     items = []
     if not zoom_to_instrument:
-        for instrument in measurements:
-            instrument_text = list(instrument.keys())[0]
-            if instrument_text in config['display_params']:
-                graph_params = config['display_params'][instrument_text]['graph']
-                graph_data = [{'parameter':param['parameter'], 'measurements':param['measurements']} for param in instrument[instrument_text] if param['parameter'] in graph_params]
-                graph = None
-                graph = create_trend_plot(graph_data, config)
-                alarm_level = max([max(list(data['measurements']['max_alarm_level'][-5:])) for data in graph_data])
-                alarm_box_style = None
-                if alarm_level == 2:
-                    alarm_box_style = 'flashing-box-alarm'
-                elif alarm_level == 1:
-                    alarm_box_style = 'flashing-box-warning'
+        for inst in instruments:
+            instrument = [i for i in measurements if i.get(inst)]
+            if not instrument:
+                instrument_text = inst
+                alarm_box_style = 'flashing-box-alarm'
                 instrument_name = html.H2(instrument_text.replace('_',' '), className=alarm_box_style)
-                
-                reading_cells = [instrument_name]
-                for parameter in instrument[instrument_text]:
-                    parameter_text = parameter['parameter']
-                    do_display = False
-                    if parameter_text in config['display_params'][instrument_text]['display']:
-                        do_display = True
-                        # Vulnerability here v
-                        try:
-                            reading_string = parameter_text + ': ' + '{:.4f}'.format(get_last_valid_value(parameter['measurements'],'value')) + ' '+ parameter['unit']
-                        except TypeError as e:
-                            reading_string = 'Bad Value: '+ str(get_last_valid_value(parameter['measurements'],'value'))
-                        reading_line = None
-                        if 'engineering' in parameter['acquisition_type']:
-        #                   reading_line = html.Div(reading_string,className='engineering_reading')  
-                            reading_line = None  
-                        else:
-                            if do_display:
-                                reading_line = html.Div(reading_string,className='ambient_reading')
+                items.append(create_grid_cell(None,html.Div([instrument_name, html.H1('NO DATA')],className='no_data_label')))
+            else:
+                instrument = instrument[0]
+                instrument_text = list(instrument.keys())[0]
+                if instrument_text in config['display_params']:
+                    graph_params = config['display_params'][instrument_text]['graph']
+                    graph_data = [{'parameter':param['parameter'], 'measurements':param['measurements']} for param in instrument[instrument_text] if param['parameter'] in graph_params]
+                    graph = None
+                    graph = create_trend_plot(graph_data, config)
+                    alarm_level = max([max(list(data['measurements']['max_alarm_level'][-5:])) for data in graph_data])
+                    alarm_box_style = None
+                    if alarm_level == 2:
+                        alarm_box_style = 'flashing-box-alarm'
+                    elif alarm_level == 1:
+                        alarm_box_style = 'flashing-box-warning'
+                    instrument_name = html.H2(instrument_text.replace('_',' '), className=alarm_box_style)
+                    
+                    reading_cells = [instrument_name]
+                    for parameter in instrument[instrument_text]:
+                        parameter_text = parameter['parameter']
+                        do_display = False
+                        if parameter_text in config['display_params'][instrument_text]['display']:
+                            do_display = True
+                            # Vulnerability here v
+                            try:
+                                reading_string = parameter_text + ': ' + '{:.4f}'.format(get_last_valid_value(parameter['measurements'],'value')) + ' '+ parameter['unit']
+                            except TypeError as e:
+                                reading_string = 'Bad Value: '+ str(get_last_valid_value(parameter['measurements'],'value'))
+                            reading_line = None
+                            if 'engineering' in parameter['acquisition_type']:
+            #                   reading_line = html.Div(reading_string,className='engineering_reading')  
+                                reading_line = None  
                             else:
-                                reading_line = None
-                        if reading_line:
-                            reading_cells.append(reading_line)
-                        sample_time = get_last_valid_value(parameter['measurements'],'sample_time')
-                items.append(create_grid_cell(graph,reading_cells, instrument = instrument_text))
+                                if do_display:
+                                    reading_line = html.Div(reading_string,className='ambient_reading')
+                                else:
+                                    reading_line = None
+                            if reading_line:
+                                reading_cells.append(reading_line)
+                            sample_time = get_last_valid_value(parameter['measurements'],'sample_time')
+                    items.append(create_grid_cell(graph,reading_cells, instrument = instrument_text))
     else:
         inst_measurements = [m for m in measurements if zoom_to_instrument in m.keys()][0][zoom_to_instrument]
         items.append(html.Div(children=[html.H2(zoom_to_instrument.replace('_',' ')),html.Button('<--Back', id='zoom_back_button', n_clicks=0)]))
         for parameter in inst_measurements:
-            if not get_last_valid_value(parameter['measurements'],'value'):
+            if get_last_valid_value(parameter['measurements'],'value') is None:
                 continue
             parameter_text = parameter['parameter']
             aqu_type_text = parameter['acquisition_type']
@@ -302,23 +325,29 @@ refresh_secs = 1
 
 # Layout for the dashboard page
 def layout_dashboard(config):
-    return html.Div([
+    global latest_pages
+    if latest_pages:
+        content = latest_pages['dashboard']
+    else:
+        content = ['Awaiting data...']
+    layout = html.Div([
         dcc.Interval(id='interval', interval=refresh_secs * 1000, n_intervals=0),
         dcc.Store(id="cache-timestamp", data=None),  # To store the last seen timestamp
         dcc.Store(id="instrument_zoom", data = None),
         html.H1('VanDAQ Operator Dashboard', style={'text-align': 'left'}, id='clickhere', n_clicks=0),
-        html.Div(id='sample_timestamp'),
+        html.Div('',id='sample_timestamp'),
         dcc.Checklist(
             options=[{'label': 'Freeze', 'value': 'suspend'}],
             id='suspend-updates',
             value=[],  # Default: updates are not suspended
             style={'margin-bottom': '10px'}
         ),
-        html.Div(id='grid-container', children=['Awaiting data...'])
+        html.Div(id='grid-container', children=content)
     ])
+    return layout
 
 
-latest_page = None
+latest_pages = None
 latest_page_time = None
 latest_sample_time = None
 latest_data_frame = None
@@ -328,18 +357,24 @@ latest_measurements_dict = None
 def update_dashboard(app, engine, config):
 
     lock = Lock()
-    Thread(target=regenerate_page, args=(engine, config, lock), daemon=True).start()
+    Thread(target=regenerate_pages, args=(engine, config, lock), daemon=True).start()
 
     @app.callback(
         Output('instrument_zoom', 'data'),
+        Output('grid-container', 'children', allow_duplicate=True),
         Input({'type': 'instrument_cell', 'index': ALL}, 'n_clicks'),
         prevent_initial_call=True
     )
     def instrument_cell_clicked(clicks1):
+        global latest_pages
         for t in ctx.triggered:
             if t['value']:
                 tr = json.loads(t['prop_id'].replace('.n_clicks',''))
-                return tr['index']
+                #print(f'Cell Clicked {datetime.datetime.now()} {tr["index"]}')
+                instrument = tr['index']
+                with lock:
+                    page = latest_pages[instrument]
+                return tr['index'], page
         raise PreventUpdate
 
     @app.callback(
@@ -349,10 +384,12 @@ def update_dashboard(app, engine, config):
         prevent_initial_call=True    
     )
     def zoom_back_clicked(clicks):
+        global latest_pages
         if clicks > 0:
-            global latest_page
+            global latest_pages
             with lock:
-                page = latest_page
+                page = latest_pages['dashboard']
+            #print(f'Clicked back button {datetime.datetime.now()}')
             return None, page
         raise PreventUpdate
 
@@ -365,29 +402,23 @@ def update_dashboard(app, engine, config):
         ],
         [
             Input("interval", "n_intervals"),
-            Input('instrument_zoom', 'data'),
-            Input('suspend-updates', 'value'),
+            State('instrument_zoom', 'data'),
+            State('suspend-updates', 'value'),
             State("cache-timestamp", "data")
         ],
         prevent_initial_call=True
     )
     def update_page(n_intervals, instrument_zoom, suspend_updates, last_seen_timestamp):
-        global latest_page
+        global latest_pages
         global latest_page_time
         global latest_sample_time
         global latest_measurements_dict
         
+        #print(f'In dash update_page {datetime.datetime.now()}')                
+
         if 'suspend' in suspend_updates:
             raise PreventUpdate
         else:
-            if instrument_zoom and 'instrument_zoom' in ctx.triggered[0]['prop_id']:
-                with lock:
-                    last_measurements = copy.copy(latest_measurements_dict)
-                    cached_timestamp = latest_page_time
-                items, sample_time, dataFrame, measurements = build_page_contents(engine, config, measurements=last_measurements, zoom_to_instrument=instrument_zoom)
-                sample_timestamp = f'Last sample time: {sample_time.strftime("%m/%d/%Y, %H:%M:%S")}'
-                return items, sample_timestamp, cached_timestamp
-
             if isinstance(last_seen_timestamp, str):
                 last_seen_timestamp = datetime.datetime.strptime(last_seen_timestamp,'%Y-%m-%dT%H:%M:%S.%f')
             with lock:
@@ -395,34 +426,46 @@ def update_dashboard(app, engine, config):
             if cached_timestamp and ((last_seen_timestamp is None) or (cached_timestamp > last_seen_timestamp)):
                 with lock:
                     cached_timestamp = latest_page_time
-                    cached_page = copy.copy(latest_page)
+                    items = latest_pages['dashboard']
                     cached_sample_time = latest_sample_time
-                    last_measurements = copy.copy(latest_measurements_dict)
-                if instrument_zoom:
-                    items, sample_time, dataFrame, measurements = build_page_contents(engine, config, measurements=last_measurements, zoom_to_instrument=instrument_zoom)
-                    sample_timestamp = f'Last sample time: {sample_time.strftime("%m/%d/%Y, %H:%M:%S")}'
-                    return items, sample_timestamp, cached_timestamp
-                                
                 sample_timestamp = f'Last sample time: {cached_sample_time.strftime("%m/%d/%Y, %H:%M:%S")}'
-                return cached_page, sample_timestamp, cached_timestamp
-        raise PreventUpdate
+                if instrument_zoom:
+                    items = latest_pages[instrument_zoom]                
+                                
+                #print(f'Returning updated page {instrument_zoom}')
+                return items, sample_timestamp, cached_timestamp
+
+        #print(f'Preventing update {datetime.datetime.now()}')                
+        return no_update, no_update, no_update
+        #raise PreventUpdate
+
 
 # Periodically regenerate the page content in the background
-def regenerate_page(engine, config, lock):
+def regenerate_pages(engine, config, lock):
+    regpage = True
+    count = 0
+    pages = {}
     while True:
-        # Here is the expensive query and page-build
-        items, sample_time, dataFrame, measurements = build_page_contents(engine, config)
-        global latest_page
-        global latest_page_time
-        global latest_sample_time
-        global latest_data_frame
-        global latest_measurements_dict
-        with lock:
-            latest_page = items
-            latest_page_time = datetime.datetime.now()
-            latest_sample_time = sample_time
-            latest_data_frame = dataFrame
-            latest_measurements_dict = measurements
+        if regpage:
+            # Here is the expensive query and page-build
+            #print(f'Starting dash regenerate {datetime.datetime.now()}')                
+            st_time = datetime.datetime.now()
+            pages['dashboard'], sample_time, dataFrame, measurements = build_page_contents(engine, config)
+            instruments = dataFrame['instrument'].unique()
+            for instrument in instruments:
+                pages[instrument],stime,df,meas = build_page_contents(engine, config, measurements=measurements, zoom_to_instrument=instrument)
+            global latest_pages
+            global latest_page_time
+            global latest_sample_time
+            global latest_data_frame
+            global latest_measurements_dict
+            with lock:
+                latest_pages = pages
+                latest_page_time = datetime.datetime.now()
+                latest_sample_time = sample_time
+                latest_data_frame = dataFrame
+                latest_measurements_dict = measurements
+            #print(f'Finished dash regenerate {datetime.datetime.now()} {(datetime.datetime.now() - st_time).total_seconds()}')                
         time.sleep(0.1)  # give some time back to the main thread
 
 

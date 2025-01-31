@@ -1,23 +1,14 @@
 dashboard_refresh_secs: 5
-alarm_shapes: 1
+alarm_shapes: True
 master_GPS: "ublox_M8Q_GPS"
-db_connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-dev"
+db_connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-test"
+show_mute_instruments: True
 display_params:
   CAPS_NO2:
     graph:
       - "NO2"
     display:
       - 'NO2'
-  PseudoTech_Bozometer:
-    graph:
-      - "Bozons"
-    display:
-      - 'Bozons'
-  Hyper_Bozometer:
-    graph:
-      - "Bozons"
-    display:
-      - 'Bozons'
   Aeris_N2O_CO:
     graph:
       - "N2O"
@@ -77,20 +68,6 @@ display_params:
     display:
       - "latitude"
       - "longitude"
-  G-Mouse_GPS:
-    graph:
-      - "latitude"
-      - "longitude"
-    display:
-      - "latitude"
-      - "longitude"
-  G-Star_IV_GPS:
-    graph:
-      - "latitude"
-      - "longitude"
-    display:
-      - "latitude"
-      - "longitude"
   Palas_Fidas_PM:
     graph:
       - "PM1"
@@ -104,8 +81,8 @@ display_params:
       - "PM4"
       - "PM10"
       - "PMtot"
-  TSI_3789_CPC:
+  PseudoTech_Bozometer:
     graph:
-      - "particle_conc"
+      - "Bozons"
     display:
-      - "particle_conc"
+      - 'Bozons'
