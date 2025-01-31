@@ -7,7 +7,7 @@ import numpy as np
 import logging
 import pickle
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from time import sleep
 import pynmea2
 
@@ -271,7 +271,6 @@ class Acquirer:
         return 'not a valid record'
     
     def send_measurement_to_queue(self, measurements):
-
         if measurements and len(measurements) > 0:
             if doqueue:
                 #self.logger.debug('queuing %s', str(measurements))
@@ -282,6 +281,7 @@ class Acquirer:
                 self.logger.debug('not queuing %s', str(measurements))
         
     def parse_simple_string_to_record(self, line, config_dict=None, item_delimiter=','):
+        self.logger.debug('received data string: '+line)
         return self.rp.parse_simple_string_to_record(line, config_dict, item_delimiter)
 
     def apply_alarms(self, messages_in):
@@ -394,6 +394,7 @@ class SerialStreamAcquirer(Acquirer):
         return None  # No complete line available
                 
     def run(self):
+        cycle_time = self.config['stream'].get('cycle_time',1)
         while True:
             if self.check_serial_open():
                 try:
@@ -404,12 +405,14 @@ class SerialStreamAcquirer(Acquirer):
                 else:
 
                     if line and len(line.split(self.config['stream']['item_delimiter'])) == self.num_items_per_line:
+                        #print(str(line))
                         dataMessage = self.parse_simple_string_to_record(line,config_dict=self.config['stream'])
                         dataMessage = self.apply_alarms(dataMessage)
-                        if len(dataMessage) > 0:
+                        if dataMessage and len(dataMessage) > 0:
+                            #print(str(dataMessage))
                             self.send_measurement_to_queue(dataMessage)
             else:
-                sleep(1)
+                sleep(cycle_time)
 
 class SerialPolledAcquirer(SerialStreamAcquirer):
     def __init__(self, configdict):
@@ -595,6 +598,9 @@ class SerialNmeaGPSAcquirer(SerialStreamAcquirer):
             messages = []
             if isinstance(msg, pynmea2.types.talker.RMC):
                 timeStamp = msg.timestamp
+                if isinstance(timeStamp,time):
+                    n = datetime.now()
+                    timeStamp = datetime(n.year,n.month,n.day,timeStamp.hour,timeStamp.minute,timeStamp.second)
                 messages.append(self.make_measurement_item('latitude','lat',float(msg.latitude),timestamp = timeStamp))
                 messages.append(self.make_measurement_item('longitude','lon',float(msg.longitude),timestamp = timeStamp))
                 if msg.spd_over_grnd:
