@@ -601,8 +601,10 @@ class SerialNmeaGPSAcquirer(SerialStreamAcquirer):
                 if isinstance(timeStamp,time):
                     n = datetime.now()
                     timeStamp = datetime(n.year,n.month,n.day,timeStamp.hour,timeStamp.minute,timeStamp.second)
-                messages.append(self.make_measurement_item('latitude','lat',float(msg.latitude),timestamp = timeStamp))
-                messages.append(self.make_measurement_item('longitude','lon',float(msg.longitude),timestamp = timeStamp))
+                if float(msg.latitude) != 0.0:
+                    messages.append(self.make_measurement_item('latitude','lat',float(msg.latitude),timestamp = timeStamp))
+                if float(msg.longitude) != 0.0:
+                    messages.append(self.make_measurement_item('longitude','lon',float(msg.longitude),timestamp = timeStamp))
                 if msg.spd_over_grnd:
                     messages.append(self.make_measurement_item('speed','m/s',float(msg.spd_over_grnd)*0.514444,timestamp = timeStamp))
                 if msg.true_course:
