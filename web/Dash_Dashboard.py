@@ -44,36 +44,6 @@ graph_line_colors = ["rgba(0, 123, 255, 0.8)",# light blue line with transparenc
                      "rgba(140, 18, 189, 0.8)",# light purple line with transparency
                      "rgba(161, 159, 9, 0.8)"]# light yellow line with transparency
             
-def create_trend_plot_old(instrument_data_list, show_axes=False):
-    graphs = []
-    i = 0
-    num = len(instrument_data_list)
-    for instrument_data in instrument_data_list:
-        name = instrument_data['parameter']
-        data = instrument_data['measurements']
-        #data = data.dropna()
-        graph = go.Scatter(
-            x=data.index,
-            y=data['value'],
-            text = name,
-            mode="lines",
-            line=dict(color=graph_line_colors[i]),  
-        )
-        graphs.append(graph)
-        i += 1
-
-    return go.Figure(
-        graphs
-    ).update_layout(
-        margin=dict(l=0, r=0, t=0, b=0),
-        xaxis=dict(visible=show_axes),
-        yaxis=dict(visible=show_axes, side='right'),
-        showgrid = False,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        showlegend=False  # Hides the legend
-    )
-
 def is_consistently_increasing(column):
     """
     Test if a Pandas Series of datetimes consistently increases.
@@ -81,62 +51,83 @@ def is_consistently_increasing(column):
     diffs = column.diff().total_seconds().dropna()
     return (diffs >= 0).all()  # No negative differences
 
-def create_trend_plot(instrument_data_list, config, zoomed=False, show_axes=False ):
-    graphs = []
-    shapes = []  # List to hold the background shapes for alarm levels
-    i = 0
-    num = len(instrument_data_list)
 
-    for instrument_data in instrument_data_list:
+def create_trend_plot(instrument_data_list, config, zoomed=False, show_axes=False, separate_scales=False):
+    graphs = []
+    shapes = []
+    num_traces = len(instrument_data_list)
+
+    # Define y-axis domains dynamically if using separate scales
+    y_axis_domains = [(i / num_traces, (i + 1) / num_traces) for i in range(num_traces)] if separate_scales else [(0, 1)]
+
+    for i, instrument_data in enumerate(instrument_data_list):
         name = instrument_data['parameter']
         data = instrument_data['measurements']
-        graphdata = data[['value']]
-        graphdata = graphdata.dropna(axis='index')
+        graphdata = data[['value']].dropna(axis='index')
+
         if not is_consistently_increasing(data.index):
             print('Got a hairball!')
-        # Add line plot
+
+        # Define a unique y-axis name (e.g., 'y2', 'y3', ...)
+        y_axis_name = f"y{i+1}" if separate_scales else "y"
+
+        # Create line plot with assigned y-axis
         graph = go.Scatter(
             x=graphdata.index,
             y=graphdata['value'],
             text=name,
             mode="lines",
             line=dict(color=graph_line_colors[i]),
+            yaxis=y_axis_name
         )
         graphs.append(graph)
 
-        # Add background shapes for max_alarm_level > 0
-        if 'alarm_shapes' in config and config['alarm_shapes']:
-            if 'max_alarm_level' in data.columns:
-                alarm_intervals = data[data['max_alarm_level'] > 0]
-                for idx, row in alarm_intervals.iterrows():
-                    color = 'rgba(255,0,0,0.6)' if row['max_alarm_level'] == 2 else 'rgba(255,255,0,0.6)'
-                    shapes.append({
-                        'type': 'rect',
-                        'xref': 'x',  # Use x-axis as reference
-                        'yref': 'paper',  # Use the paper height as reference for full y-axis coverage
-                        'x0': idx,  # Start time of the interval
-                        'x1': idx + pd.Timedelta(seconds=1),  # End time of the interval
-                        'y0': 0,
-                        'y1': 1,
-                        'fillcolor': color,
-                        'opacity': 0.6,
-                        'layer': 'below',  # Ensure it appears below the line plot
-                        'line_width': 0
-                    })
+        # Add background shapes for alarm levels
+        if config.get('alarm_shapes', False) and 'max_alarm_level' in data.columns:
+            alarm_intervals = data[data['max_alarm_level'] > 0]
+            for idx, row in alarm_intervals.iterrows():
+                color = 'rgba(255,0,0,0.6)' if row['max_alarm_level'] == 2 else 'rgba(255,255,0,0.6)'
+                shapes.append({
+                    'type': 'rect',
+                    'xref': 'x',
+                    'yref': y_axis_name,
+                    'x0': idx,
+                    'x1': idx + pd.Timedelta(seconds=1),
+                    'y0': graphdata['value'].min(),
+                    'y1': graphdata['value'].max(),
+                    'fillcolor': color,
+                    'opacity': 0.6,
+                    'layer': 'below',
+                    'line_width': 0
+                })
 
-        i += 1
-
-    return go.Figure(
-        graphs
-    ).update_layout(
+    # Create layout with multiple y-axes if separate scales are enabled
+    layout = go.Layout(
         margin=dict(l=0, r=0, t=0, b=0),
-        xaxis=dict(visible=show_axes,showgrid = False,tickfont=dict(color='lightblue')),  # Make x-axis visible for easier alignment
-        yaxis=dict(visible=show_axes, side='right', showgrid = False,tickfont=dict(color='lightblue')),  # Make y-axis visible for easier understanding
+        xaxis=dict(visible=show_axes, showgrid=False, tickfont=dict(color='lightblue')),
+        yaxis=dict(visible=show_axes, side='right', showgrid=False, tickfont=dict(color='lightblue')),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        shapes=shapes,  # Add the shapes to the layout        
-        showlegend=False  # Hides the legend
+        shapes=shapes,
+        showlegend=False
     )
+
+    # Dynamically add additional y-axes for separate scales
+    if separate_scales:
+        layout.yaxis = dict(
+            domain=y_axis_domains[0], 
+            showgrid=False, 
+            tickfont=dict(color='lightblue')
+        )
+        for i, domain in enumerate(y_axis_domains[1:], start=1):
+            layout[f"yaxis{i+1}"] = dict(
+                domain=domain,
+                showgrid=False,
+                tickfont=dict(color='lightblue'),
+                anchor="x"
+            )
+
+    return go.Figure(graphs, layout)
 
 def create_grid_cell(graph,text, instrument = None):
     # Use dcc.Graph for trend plot background and overlay html for the text
@@ -244,7 +235,8 @@ def build_page_contents(engine, config, measurements = None, dataFrame = None, z
                     graph_params = config['display_params'][instrument_text]['graph']
                     graph_data = [{'parameter':param['parameter'], 'measurements':param['measurements']} for param in instrument[instrument_text] if param['parameter'] in graph_params]
                     graph = None
-                    graph = create_trend_plot(graph_data, config)
+                    separate_scales = config['display_params'][instrument_text].get('separate_scales',False)
+                    graph = create_trend_plot(graph_data, config, separate_scales=separate_scales)
                     alarm_level = max([max(list(data['measurements']['max_alarm_level'][-5:])) for data in graph_data])
                     alarm_box_style = None
                     if alarm_level == 2:
