@@ -10,8 +10,11 @@ app = dash.Dash(__name__)
 engine = None
 
 # Define a placeholder DataFrame for the alarm table (replace with your database query results)
-def get_alarm_data(engine):
+def get_alarm_data(engine, config):
     data = get_alarm_table(engine,start_time = datetime.datetime.now()-datetime.timedelta(minutes=5))
+    if 'display_timezone' in config:
+        data['time'] = data['time'].dt.tz_localize('UTC').dt.tz_convert(config['display_timezone'])
+        data.set_index('time', inplace = True, drop=False)
     return data
 
 def get_alarm_columns(engine):
@@ -21,7 +24,9 @@ def get_alarm_columns(engine):
 
 
 # Layout for the alarm table page
-def layout_alarm_table(config):
+def layout_alarm_table(configdict):
+    global config
+    config = configdict
     return html.Div([
         html.H1('Alarm Table', style={'text-align': 'left'}),
         dcc.Checklist(
@@ -73,5 +78,5 @@ def update_alarm_table(app, sqlengine, config):
             return dash.no_update
 
         # Fetch data from the database (simulated here)
-        alarm_data = get_alarm_data(sqlengine)
+        alarm_data = get_alarm_data(sqlengine, config)
         return alarm_data.to_dict('records')

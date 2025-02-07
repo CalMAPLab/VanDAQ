@@ -248,7 +248,8 @@ def get_all_geolocations(engine):
         .join(DimTime, DimTime.id == DimGeolocation.sample_time_id)
         .join(DimPlatform, DimPlatform.id == DimGeolocation.platform_id)
         .join(DimInstrument, DimInstrument.id == DimGeolocation.instrument_id)
-        .where(and_((DimGeolocation.latitude != 0),(DimGeolocation.longitude != 0)))
+        # checking for equality of a field with itself filters out NaNs
+        .where(and_((DimGeolocation.latitude != 0),(DimGeolocation.longitude != 0),(DimGeolocation.latitude == DimGeolocation.latitude),(DimGeolocation.longitude == DimGeolocation.longitude),(DimGeolocation.latitude != 'NaN'),(DimGeolocation.longitude != 'NaN')))
         .order_by(DimGeolocation.sample_time_id)        
     )
     compiled_query = geo_query.compile(session.bind, compile_kwargs={"literal_binds": True})
@@ -261,7 +262,7 @@ def get_all_geolocations(engine):
     return df
 
 
-def get_measurements_with_alarms_and_locations(engine, start_time=None, gps_instrument=None, end_time=None, platform=None, after_id=None):
+def get_measurements_with_alarms_and_locations_tooSlow(engine, start_time=None, gps_instrument=None, end_time=None, platform=None, after_id=None):
     session = sessionmaker(bind=engine)()
 
 
@@ -277,7 +278,6 @@ def get_measurements_with_alarms_and_locations(engine, start_time=None, gps_inst
         if pdf.shape[0]:
             platform_id = int(pdf['id'][0])
 
-    gps_instrument_id = None
 
     if gps_instrument:
         platform_query = (
@@ -309,6 +309,14 @@ def get_measurements_with_alarms_and_locations(engine, start_time=None, gps_inst
 
     measurement_subquery = measurement_query.subquery()
 
+    # subquery for geolocations
+    geolocation_subquery = (
+        select(DimGeolocation, DimInstrument.instrument.label("gps"))
+        .join(DimInstrument,DimGeolocation.instrument_id == DimInstrument.id)
+        .where(and_((DimGeolocation.latitude != 0),(DimGeolocation.longitude != 0),(DimGeolocation.latitude == DimGeolocation.latitude),(DimGeolocation.longitude == DimGeolocation.longitude),(DimGeolocation.latitude != 'NaN'),(DimGeolocation.longitude != 'NaN')))
+        .order_by(DimGeolocation.sample_time_id)       
+    ).subquery()
+    
     # Step 2: Scoped alarm aggregation
     alarm_aggregation = (
         select(
@@ -321,11 +329,10 @@ def get_measurements_with_alarms_and_locations(engine, start_time=None, gps_inst
             select(measurement_subquery.c.id)
         ))
         .group_by(FactAlarm.measurement_id)
-        .subquery()
-    )
+    ).subquery()
+
 
     # Step 3: Main query
-    gps_inst_table = aliased(DimInstrument)
     query = (
         select(
             measurement_subquery.c.id,
@@ -337,9 +344,9 @@ def get_measurements_with_alarms_and_locations(engine, start_time=None, gps_inst
             DimUnit.unit,
             DimAcquisitionType.acquisition_type,
             DimPlatform.platform,
-            DimGeolocation.latitude,
-            DimGeolocation.longitude,
-            gps_inst_table.instrument.label('gps'),
+            geolocation_subquery.c.gps,
+            geolocation_subquery.c.latitude,
+            geolocation_subquery.c.longitude,
             func.coalesce(alarm_aggregation.c.alarm_count, 0).label("alarm_count"),
             func.coalesce(alarm_aggregation.c.max_alarm_level, 0).label("max_alarm_level"),
             func.coalesce(alarm_aggregation.c.concatenated_messages, "").label("alarm_messages")
@@ -350,12 +357,150 @@ def get_measurements_with_alarms_and_locations(engine, start_time=None, gps_inst
         .join(DimAcquisitionType, measurement_subquery.c.acquisition_type_id == DimAcquisitionType.id)
         .join(DimPlatform, measurement_subquery.c.platform_id == DimPlatform.id)
         #.join(DimGeolocation, and_((measurement_subquery.c.sample_time_id == DimGeolocation.sample_time_id),(DimGeolocation.instrument_id == gps_instrument_id)))
-        .join(DimGeolocation, (measurement_subquery.c.sample_time_id == DimGeolocation.sample_time_id))
-        .join(gps_inst_table, DimGeolocation.instrument_id == gps_inst_table.id)
+        #.join(gps_inst_table, DimGeolocation.instrument_id == gps_inst_table.id)
         .outerjoin(alarm_aggregation,(measurement_subquery.c.id == alarm_aggregation.c.measurement_id))
-        .where(and_((DimGeolocation.latitude != 0),(DimGeolocation.longitude != 0)))
+        .join(geolocation_subquery, (measurement_subquery.c.sample_time_id == geolocation_subquery.c.sample_time_id))
+        #.where(and_((DimGeolocation.latitude != 0),(DimGeolocation.longitude != 0)))
         #.order_by(FactMeasurement.sample_time)
     )
+
+    compiled_query = query.compile(session.bind, compile_kwargs={"literal_binds": True})
+
+    # Use pandas to execute the compiled query and load it into a DataFrame
+    df = pd.read_sql(str(compiled_query), session.bind)
+
+    df.set_index('sample_time', inplace=True, drop=False)
+
+    return df
+
+def get_measurements_with_alarms_and_locations(engine, start_time=None, acquisition_type=None, gps_instrument=None, end_time=None, platform=None, after_id=None):
+    session = sessionmaker(bind=engine)()
+
+
+    platform_id = None
+
+    if platform:
+        platform_query = (
+            select(DimPlatform)
+            .where(DimPlatform.platform == platform))
+        compiled_query = platform_query.compile(session.bind, compile_kwargs={"literal_binds": True})
+
+        pdf = pd.read_sql(str(compiled_query), session.bind)
+        if pdf.shape[0]:
+            platform_id = int(pdf['id'][0])
+
+    gps_instrument_id = None
+
+    if gps_instrument:
+        platform_query = (
+            select(DimInstrument)
+            .where(DimInstrument.instrument == gps_instrument))
+        compiled_query = platform_query.compile(session.bind, compile_kwargs={"literal_binds": True})
+
+        pdf = pd.read_sql(str(compiled_query), session.bind)
+        if pdf.shape[0]:
+            gps_instrument_id = int(pdf['id'][0])
+
+    acquisition_type_id = None
+
+    if acquisition_type:
+        acquisition_type_query = (
+            select(DimAcquisitionType)
+            .where(DimAcquisitionType.acquisition_type == acquisition_type))
+        compiled_query = acquisition_type_query.compile(session.bind, compile_kwargs={"literal_binds": True})
+
+        pdf = pd.read_sql(str(compiled_query), session.bind)
+        if pdf.shape[0]:
+            acquisition_type_id = int(pdf['id'][0])
+   
+
+    # subquery for geolocations
+    geolocation_subquery = (
+        select(DimGeolocation, DimTime.time.label('sample_time'), DimInstrument.instrument.label("gps"))
+        .join(DimInstrument,DimGeolocation.instrument_id == DimInstrument.id)
+        .join(DimTime,DimGeolocation.sample_time_id == DimTime.id)
+        .where(and_((DimGeolocation.latitude != 0),(DimGeolocation.longitude != 0),(DimGeolocation.latitude == DimGeolocation.latitude),(DimGeolocation.longitude == DimGeolocation.longitude),(DimGeolocation.latitude != 'NaN'),(DimGeolocation.longitude != 'NaN')))
+        .order_by(DimGeolocation.sample_time_id)       
+    )
+
+    if platform_id:
+        geolocation_subquery = geolocation_subquery.where(DimGeolocation.platform_id == platform_id)
+
+    if gps_instrument_id:
+        geolocation_subquery = geolocation_subquery.where(DimGeolocation.instrument_id == gps_instrument_id)
+
+    if start_time:
+        geolocation_subquery = geolocation_subquery.where(DimTime.time >= start_time)
+    
+    if end_time:
+        geolocation_subquery = geolocation_subquery.where(DimTime.time  <= end_time)
+
+    geolocation_subquery = geolocation_subquery.subquery()
+
+
+    # Step 1: Subquery to get the time frame of measurements
+    measurement_query = (
+        select(FactMeasurement)
+        .where(FactMeasurement.sample_time_id.in_(select(geolocation_subquery.c.sample_time_id)))
+        .order_by(FactMeasurement.sample_time)
+    )
+
+    if acquisition_type_id:
+        measurement_query = measurement_query.where(FactMeasurement.acquisition_type_id == acquisition_type_id)
+
+    if after_id:
+        measurement_query = measurement_query.where(FactMeasurement.id > after_id)
+
+    measurement_subquery = measurement_query.subquery()
+
+    
+    # Step 2: Scoped alarm aggregation
+    alarm_aggregation = (
+        select(
+            FactAlarm.measurement_id,
+            func.count(FactAlarm.id).label("alarm_count"),
+            func.max(FactAlarm.alarm_level_id).label("max_alarm_level"),
+            func.string_agg(FactAlarm.message, "|").label("concatenated_messages")
+        )
+        .where(FactAlarm.measurement_id.in_(
+            select(measurement_subquery.c.id)
+        ))
+        .group_by(FactAlarm.measurement_id)
+    ).subquery()
+
+
+    # Step 3: Main query
+    query = (
+        select(
+            measurement_subquery.c.id,
+            measurement_subquery.c.sample_time,
+            measurement_subquery.c.value,
+            measurement_subquery.c.string,
+            DimInstrument.instrument,
+            DimParameter.parameter,
+            DimUnit.unit,
+            DimAcquisitionType.acquisition_type,
+            DimPlatform.platform,
+            geolocation_subquery.c.gps,
+            geolocation_subquery.c.latitude,
+            geolocation_subquery.c.longitude,
+            func.coalesce(alarm_aggregation.c.alarm_count, 0).label("alarm_count"),
+            func.coalesce(alarm_aggregation.c.max_alarm_level, 0).label("max_alarm_level"),
+            func.coalesce(alarm_aggregation.c.concatenated_messages, "").label("alarm_messages")
+        )
+        .join(DimInstrument, measurement_subquery.c.instrument_id == DimInstrument.id)
+        .join(DimParameter, measurement_subquery.c.parameter_id == DimParameter.id)
+        .join(DimUnit, measurement_subquery.c.unit_id == DimUnit.id)
+        .join(DimAcquisitionType, measurement_subquery.c.acquisition_type_id == DimAcquisitionType.id)
+        .join(DimPlatform, measurement_subquery.c.platform_id == DimPlatform.id)
+        #.join(DimGeolocation, and_((measurement_subquery.c.sample_time_id == DimGeolocation.sample_time_id),(DimGeolocation.instrument_id == gps_instrument_id)))
+        #.join(gps_inst_table, DimGeolocation.instrument_id == gps_inst_table.id)
+        .outerjoin(alarm_aggregation,(measurement_subquery.c.id == alarm_aggregation.c.measurement_id))
+        .join(geolocation_subquery, (measurement_subquery.c.sample_time_id == geolocation_subquery.c.sample_time_id))
+        #.where(and_((DimGeolocation.latitude != 0),(DimGeolocation.longitude != 0)))
+        #.order_by(FactMeasurement.sample_time)
+    )
+
 
     compiled_query = query.compile(session.bind, compile_kwargs={"literal_binds": True})
 

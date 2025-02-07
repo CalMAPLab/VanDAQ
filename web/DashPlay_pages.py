@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 # import other dashboard pages
 from Dash_Alarm_Table import *
 from Dash_Dashboard import *
-from Dash_Mapper import *
+from Dash_Mapper import layout_map_display, update_map_page
 
 # Initialize the Dash app
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
@@ -49,8 +49,10 @@ app.layout = html.Div([
 
 update_dashboard(app, engine, get_config())
 update_alarm_table(app, engine, get_config())
-update_map_page(app, engine, get_config())
-
+try:
+    update_map_page(app, engine, get_config())
+except Exception as e:
+    print(e)
 # Callback to update tab content
 @app.callback(
     Output('tab-content', 'children'),
@@ -70,4 +72,7 @@ def render_tab(tab_name):
 # Run the app
 server = app.server
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    import logging
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)
+    app.run_server(debug=False, dev_tools_ui=False, dev_tools_props_check=False)
