@@ -32,9 +32,10 @@ def get_instrument_measurements(engine,config):
     # Fetch the latest measurement set
     #df = get_measurements(engine, start_time=datetime.datetime.now()-datetime.timedelta(minutes=5))
     df = get_2step_query_with_alarms(engine, datetime.datetime.now()-datetime.timedelta(minutes=5),wide=False)
-    if 'display_timezone' in config:
-        df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config['display_timezone'])
-        df.set_index('sample_time', inplace = True, drop=False)
+    if len(df) > 0:
+        if 'display_timezone' in config:
+            df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config['display_timezone'])
+            df.set_index('sample_time', inplace = True, drop=False)
     data = transform_instrument_dataframe(df)
     return data, df          
 
