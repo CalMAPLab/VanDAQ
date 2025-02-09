@@ -17,7 +17,7 @@ from vandaq_2step_measurements_query import get_measurements_with_alarms_and_loc
 from vandaq_2step_measurements_query import get_all_geolocations
 
 
-def get_geolocations(engine,config, timezone= None):
+def get_geolocations(engine, config, timezone= None):
     geo_df = get_all_geolocations(engine)
     if timezone:
         geo_df['sample_time'] = geo_df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(timezone)
@@ -83,7 +83,7 @@ def layout_map_display(config):
         style={'margin-bottom': '10px'}
     ),
     dcc.Store(id="refresh-trigger", data=0), 
-    html.Button('Do',id="do-something", n_clicks=0), 
+    #html.Button('Do',id="do-something", n_clicks=0), 
     dcc.Store(id="map-state", data={}), 
     html.Div([
         #html.H3("platform"),
@@ -96,7 +96,7 @@ def layout_map_display(config):
                     max_date_allowed=max(query_results['gps_dates']),
                     disabled_days=find_missing_dates(query_results['gps_dates']),
                     display_format='YYYY-MM-DD',
-                    date=max(query_results['gps_dates']).date()
+                    date=datetime.now().date()
                 ))
             ]),
         html.Div([
@@ -169,13 +169,19 @@ def calculate_zoom_level(dataframe):
     elif max_range > 1:
         zoom = 6
     elif max_range > 0.1:
-        zoom = 10
+        zoom = 9
     elif max_range > 0.01:
         zoom = 12
     else:
         zoom = 14  # Zoomed in for small distances
     
     return zoom, center
+
+def today_date(config):
+    local_tz = pytz.utc
+    if 'display_timezone' in config:
+        local_tz =  pytz.timezone(config['display_timezone'])
+    return pytz.utc.localize(datetime.now()).astimezone(local_tz).date()
 
 
 def update_map_page(app, engine, config):
@@ -184,11 +190,17 @@ def update_map_page(app, engine, config):
     lock = Lock()
     Thread(target=requery_geo, args=(engine, config, lock), daemon=True).start()
 
+
     @app.callback(
         Output("date-picker", "disabled"),
         Output("refresh-trigger", "data"),
         Output("date-picker", "date"),
         Output('map-state','data', allow_duplicate=True),
+        Output('platform-selector','options'),
+        Output('platform-selector','value'),
+        Output('gps-selector','options'),
+        Output('gps-selector','value'),
+        Output("map-container", "children",allow_duplicate=True),
         Input("today-checkbox", "value"),
         Input("date-picker", "date"),
         State("refresh-trigger", "data"),
@@ -197,8 +209,10 @@ def update_map_page(app, engine, config):
     )
     def date_change(today, date, refresh, map_state):
         global query_results
-        date_changed_to = None
+        date_changed_to = no_update
         today_cb_changed = False
+        disable_date_picker = False
+        map = no_update
         for t in ctx.triggered:
             if 'date-picker' in t['prop_id']:
                 picker_date = datetime.strptime(t['value'], '%Y-%m-%d').date()
@@ -212,16 +226,40 @@ def update_map_page(app, engine, config):
         if today_cb_changed:
             map_state['needs_refresh'] = True
             if today == ["today"]:
-                today = datetime.now().date()
-                query_results['day'] = today
-                return True, refresh+1, today, map_state
+                today = today_date(config)
+                disable_date_picker = True
+                date_changed_to = today
             else:
                 picker_date = datetime.strptime(date, '%Y-%m-%d').date()
-                query_results['day'] = picker_date
-                return False, refresh+1, no_update, map_state
+                date_changed_to = picker_date
 
-        if date_changed_to:            
-            return False, refresh+1, no_update, map_state
+        if date_changed_to:  
+            if map_state.get('map-position'):
+                map_state.pop('map-position')
+            start_time = datetime(query_results['day'].year, query_results['day'].month, query_results['day'].day,0,0,0)
+            end_time = datetime(query_results['day'].year, query_results['day'].month, query_results['day'].day,23,59,59)
+            gl = query_results['all_geolocations']
+            geo_subset = gl[(gl["sample_time"] >= start_time)
+                            & (gl["sample_time"] <= end_time)]
+            platforms = list(geo_subset['platform'].unique())
+            gpss = list(geo_subset['instrument'].unique())
+            platform = None
+            if platforms:
+                platform = platforms[0]
+            gps = None
+            if gpss:
+                gps = gpss[0]
+            with lock:
+                query_results['day'] = date_changed_to
+                query_results['latest_data_frame'][query_results['day']] = None
+                query_results['selected_platform'] = platform
+                query_results['selected_gps'] = gps
+                query_results['awaiting_data'] = True
+            map = html.H2('Awaiting data...')
+
+
+
+            return disable_date_picker, refresh+1, date_changed_to, map_state, platforms, platform, gpss, gps, map
 
         raise PreventUpdate
 
@@ -229,7 +267,7 @@ def update_map_page(app, engine, config):
         
 
     @app.callback(
-        Output("map-container", "children"),
+        Output("map-container", "children",allow_duplicate=True),
         Output('map-state', 'data', allow_duplicate=True),
         Input("refresh-trigger", "data"),
         State('platform-selector','value'),
@@ -311,6 +349,8 @@ def update_map_page(app, engine, config):
         else:
             map = html.H1('No Data')
 
+        if qr.get('awaiting_data'):
+            map = html.H2('Awaiting data...')
         #print('we have a fig')
         #print(f'finished update at {(datetime.now()-spy_time).microseconds} usec')
         
@@ -349,19 +389,18 @@ def update_map_page(app, engine, config):
         Output('instrument-selector','options'),
         Output('instrument-selector','value'),
         Input('check-interval','n_intervals'),
-        Input('do-something','n-clicks'),
         State('map-state','data'),
         State('refresh-trigger','data'),
         prevent_initial_call=True
     )
-    def check_needs_update(check_interval, do, map_state, refresh_trigger):
+    def check_needs_update(check_interval, map_state, refresh_trigger):
         global query_results
         print('got here')
         if map_state.get('needs_refresh'):
             day = query_results.get('day')
             if day:
                 df = query_results['latest_data_frame'].get(day)
-                if isinstance(df, pd.DataFrame) and len(df) > 0:
+                if isinstance(df, pd.DataFrame) and (len(df) > 0) and (not query_results.get('awaiting_data')):
                     inst_params = get_instruments_and_params(df)
                     instruments = list(inst_params.keys())
                     params = inst_params[instruments[0]]
@@ -387,7 +426,7 @@ def update_map_page(app, engine, config):
                 print(f'setting instrument params to {params}')
                 return params, params[0]
         return no_update
-         
+
 # Periodically regenerate the map data in the background
 def requery_geo(engine, config, lock):
     # Here is the expensive query and page-build
@@ -399,9 +438,9 @@ def requery_geo(engine, config, lock):
     local_tz = pytz.utc
     if 'display_timezone' in config:
         local_tz =  pytz.timezone(config['display_timezone'])
-    todays_date = pytz.utc.localize(datetime.now()).astimezone(local_tz).date()
+    todays_date = today_date(config)
     query_results['day'] = todays_date
-    last_day = todays_date
+    last_day = today_date(config)
     platform = config['mapping'].get('default_platform')
     gps = config['mapping'].get('default_gps')
     gf = get_geolocations(engine, config)
@@ -413,11 +452,16 @@ def requery_geo(engine, config, lock):
     query_results['gps_dates'] = gps_dates_l
     query_results['gps_instruments'] = gps_instruments_l
     query_results['gps_platforms'] = gps_platforms_l
+    query_results['all_geolocations'] = gf
     while True:
         #print(f'--starting background map refresh at {datetime.now()}')
         df = None
 
         map_day = query_results['day']
+        if query_results.get('selected_platform'):
+            platform = query_results['selected_platform']
+        if query_results.get('selected_gps'):
+            gps = query_results['selected_gps']
 
         if last_day != map_day:
             print(f'thread {rg_id} - Changing from day {last_day} to {map_day}')
@@ -454,6 +498,7 @@ def requery_geo(engine, config, lock):
         if isinstance(df, pd.DataFrame) and len(df) > 0:
             new_results = copy.copy(query_results)
             new_results['latest_data_frame'][map_day] = df
+            new_results['awaiting_data'] = False
             with lock:
                 query_results = new_results
         else:
