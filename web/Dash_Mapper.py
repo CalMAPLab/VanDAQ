@@ -252,7 +252,7 @@ def update_map_page(app, engine, config):
                 gps = gpss[0]
             with lock:
                 query_results['day'] = date_changed_to
-                query_results['latest_data_frame'][query_results['day']] = None
+                #query_results['latest_data_frame'][query_results['day']] = None
                 query_results['selected_platform'] = platform
                 query_results['selected_gps'] = gps
                 query_results['awaiting_data'] = True
@@ -480,7 +480,7 @@ def requery_geo(engine, config, lock):
         first_time =  local_tz.localize(datetime(map_day.year, map_day.month, map_day.day, 0,0,0)).astimezone(pytz.utc)
         last_time =  local_tz.localize(datetime(map_day.year, map_day.month, map_day.day, 23,59,59)).astimezone(pytz.utc)
 
-        if not isinstance(previous_df, pd.DataFrame) or (len(previous_df) == 0) or (last_day != map_day):
+        if not isinstance(previous_df, pd.DataFrame) or (len(previous_df) == 0):
             last_measurement_id = None
         else:
             if isinstance(previous_df, pd.DataFrame) and len(previous_df) > 0:
@@ -491,13 +491,15 @@ def requery_geo(engine, config, lock):
         platform = None
         gps = None
         df = get_measurements_with_alarms_and_locations(engine, start_time=first_time, end_time=last_time, platform=platform, gps_instrument=gps, acquisition_type='measurement_calibrated', after_id = last_measurement_id)
-        #print(f'thread {rg_id} - map query got {len(df)} records, took {(datetime.now() - start_time).total_seconds()} seconds')
+        print(f'thread {rg_id} - map query got {len(df)} records, last meas_id = {last_measurement_id}, took {(datetime.now() - start_time).total_seconds()} seconds')
         if len(df) > 0:
             if 'display_timezone' in config:
                 df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config['display_timezone'])
                 df.set_index('sample_time', inplace = True, drop=False)
-        if last_measurement_id and len(df) > 0:
+        if last_measurement_id and isinstance(previous_df, pd.DataFrame) and (len(df) > 0):
             df = pd.concat([previous_df, df])
+        elif isinstance(previous_df, pd.DataFrame):
+            df = previous_df
 
         if isinstance(df, pd.DataFrame) and len(df) > 0:
             new_results = copy.copy(query_results)
@@ -508,7 +510,7 @@ def requery_geo(engine, config, lock):
         else:
             query_results['latest_sample_time'] = datetime.now()
 
-        time.sleep(2.0)  # give some time back to the main thread
+        time.sleep(0.5)  # give some time back to the main thread
 
 
 
