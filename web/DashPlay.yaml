@@ -3,6 +3,10 @@ alarm_shapes: True
 master_GPS: "ublox_M8Q_GPS"
 db_connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-test"
 show_mute_instruments: True
+display_timezone: "US/Pacific"
+mapping:
+  default_platform: "van1"
+  default_gps: "ublox_M8Q_GPS"
 display_params:
   CAPS_NO2:
     graph:
@@ -18,6 +22,7 @@ display_params:
       - "CO"
       - "H2O"
   Aeris_CH4_C2H6:
+    separate_scales: True
     graph:
       - "CH4"
       - "C2H6"
@@ -27,6 +32,7 @@ display_params:
       - "C2H6"
       - "H2O"
   Aeris_N2O_CO:
+    separate_scales: True
     graph:
       - "N2O"
       - "CO"

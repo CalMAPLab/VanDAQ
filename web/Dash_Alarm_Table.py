@@ -12,7 +12,7 @@ engine = None
 # Define a placeholder DataFrame for the alarm table (replace with your database query results)
 def get_alarm_data(engine, config):
     data = get_alarm_table(engine,start_time = datetime.datetime.now()-datetime.timedelta(minutes=5))
-    if 'display_timezone' in config:
+    if len(data > 0) and 'display_timezone' in config:
         data['time'] = data['time'].dt.tz_localize('UTC').dt.tz_convert(config['display_timezone'])
         data.set_index('time', inplace = True, drop=False)
     return data
@@ -31,7 +31,7 @@ def layout_alarm_table(configdict):
         html.H1('Alarm Table', style={'text-align': 'left'}),
         dcc.Checklist(
             options=[{'label': 'Freeze', 'value': 'suspend'}],
-            id='suspend-updates',
+            id='suspend-alarm_updates',
             value=[],  # Default: updates are not suspended
             style={'margin-bottom': '10px'}
         ),
@@ -70,7 +70,7 @@ def update_alarm_table(app, sqlengine, config):
     @app.callback(
         Output('alarm-table', 'data'),
         [Input('update-interval', 'n_intervals'),
-         Input('suspend-updates', 'value')]
+         Input('suspend-alarm_updates', 'value')]
     )
     def update_alarm_table_callback(n_intervals, suspend_updates):
         # Check if updates are suspended
