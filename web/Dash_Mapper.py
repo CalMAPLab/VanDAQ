@@ -70,7 +70,7 @@ def layout_map_display(config):
     platform = config['mapping'].get('default_platform')
     gps = config['mapping'].get('default_gps')
 
-    while query_results['gps_dates'] == None:
+    while query_results.get('gps_dates') == None:
         time.sleep(0.1)
 
     page = html.Div([
@@ -96,7 +96,8 @@ def layout_map_display(config):
                     max_date_allowed=max(query_results['gps_dates']),
                     disabled_days=find_missing_dates(query_results['gps_dates']),
                     display_format='YYYY-MM-DD',
-                    date=datetime.now().date()
+                    date=today_date(config),
+                    disabled=True
                 ))
             ]),
         html.Div([
@@ -270,8 +271,8 @@ def update_map_page(app, engine, config):
         Output("map-container", "children",allow_duplicate=True),
         Output('map-state', 'data', allow_duplicate=True),
         Input("refresh-trigger", "data"),
-        State('platform-selector','value'),
-        State('gps-selector','value'),
+        Input('platform-selector','value'),
+        Input('gps-selector','value'),
         Input('parameter-selector','value'),
         State('instrument-selector','value'),
         State('date-picker','date'),
@@ -282,7 +283,7 @@ def update_map_page(app, engine, config):
         global query_results
         # Combine date and time
         spy_time = datetime.now()
-        print(f'got to update-map at {(datetime.now()-spy_time).total_seconds()} sec')
+        #print(f'got to update-map at {(datetime.now()-spy_time).total_seconds()} sec')
 
         if ':' in date:
             date = datetime.strptime(date, "%Y-%m-%dT%H:%M:%S").date()
@@ -300,7 +301,7 @@ def update_map_page(app, engine, config):
         
         df = qr['latest_data_frame'].get(qr['day'],None)
         if isinstance(df, pd.DataFrame):
-            print(f'about to filter data {(datetime.now()-spy_time).total_seconds()} sec')
+            #print(f'about to filter data {(datetime.now()-spy_time).total_seconds()} sec')
 
             # Filter data
             filtered_df = df[(df["sample_time"] >= start_datetime)
@@ -312,8 +313,8 @@ def update_map_page(app, engine, config):
                             ].sort_index()
 
             # Generate map
-            print(f'data filtered {(datetime.now()-spy_time).total_seconds()} sec')
-            print(len(filtered_df))
+            #print(f'data filtered {(datetime.now()-spy_time).total_seconds()} sec')
+            #print(len(filtered_df))
             if len(filtered_df) > 0:
                 if map_state.get('map-position'):
                     zoom =  map_state['map-position']['zoom']
@@ -339,10 +340,10 @@ def update_map_page(app, engine, config):
                     )
                     #fig.update_layout(mapbox=bounding_box)
                     map = dcc.Graph(figure=fig, id="map-graph", responsive=True, config={"scrollZoom": True})
-                    print(f'map created {(datetime.now()-spy_time).total_seconds()} sec')
+                    #print(f'map created {(datetime.now()-spy_time).total_seconds()} sec')
                     #print('got back from line_mapbox')
                 except Exception as e:
-                    print(str(e))
+                    #print(str(e))
                     raise PreventUpdate
             else:
                 map = html.H1('No Data')
@@ -373,12 +374,12 @@ def update_map_page(app, engine, config):
         # Capture zoom level
         if "mapbox.zoom" in relayoutData:
             new_state['map-position']["zoom"] = relayoutData["mapbox.zoom"]
-            print(f'Map zoomed to {relayoutData["mapbox.zoom"]}')
+            #print(f'Map zoomed to {relayoutData["mapbox.zoom"]}')
 
         # Capture map center (panning)
         if "mapbox.center" in relayoutData:
             new_state['map-position']["center"] = relayoutData["mapbox.center"]
-            print(f'Map panned to {relayoutData["mapbox.center"]}')
+            #print(f'Map panned to {relayoutData["mapbox.center"]}')
 
         return new_state
 
@@ -395,11 +396,22 @@ def update_map_page(app, engine, config):
     )
     def check_needs_update(check_interval, map_state, refresh_trigger):
         global query_results
-        print('got here')
+        #print('got here')
+        with lock:
+            day = query_results.get('day')
+            df = None
+            if day:
+                    df = query_results['latest_data_frame'].get(day)        
+
+        if map_state.get('latest_sample_time') and df is not None:
+            df_last_sample_time = df['sample_time'].max()
+            if df_last_sample_time > map_state.get('latest_sample_time'):
+                map_state['needs_refresh'] = True
+                map_state['latest_sample_time'] = df_last_sample_time
+
         if map_state.get('needs_refresh'):
             day = query_results.get('day')
             if day:
-                df = query_results['latest_data_frame'].get(day)
                 if isinstance(df, pd.DataFrame) and (len(df) > 0) and (not query_results.get('awaiting_data')):
                     inst_params = get_instruments_and_params(df)
                     instruments = list(inst_params.keys())
@@ -423,7 +435,7 @@ def update_map_page(app, engine, config):
             if isinstance(df, pd.DataFrame) and len(df) > 0:
                 inst_params = get_instruments_and_params(df)
                 params = inst_params[instrument]
-                print(f'setting instrument params to {params}')
+                #print(f'setting instrument params to {params}')
                 return params, params[0]
         return no_update
 
@@ -458,42 +470,34 @@ def requery_geo(engine, config, lock):
         df = None
 
         map_day = query_results['day']
-        if query_results.get('selected_platform'):
-            platform = query_results['selected_platform']
-        if query_results.get('selected_gps'):
-            gps = query_results['selected_gps']
 
-        if last_day != map_day:
-            print(f'thread {rg_id} - Changing from day {last_day} to {map_day}')
-        else:
-            print(f'thread {rg_id} - day is {map_day}')
+        # if last_day != map_day:
+        #     print(f'thread {rg_id} - Changing from day {last_day} to {map_day}')
+        # else:
+        #     print(f'thread {rg_id} - day is {map_day}')
 
         previous_df = query_results['latest_data_frame'].get(map_day,None)
         first_time =  local_tz.localize(datetime(map_day.year, map_day.month, map_day.day, 0,0,0)).astimezone(pytz.utc)
         last_time =  local_tz.localize(datetime(map_day.year, map_day.month, map_day.day, 23,59,59)).astimezone(pytz.utc)
+
         if not isinstance(previous_df, pd.DataFrame) or (len(previous_df) == 0) or (last_day != map_day):
-            last_day = map_day
-            start_time = datetime.now()
-            df = get_measurements_with_alarms_and_locations(engine, start_time=first_time, end_time=last_time, platform=platform, gps_instrument=gps, acquisition_type='measurement_calibrated')
-            print(f'thread {rg_id} - First map query takes {(datetime.now() - start_time).total_seconds()} seconds')
-            if len(df) > 0:
-                if 'display_timezone' in config:
-                    df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config['display_timezone'])
-                    df.set_index('sample_time', inplace = True, drop=False)
-        else:
             last_measurement_id = None
+        else:
             if isinstance(previous_df, pd.DataFrame) and len(previous_df) > 0:
                 last_measurement_id = previous_df['id'].max()
-            start_time = datetime.now()
-            df = get_measurements_with_alarms_and_locations(engine, start_time=first_time, end_time=last_time, after_id=last_measurement_id, platform=platform, gps_instrument=gps, acquisition_type='measurement_calibrated')
-            print(f'thread {rg_id} - Added map query takes {(datetime.now() - start_time).total_seconds()} seconds')
-            if len(df) > 0:
-                if 'display_timezone' in config:
-                    df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config['display_timezone'])
-                    df.set_index('sample_time', inplace = True, drop=False)
-                df = pd.concat([previous_df, df])            
-                env_parameters_l = list(df[(df["acquisition_type"] == 'measurement_calibrated')]['parameter'].unique())
-                env_instruments_l = list(df[(df["acquisition_type"] == 'measurement_calibrated')]['instrument'].unique())
+
+        last_day = map_day
+        start_time = datetime.now()
+        platform = None
+        gps = None
+        df = get_measurements_with_alarms_and_locations(engine, start_time=first_time, end_time=last_time, platform=platform, gps_instrument=gps, acquisition_type='measurement_calibrated', after_id = last_measurement_id)
+        #print(f'thread {rg_id} - map query got {len(df)} records, took {(datetime.now() - start_time).total_seconds()} seconds')
+        if len(df) > 0:
+            if 'display_timezone' in config:
+                df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config['display_timezone'])
+                df.set_index('sample_time', inplace = True, drop=False)
+        if last_measurement_id and len(df) > 0:
+            df = pd.concat([previous_df, df])
 
         if isinstance(df, pd.DataFrame) and len(df) > 0:
             new_results = copy.copy(query_results)

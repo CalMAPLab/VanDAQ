@@ -331,7 +331,7 @@ def layout_dashboard(config):
         html.Div('',id='sample_timestamp'),
         dcc.Checklist(
             options=[{'label': 'Freeze', 'value': 'suspend'}],
-            id='suspend-updates',
+            id='suspend-dashboard_updates',
             value=[],  # Default: updates are not suspended
             style={'margin-bottom': '10px'}
         ),
@@ -396,7 +396,7 @@ def update_dashboard(app, engine, config):
         [
             Input("interval", "n_intervals"),
             State('instrument_zoom', 'data'),
-            State('suspend-updates', 'value'),
+            State('suspend-dashboard_updates', 'value'),
             State("cache-timestamp", "data")
         ],
         prevent_initial_call=True

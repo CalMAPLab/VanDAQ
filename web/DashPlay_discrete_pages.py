@@ -1,7 +1,6 @@
 import dash
 from dash import Dash, dcc, html, Input, Output, State, dash_table
 import dash_bootstrap_components as dbc
-from dash.exceptions import PreventUpdate
 from dash.dependencies import Input, Output
 from numpy import isnan
 import plotly.graph_objs as go
@@ -15,7 +14,6 @@ from Dash_Mapper import layout_map_display, update_map_page
 
 # Initialize the Dash app
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
-#app = dash.Dash(__name__)
 
 def get_config(): 
     configfile_name = '/home/vandaq/vandaq/web/DashPlay.yaml'
@@ -38,10 +36,6 @@ else:
 
 engine = create_engine(connect_string, echo=False)
 
-update_dashboard(app, engine, get_config())
-update_alarm_table(app, engine, get_config())
-update_map_page(app, engine, get_config())
-
 tabstyle = {'padding':'5px 25px'}
 # Main layout with tabs
 app.layout = html.Div([
@@ -50,30 +44,29 @@ app.layout = html.Div([
         dcc.Tab(label='Alarm Table', value='alarm-table', style=tabstyle, selected_style=tabstyle),
         dcc.Tab(label='Map', value='map-display', style=tabstyle, selected_style=tabstyle)
     ]),
-    html.Div([
-        html.Div(layout_dashboard(get_config()), id="dashboard-content", style={"display": "block"}),
-        html.Div(layout_alarm_table(get_config()), id="alarm-table-content", style={"display": "none"}),
-        html.Div(layout_map_display(get_config()), id="map-content", style={"display": "none"})                
-    ], id='app-content')
+    html.Div(id='tab-content')
 ])
 
-
+update_dashboard(app, engine, get_config())
+update_alarm_table(app, engine, get_config())
+try:
+    update_map_page(app, engine, get_config())
+except Exception as e:
+    print(e)
 # Callback to update tab content
 @app.callback(
-    Output('dashboard-content', 'style'),
-    Output('alarm-table-content', 'style'),
-    Output('map-content', 'style'),
+    Output('tab-content', 'children'),
     Input('tabs', 'value'),
     suppress_callback_exceptions=True
 )
 def render_tab(tab_name):
     if tab_name == 'dashboard':
-        return {"display": "block"}, {"display": "none"}, {"display": "none"}
+        ret = layout_dashboard(get_config())
     elif tab_name == 'alarm-table':
-        return {"display": "none"}, {"display": "block"}, {"display": "none"}
+        ret = layout_alarm_table(get_config())
     elif tab_name == 'map-display':
-        return {"display": "none"}, {"display": "none"}, {"display": "block"}
-    raise PreventUpdate
+        ret = layout_map_display(get_config())
+    return ret
 
 
 # Run the app
@@ -83,4 +76,3 @@ if __name__ == '__main__':
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.ERROR)
     app.run_server(debug=False, dev_tools_ui=False, dev_tools_props_check=False)
-    #app.run_server(debug=True)
