@@ -14,6 +14,7 @@ display_params:
     display:
       - 'NO2'
   Aeris_N2O_CO:
+    separate_scales: True
     graph:
       - "N2O"
       - "CO"
@@ -31,15 +32,24 @@ display_params:
       - "CH4"
       - "C2H6"
       - "H2O"
-  Aeris_N2O_CO:
+  Aeris_CH4_C2H6:
     separate_scales: True
     graph:
-      - "N2O"
-      - "CO"
-    display:
-      - "N2O"
+      - "CH4"
+      - "C2H6"
       - "H2O"
-      - "CO"
+    display:
+      - "CH4"
+      - "C2H6"
+      - "H2O"
+  Licor_7200_CO2:
+    separate_scales: True
+    graph:
+      - "CO2MF"
+      - "H2OMF"
+    display:
+      - "CO2MF"
+      - "H2OMF"
   DMS_PAX_BlackCarbon:
     graph:
       - "BC_mass"
