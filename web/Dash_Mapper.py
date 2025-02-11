@@ -210,7 +210,7 @@ def update_map_page(app, engine, config):
     )
     def date_change(today, date, refresh, map_state):
         global query_results
-        date_changed_to = no_update
+        date_changed_to = None
         today_cb_changed = False
         disable_date_picker = False
         map = no_update
@@ -259,6 +259,8 @@ def update_map_page(app, engine, config):
             map = html.H2('Awaiting data...')
 
 
+            if not date_changed_to:
+                date_changed_to = no_update
 
             return disable_date_picker, refresh+1, date_changed_to, map_state, platforms, platform, gpss, gps, map
 
@@ -397,17 +399,19 @@ def update_map_page(app, engine, config):
     def check_needs_update(check_interval, map_state, refresh_trigger):
         global query_results
         #print('got here')
+        new_data_for_day = False
         with lock:
             day = query_results.get('day')
+            new_data_for_day = query_results.get('new_data_for_day')
             df = None
             if day:
                     df = query_results['latest_data_frame'].get(day)        
 
-        if map_state.get('latest_sample_time') and df is not None:
+        if new_data_for_day:
             df_last_sample_time = df['sample_time'].max()
-            if df_last_sample_time > map_state.get('latest_sample_time'):
-                map_state['needs_refresh'] = True
-                map_state['latest_sample_time'] = df_last_sample_time
+            map_state['needs_refresh'] = True
+            map_state['latest_sample_time'] = df_last_sample_time
+            return refresh_trigger+1, map_state, no_update, no_update 
 
         if map_state.get('needs_refresh'):
             day = query_results.get('day')
@@ -491,13 +495,15 @@ def requery_geo(engine, config, lock):
         platform = None
         gps = None
         df = get_measurements_with_alarms_and_locations(engine, start_time=first_time, end_time=last_time, platform=platform, gps_instrument=gps, acquisition_type='measurement_calibrated', after_id = last_measurement_id)
-        print(f'thread {rg_id} - map query got {len(df)} records, last meas_id = {last_measurement_id}, took {(datetime.now() - start_time).total_seconds()} seconds')
+        #print(f'thread {rg_id} - map query got {len(df)} records, last meas_id = {last_measurement_id}, took {(datetime.now() - start_time).total_seconds()} seconds')
+        new_data_for_day = False
         if len(df) > 0:
             if 'display_timezone' in config:
                 df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config['display_timezone'])
                 df.set_index('sample_time', inplace = True, drop=False)
         if last_measurement_id and isinstance(previous_df, pd.DataFrame) and (len(df) > 0):
             df = pd.concat([previous_df, df])
+            new_data_for_day = True
         elif isinstance(previous_df, pd.DataFrame):
             df = previous_df
 
@@ -505,6 +511,8 @@ def requery_geo(engine, config, lock):
             new_results = copy.copy(query_results)
             new_results['latest_data_frame'][map_day] = df
             new_results['awaiting_data'] = False
+            new_results['new_data_for_day'] = new_data_for_day
+
             with lock:
                 query_results = new_results
         else:
