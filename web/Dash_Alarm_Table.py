@@ -12,7 +12,7 @@ engine = None
 # Define a placeholder DataFrame for the alarm table (replace with your database query results)
 def get_alarm_data(engine, config):
     data = get_alarm_table(engine,start_time = datetime.datetime.now()-datetime.timedelta(minutes=5))
-    if len(data > 0) and 'display_timezone' in config:
+    if len(data) > 0 and 'display_timezone' in config:
         data['time'] = data['time'].dt.tz_localize('UTC').dt.tz_convert(config['display_timezone'])
         data.set_index('time', inplace = True, drop=False)
     return data
@@ -37,7 +37,7 @@ def layout_alarm_table(configdict):
         ),
         dcc.Interval(
             id='update-interval',
-            interval=1000,  # 1-second interval
+            interval=2*1000,  # 1-second interval
             n_intervals=0
         ),
         dash_table.DataTable(
