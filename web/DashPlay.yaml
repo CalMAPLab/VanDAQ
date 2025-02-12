@@ -4,6 +4,11 @@ master_GPS: "ublox_M8Q_GPS"
 db_connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-test"
 show_mute_instruments: True
 display_timezone: "US/Pacific"
+logs:
+  log_dir: "/home/vandaq/vandaq/web/log"
+  log_file: "VanDAQ_Dashboard.log"
+  log_level: "INFO"
+  logger_name: "dashboard"
 mapping:
   default_platform: "van1"
   default_gps: "ublox_M8Q_GPS"
