@@ -184,9 +184,11 @@ def today_date(config):
         local_tz =  pytz.timezone(config['display_timezone'])
     return pytz.utc.localize(datetime.now()).astimezone(local_tz).date()
 
+logger = None
 
 def update_map_page(app, engine, config):
     global query_results
+    logger = config['logger']
 
     lock = Lock()
     Thread(target=requery_geo, args=(engine, config, lock), daemon=True).start()
@@ -214,6 +216,7 @@ def update_map_page(app, engine, config):
         today_cb_changed = False
         disable_date_picker = False
         map = no_update
+        logger.debug(f'got to date_change:  date= {date} today={today} map_state={map_state} ')
         for t in ctx.triggered:
             if 'date-picker' in t['prop_id']:
                 picker_date = datetime.strptime(t['value'], '%Y-%m-%d').date()
@@ -285,7 +288,7 @@ def update_map_page(app, engine, config):
         global query_results
         # Combine date and time
         spy_time = datetime.now()
-        #print(f'got to update-map at {(datetime.now()-spy_time).total_seconds()} sec')
+        logger.debug(f'got to update-map at {(datetime.now()-spy_time).total_seconds()} sec')
 
         if ':' in date:
             date = datetime.strptime(date, "%Y-%m-%dT%H:%M:%S").date()
@@ -303,7 +306,7 @@ def update_map_page(app, engine, config):
         
         df = qr['latest_data_frame'].get(qr['day'],None)
         if isinstance(df, pd.DataFrame):
-            #print(f'about to filter data {(datetime.now()-spy_time).total_seconds()} sec')
+            logger.debug(f'update-map: about to filter data {(datetime.now()-spy_time).total_seconds()} sec')
 
             # Filter data
             filtered_df = df[(df["sample_time"] >= start_datetime)
@@ -315,8 +318,8 @@ def update_map_page(app, engine, config):
                             ].sort_index()
 
             # Generate map
-            #print(f'data filtered {(datetime.now()-spy_time).total_seconds()} sec')
-            #print(len(filtered_df))
+            logger.debug(f'update-map: data filtered {(datetime.now()-spy_time).total_seconds()} sec')
+            logger.debug(f'update-map: now have {len(filtered_df)} data points')
             if len(filtered_df) > 0:
                 if map_state.get('map-position'):
                     zoom =  map_state['map-position']['zoom']
@@ -342,7 +345,7 @@ def update_map_page(app, engine, config):
                     )
                     #fig.update_layout(mapbox=bounding_box)
                     map = dcc.Graph(figure=fig, id="map-graph", responsive=True, config={"scrollZoom": True})
-                    #print(f'map created {(datetime.now()-spy_time).total_seconds()} sec')
+                    logger.debug(f'update-map: map created {(datetime.now()-spy_time).total_seconds()} sec')
                     #print('got back from line_mapbox')
                 except Exception as e:
                     #print(str(e))
@@ -376,12 +379,12 @@ def update_map_page(app, engine, config):
         # Capture zoom level
         if "mapbox.zoom" in relayoutData:
             new_state['map-position']["zoom"] = relayoutData["mapbox.zoom"]
-            #print(f'Map zoomed to {relayoutData["mapbox.zoom"]}')
+            logger.debug(f'Map zoomed to {relayoutData["mapbox.zoom"]}')
 
         # Capture map center (panning)
         if "mapbox.center" in relayoutData:
             new_state['map-position']["center"] = relayoutData["mapbox.center"]
-            #print(f'Map panned to {relayoutData["mapbox.center"]}')
+            logger.debug(f'Map panned to {relayoutData["mapbox.center"]}')
 
         return new_state
 
@@ -398,7 +401,7 @@ def update_map_page(app, engine, config):
     )
     def check_needs_update(check_interval, map_state, refresh_trigger):
         global query_results
-        #print('got here')
+        logger.debug(f'Callback thread check_needs_update map_state = {map_state}')
         new_data_for_day = False
         with lock:
             day = query_results.get('day')
@@ -433,6 +436,7 @@ def update_map_page(app, engine, config):
     )
     def set_instrument_param_options(instrument):
         global query_results
+        logger.debug(f'Callback thread set_instrument_param_options {instrument} ')
         day = query_results.get('day')
         if day:
             df = query_results['latest_data_frame'].get(day)
@@ -447,6 +451,7 @@ def update_map_page(app, engine, config):
 def requery_geo(engine, config, lock):
     # Here is the expensive query and page-build
     global query_results
+    logger = config['logger']
     rg_id = random.randint(1, 10)
     query_results = {}
     query_results['latest_data_frame'] = {}
@@ -475,10 +480,10 @@ def requery_geo(engine, config, lock):
 
         map_day = query_results['day']
 
-        # if last_day != map_day:
-        #     print(f'thread {rg_id} - Changing from day {last_day} to {map_day}')
-        # else:
-        #     print(f'thread {rg_id} - day is {map_day}')
+        if last_day != map_day:
+            logger.debug(f'requery_geo thread {rg_id} - Changing from day {last_day} to {map_day}')
+        else:
+            logger.debug(f'requery_geo thread {rg_id} - day is {map_day}')
 
         previous_df = query_results['latest_data_frame'].get(map_day,None)
         first_time =  local_tz.localize(datetime(map_day.year, map_day.month, map_day.day, 0,0,0)).astimezone(pytz.utc)
@@ -495,7 +500,7 @@ def requery_geo(engine, config, lock):
         platform = None
         gps = None
         df = get_measurements_with_alarms_and_locations(engine, start_time=first_time, end_time=last_time, platform=platform, gps_instrument=gps, acquisition_type='measurement_calibrated', after_id = last_measurement_id)
-        #print(f'thread {rg_id} - map query got {len(df)} records, last meas_id = {last_measurement_id}, took {(datetime.now() - start_time).total_seconds()} seconds')
+        logger.debug(f'requery_geo thread {rg_id} - map query got {len(df)} records, last meas_id = {last_measurement_id}, took {(datetime.now() - start_time).total_seconds()} seconds')
         new_data_for_day = False
         if len(df) > 0:
             if 'display_timezone' in config:
