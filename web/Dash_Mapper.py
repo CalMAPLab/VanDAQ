@@ -16,6 +16,8 @@ from sqlalchemy import create_engine
 from vandaq_2step_measurements_query import get_measurements_with_alarms_and_locations
 from vandaq_2step_measurements_query import get_all_geolocations
 
+global query_results
+query_results = {}
 
 def get_geolocations(engine, config, timezone= None):
     geo_df = get_all_geolocations(engine)
@@ -75,7 +77,7 @@ def layout_map_display(config):
 
     page = html.Div([
     html.H1("Drive Map"),
-    dcc.Interval(id='check-interval', interval=1 * 1000, n_intervals=0),
+    dcc.Interval(id='check-interval', interval=2 * 1000, n_intervals=0),
     dcc.Checklist(
         options=[{'label': 'Today', 'value': 'today'}],
         id='today-checkbox',
@@ -289,6 +291,9 @@ def update_map_page(app, engine, config):
         # Combine date and time
         spy_time = datetime.now()
         logger.debug(f'got to update-map at {(datetime.now()-spy_time).total_seconds()} sec')
+        for t in ctx.triggered:
+            trigger = t['prop_id']
+            logger.debug(f'update-map trigger {trigger} ')
 
         if ':' in date:
             date = datetime.strptime(date, "%Y-%m-%dT%H:%M:%S").date()
@@ -349,6 +354,7 @@ def update_map_page(app, engine, config):
                     #print('got back from line_mapbox')
                 except Exception as e:
                     #print(str(e))
+                    logger.debug(f'update-map: died in exception {e} {(datetime.now()-spy_time).total_seconds()} sec')
                     raise PreventUpdate
             else:
                 map = html.H1('No Data')
@@ -360,6 +366,7 @@ def update_map_page(app, engine, config):
         #print('we have a fig')
         #print(f'finished update at {(datetime.now()-spy_time).microseconds} usec')
         
+        logger.debug(f'update-map: exiting at {(datetime.now()-spy_time).total_seconds()} sec')
 
         return map, map_state
 
@@ -441,7 +448,9 @@ def update_map_page(app, engine, config):
         if day:
             df = query_results['latest_data_frame'].get(day)
             if isinstance(df, pd.DataFrame) and len(df) > 0:
+                spy_time = datetime.now()
                 inst_params = get_instruments_and_params(df)
+                logger.debug(f'set_instrument_param_options, get_instruments_and_params took  {(datetime.now()-spy_time).total_seconds()} seconds')
                 params = inst_params[instrument]
                 #print(f'setting instrument params to {params}')
                 return params, params[0]
