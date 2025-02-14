@@ -117,12 +117,14 @@ def create_trend_plot(instrument_data_list, config, zoomed=False, show_axes=Fals
     if separate_scales:
         layout.yaxis = dict(
             domain=y_axis_domains[0], 
+            side='right',
             showgrid=False, 
             tickfont=dict(color='lightblue')
         )
         for i, domain in enumerate(y_axis_domains[1:], start=1):
             layout[f"yaxis{i+1}"] = dict(
                 domain=domain,
+                side='right',
                 showgrid=False,
                 tickfont=dict(color='lightblue'),
                 anchor="x"
@@ -237,7 +239,7 @@ def build_page_contents(engine, config, measurements = None, dataFrame = None, z
                     graph_data = [{'parameter':param['parameter'], 'measurements':param['measurements']} for param in instrument[instrument_text] if param['parameter'] in graph_params]
                     graph = None
                     separate_scales = config['display_params'][instrument_text].get('separate_scales',False)
-                    graph = create_trend_plot(graph_data, config, separate_scales=separate_scales)
+                    graph = create_trend_plot(graph_data, config, show_axes = True, separate_scales=separate_scales)
                     alarm_level = max([max(list(data['measurements']['max_alarm_level'][-5:])) for data in graph_data])
                     alarm_box_style = None
                     if alarm_level == 2:
