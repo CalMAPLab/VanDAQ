@@ -63,11 +63,11 @@ update_dashboard(app, engine, config)
 update_alarm_table(app, engine, config)
 update_map_page(app, engine, config)
 
-tabstyle = {'padding':'5px 25px'}
+tabstyle = {'padding':'5px 25px', 'position': 'sticky'}
 # Main layout with tabs
 logger.debug('Creating tab layout')
 app.layout = html.Div([
-    dcc.Tabs(id='tabs', value='dashboard', children=[
+    dcc.Tabs(id='tabs', className="tab-container", value='dashboard', children=[
         dcc.Tab(label='Dashboard', value='dashboard', style=tabstyle, selected_style=tabstyle),
         dcc.Tab(label='Alarm Table', value='alarm-table', style=tabstyle, selected_style=tabstyle),
         dcc.Tab(label='Map', value='map-display', style=tabstyle, selected_style=tabstyle)
@@ -76,7 +76,7 @@ app.layout = html.Div([
         html.Div(layout_dashboard(config), id="dashboard-content", style={"display": "block"}),
         html.Div(layout_alarm_table(config), id="alarm-table-content", style={"display": "none"}),
         html.Div(layout_map_display(config), id="map-content", style={"display": "none"})                
-    ], id='app-content')
+    ], id='app-content', className='page-content')
 ])
 
 

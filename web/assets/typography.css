@@ -55,6 +55,17 @@ h1, h2, h3, h4, h5, h6 {
     border-bottom: 2px solid #007BFF;
 }
 
+.tab-container {
+    position: fixed;
+    top: 0;
+    width: 100%;
+    background-color: white; /* Match your page background */
+    z-index: 1000; /* Ensure it stays above other elements */
+}
+
+.page-content {
+    padding-top: 10px;
+}
 /* DataTable */
 .dataTable {
     font-family: Arial, sans-serif;
@@ -127,7 +138,13 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 #map-graph{
-    height: 600px;
+    height: 700px;
+}
+.map-control-button{
+    height: 20px;
+    position: relative;
+    top: 25px;
+
 }
 
 .tab .jsx-2137964197 {
