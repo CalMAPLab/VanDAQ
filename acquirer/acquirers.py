@@ -88,9 +88,9 @@ class RecordParser:
         for i, part in enumerate(parts):
             if items[i] != 'x':
                 try:
-                    if config_dict['formats'].split(',')[i] in ['f', 'h']:
+                    if config_dict['formats'].split(',')[i] == 'f':
                         self.buffer[instrument_key][items[i]].append(float(part))
-                    elif config_dict['formats'].split(',')[i] == 's':
+                    elif config_dict['formats'].split(',')[i] in ['s', 'h']:
                         self.buffer[instrument_key][items[i]].append(part)
                 except ValueError:
                     self.buffer[instrument_key][items[i]].append(None)
@@ -125,9 +125,9 @@ class RecordParser:
                 try:
                     value = None
                     string = None
-                    if formats[i] in ['f', 'h']:
+                    if formats[i] == 'f':
                         value = float(parts[i])
-                    elif formats[i] == 's':
+                    elif formats[i] in ['s','h']:
                         string = parts[i]
                     
                     resultDict = {
@@ -171,7 +171,7 @@ class RecordParser:
 
                 agg_method = aggregate_items[i]
                 aggregated_value = None
-                if formats[i] in ['f', 'h']:
+                if formats[i] == 'f':
                     if agg_method == 'mean':
                         aggregated_value = mean(values)
                     elif agg_method == 'min':
@@ -182,7 +182,7 @@ class RecordParser:
                         aggregated_value = values[0]
                     elif agg_method == 'last':
                         aggregated_value = values[-1]
-                elif formats[i] == 's':
+                elif formats[i] in ['s', 'h']:
                     if agg_method == 'first':
                         aggregated_value = values[0]
                     elif agg_method == 'last':
@@ -199,9 +199,9 @@ class RecordParser:
                     'instrument_time': instrument_datetime,  # Assumes current time for instrument_time
                 }
                 if aggregated_value is not None:
-                    if formats[i] in ['f', 'h']:
+                    if formats[i] == 'f':
                         resultDict['value'] = aggregated_value
-                    elif formats[i] == 's':
+                    elif formats[i] in ['s','h']:
                         resultDict['string'] = aggregated_value
 
                 resultList.append(resultDict)
@@ -402,6 +402,7 @@ class SerialStreamAcquirer(Acquirer):
                     line = self.getline()
                 except Exception as e:
                     self.logger.error('Error reading serial port '+self.config['serial']['device']+' :'+ str(e))
+                    sleep(cycle_time)
                 else:
 
                     if line and len(line.split(self.config['stream']['item_delimiter'])) == self.num_items_per_line:
