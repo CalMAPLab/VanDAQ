@@ -1,6 +1,7 @@
 import sys
 import os
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import pandas as pd
 from sqlalchemy import create_engine, text
 from vandaq_2step_measurements_query import get_2step_query_with_alarms
@@ -85,7 +86,8 @@ if args.data_date:
         print("Please provide the date in YYYY-MM-DD format.")
         sys.exit(1)
 else:
-    query_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    local_tz = pytz.timezone(config['timezone'])
+    query_date = datetime.now().replace(tzinfo=gmt_timezone).astimezone(local_tz).replace(hour=0, minute=0, second=0, microsecond=0,tzinfo=None)
 
 no_gps = args.nogps
 
