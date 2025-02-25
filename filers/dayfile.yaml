@@ -1,6 +1,10 @@
 directory: "/home/vandaq/vandaq/filers/files/day/"
+db_connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-test"
+timezone: "US/Pacific"
 platforms:
   - van1
 van1:
   timezone: "US/Pacific"
   subdir: van1
+  gps_instrument: "ublox_M8Q_GPS"
+
