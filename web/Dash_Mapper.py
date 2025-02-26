@@ -352,7 +352,7 @@ def update_map_page(app, engine, config):
                         center=center
                     )
                     # Add a "You are here" marker for the last data point
-                    last_point = filtered_df.iloc[-1] if not filtered_df.empty else None
+                    last_point = df.iloc[-1] if not filtered_df.empty else None
                     if last_point is not None:
                         fig.add_scattermapbox(
                             lat=[last_point["latitude"]],
