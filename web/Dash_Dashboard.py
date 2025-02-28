@@ -423,7 +423,10 @@ def update_dashboard(app, engine, config):
                     cached_timestamp = latest_page_time
                     items = latest_pages['dashboard']
                     cached_sample_time = latest_sample_time
-                sample_timestamp = f'Last sample time: {cached_sample_time.strftime("%m/%d/%Y, %H:%M:%S")}'
+                if isinstance(cached_sample_time, datetime.datetime):
+                    sample_timestamp = f'Last sample time: {cached_sample_time.strftime("%m/%d/%Y, %H:%M:%S")}'
+                else:
+                    sample_timestamp = ''
                 if instrument_zoom:
                     items = latest_pages[instrument_zoom]                
                                 

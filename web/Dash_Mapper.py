@@ -314,7 +314,7 @@ def update_map_page(app, engine, config):
         
         
         if isinstance(df, pd.DataFrame):
-            logger.debug(f'update-map: about to filter data {(datetime.now()-spy_time).total_seconds()} sec')
+            logger.debug(f'update-map: about to filter {len(df)} records of data {(datetime.now()-spy_time).total_seconds()} sec')
 
             # Filter data
             filtered_df = df[(df["sample_time"] >= start_datetime)
@@ -446,12 +446,24 @@ def update_map_page(app, engine, config):
         Input('check-interval','n_intervals'),
         State('map-state','data'),
         State('refresh-trigger','data'),
+        State('instrument-selector','options'),
         prevent_initial_call=True
     )
-    def check_needs_update(check_interval, map_state, refresh_trigger):
+    def check_needs_update(check_interval, map_state, refresh_trigger, instrument_selector):
         global query_results
         logger.debug(f'Callback thread check_needs_update map_state = {map_state}')
         new_data_for_day = False
+        instruments = no_update
+        selected_instrument = no_update
+        
+        # Do initial load of instrument selector 
+        if (not instrument_selector) and (query_results.get('inst_params')):
+            inst_params = query_results.get('inst_params')
+            instruments = list(inst_params.keys())
+            selected_instrument = instruments[0]
+            
+        
+        
         with lock:
             day = query_results.get('day')
             new_data_for_day = query_results.get('new_data_for_day')
@@ -459,11 +471,12 @@ def update_map_page(app, engine, config):
             if day:
                     df = query_results['latest_data_frame'].get(day)        
 
-        if new_data_for_day:
+        if new_data_for_day and (df is not None) and len(df) > 0:
             df_last_sample_time = df['sample_time'].max()
             #map_state['needs_refresh'] = True
             map_state['latest_sample_time'] = df_last_sample_time
-            return refresh_trigger+1, map_state, no_update, no_update 
+            logger.debug(f'check_needs_update map_state Returning new data for day {instruments} {selected_instrument}')
+            return refresh_trigger+1, map_state, instruments, selected_instrument 
 
         if map_state.get('needs_refresh'):
             day = query_results.get('day')
@@ -471,7 +484,6 @@ def update_map_page(app, engine, config):
                 if isinstance(df, pd.DataFrame) and (len(df) > 0) and (not query_results.get('awaiting_data')):
                     inst_params = get_instruments_and_params(df)
                     instruments = list(inst_params.keys())
-                    params = inst_params[instruments[0]]
                     map_state['needs_refresh'] = False
                     return refresh_trigger+1, map_state, instruments, instruments[0] 
         #raise PreventUpdate
@@ -509,6 +521,7 @@ def requery_geo(engine, config, lock):
     query_results = {
         'latest_data_frame': {},
         'day': today_date(config),
+        'inst_params': None
     }
 
     local_tz = pytz.timezone(config.get('display_timezone', 'UTC'))
@@ -523,7 +536,6 @@ def requery_geo(engine, config, lock):
     })
 
     last_day = query_results['day']
-    last_measurement_id = None
 
     while True:
         map_day = query_results['day']
@@ -536,17 +548,19 @@ def requery_geo(engine, config, lock):
 
         first_time = local_tz.localize(datetime(map_day.year, map_day.month, map_day.day, 0, 0, 0)).astimezone(pytz.utc)
         last_time = local_tz.localize(datetime(map_day.year, map_day.month, map_day.day, 23, 59, 59)).astimezone(pytz.utc)
+        logger.debug(f'requery_geo original first time ={first_time}, end_time={last_time}')
 
-        last_measurement_id = previous_df['id'].max() if isinstance(previous_df, pd.DataFrame) and not previous_df.empty else None
+        first_time = previous_df['sample_time'].max().astimezone(pytz.utc)+timedelta(0,1) if isinstance(previous_df, pd.DataFrame) and not previous_df.empty else first_time
+        logger.debug(f'requery_geo now first time ={first_time}, end_time={last_time}')
 
         last_day = map_day
         start_time = datetime.now()
 
+        logger.debug(f'requery_geo about to query start_time={first_time}, end_time={last_time}')
         # Fetch new measurements
         df = get_measurements_with_alarms_and_locations(
             engine, start_time=first_time, end_time=last_time,
-            platform=None, gps_instrument=None, acquisition_type='measurement_calibrated',
-            after_id=last_measurement_id
+            platform=None, gps_instrument=None, acquisition_type='measurement_calibrated'
         )
 
         logger.debug(f'requery_geo thread {rg_id} - map query got {len(df)} records, '
@@ -557,21 +571,22 @@ def requery_geo(engine, config, lock):
             df.set_index('sample_time', inplace=True, drop=False)
 
             if isinstance(previous_df, pd.DataFrame) and not previous_df.empty:
-                df = pd.concat([previous_df, df])
-                new_data_for_day = True
-            else:
-                new_data_for_day = False
+                df = pd.concat([previous_df, df])            
+            new_data_for_day = True
+            
         else:
             df = previous_df
             new_data_for_day = False
 
         if isinstance(df, pd.DataFrame) and not df.empty:
+            inst_params = get_instruments_and_params(df)
             with lock:
                 query_results = copy.copy(query_results)
                 query_results.update({
                     'latest_data_frame': {map_day: df},
                     'awaiting_data': False,
-                    'new_data_for_day': new_data_for_day
+                    'new_data_for_day': new_data_for_day,
+                    'inst_params': inst_params
                 })
         else:
             query_results['latest_sample_time'] = datetime.now()
