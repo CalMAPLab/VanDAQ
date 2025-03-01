@@ -564,7 +564,7 @@ def requery_geo(engine, config, lock):
         )
 
         logger.debug(f'requery_geo thread {rg_id} - map query got {len(df)} records, '
-                     f'last meas_id = {last_measurement_id}, took {(datetime.now() - start_time).total_seconds()} seconds')
+                     f' took {(datetime.now() - start_time).total_seconds()} seconds')
 
         if not df.empty:
             df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config.get('display_timezone', 'UTC'))
