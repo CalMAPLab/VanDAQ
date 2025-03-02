@@ -339,6 +339,9 @@ def update_map_page(app, engine, config):
                     map_state['map-position'] ['center'] = center
 
                 try:
+                    # Calculate the 5th and 95th percentiles
+                    lower_bound = filtered_df["value"].quantile(0.05)
+                    upper_bound = filtered_df["value"].quantile(0.95)
                     fig = px.scatter_mapbox(
                         filtered_df,
                         lat="latitude",
@@ -349,7 +352,9 @@ def update_map_page(app, engine, config):
                         mapbox_style="open-street-map",
                         title=f"Tracks Colored by {sel_parameter} in {filtered_df['unit'].unique()[0]}",
                         zoom=zoom, 
-                        center=center
+                        center=center,
+                        color_continuous_scale=px.colors.sequential.Viridis,
+                        range_color=[lower_bound, upper_bound]
                     )
                     # Add a "You are here" marker for the last data point
                     last_point = df.iloc[-1] if not filtered_df.empty else None
@@ -365,13 +370,9 @@ def update_map_page(app, engine, config):
                             name="Current Location"
                         )
 
-
-                    #fig.update_layout(mapbox=bounding_box)
                     map = dcc.Graph(figure=fig, id="map-graph", responsive=True, config={"scrollZoom": True})
                     logger.debug(f'update-map: map created {(datetime.now()-spy_time).total_seconds()} sec')
-                    #print('got back from line_mapbox')
                 except Exception as e:
-                    #print(str(e))
                     logger.debug(f'update-map: died in exception {e} {(datetime.now()-spy_time).total_seconds()} sec')
                     raise PreventUpdate
             else:
