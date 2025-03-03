@@ -6,6 +6,7 @@ import yaml
 import numpy as np
 import logging
 import pickle
+import pandas as pd 
 import random
 from datetime import datetime, timedelta, time
 from time import sleep
@@ -43,36 +44,39 @@ class RecordParser:
         items = config_dict['items'].split(config_dict['item_delimiter'])
         parts = line.split(config_dict['item_delimiter'])
         formats = config_dict['formats'].split(config_dict['item_delimiter'])
-        if 'inst_datetime' in items:
-            idx = items.index('inst_datetime')
-            dt_string = parts[idx]
-            if '24:' in dt_string:
-                next_day = True
-                dt_string = dt_string.replace('24:','00:')
-            instrument_datetime = datetime.strptime(dt_string, formats[idx])
-            if next_day:
-                instrument_datetime += timedelta(days=1)
-            instrument_datetime = instrument_datetime.replace(microsecond=0)
-        elif 'inst_date' in items:
-            idx = items.index('inst_date')
-            instrument_date = datetime.strptime(parts[idx], formats[idx]).date()
-        if 'inst_time' in items:
-            idx = items.index('inst_time')
-            dt_string = parts[idx]
-            if '24:' in dt_string:
-                next_day = True
-                dt_string = dt_string.replace('24:','00:')
-            instrument_time = datetime.strptime(dt_string, formats[idx]).time()
-        if instrument_time and instrument_date:
-            instrument_datetime = datetime.combine(instrument_date, instrument_time)        
-            instrument_datetime = instrument_datetime.replace(microsecond=0)
-        elif instrument_time and not instrument_date:
-            instrument_datetime = datetime.combine(datetime(1900, 1, 1, 0, 0, 0).date(), instrument_time)  
-            instrument_datetime = instrument_datetime.replace(microsecond=0)
-            if next_day:
-                instrument_datetime += timedelta(days=1)
-                                      
-
+        try:
+            if 'inst_datetime' in items:
+                idx = items.index('inst_datetime')
+                dt_string = parts[idx]
+                if '24:' in dt_string:
+                    next_day = True
+                    dt_string = dt_string.replace('24:','00:')
+                instrument_datetime = datetime.strptime(dt_string, formats[idx])
+                if next_day:
+                    instrument_datetime += timedelta(days=1)
+                instrument_datetime = instrument_datetime.replace(microsecond=0)
+            elif 'inst_date' in items:
+                idx = items.index('inst_date')
+                instrument_date = datetime.strptime(parts[idx], formats[idx]).date()
+            if 'inst_time' in items:
+                idx = items.index('inst_time')
+                dt_string = parts[idx]
+                if '24:' in dt_string:
+                    next_day = True
+                    dt_string = dt_string.replace('24:','00:')
+                instrument_time = datetime.strptime(dt_string, formats[idx]).time()
+            if instrument_time and instrument_date:
+                instrument_datetime = datetime.combine(instrument_date, instrument_time)        
+                instrument_datetime = instrument_datetime.replace(microsecond=0)
+            elif instrument_time and not instrument_date:
+                instrument_datetime = datetime.combine(datetime(1900, 1, 1, 0, 0, 0).date(), instrument_time)  
+                instrument_datetime = instrument_datetime.replace(microsecond=0)
+                if next_day:
+                    instrument_datetime += timedelta(days=1)
+        except Exception as e:                                      
+            self.logger.error(f'Error parsing instrument data line: line = {line}, error = {str(e)}')
+            return None
+        
         # Bypass aggregation if no aggregate settings
         if not aggregate_seconds or not aggregate_items:
             return self._parse_direct(line, config_dict, item_delimiter, instrument_datetime)
@@ -699,6 +703,29 @@ class SimulatedAcquirer(Acquirer):
             sleep(cycle_interval.total_seconds())
             cycle_time = datetime.now()
 
+class SimulatedGPSAcquirer(SerialNmeaGPSAcquirer):
+    def __init__(self, configdict):
+        Acquirer.__init__(self,configdict)
+        self.config = configdict
+        self.cycletime = configdict['cycletime']
+        self.dataframe = pd.read_csv(configdict['datafile'])
+        self.location_index = 0
+        self.measurement_delay = configdict.get('measurement_delay_secs', 0)
+
+
+    def run(self):
+        cycle_interval = int(self.config['cycletime'])
+        while self.location_index < len(self.dataframe):
+            lat = self.dataframe.iloc[self.location_index]['latitude']
+            lon = self.dataframe.iloc[self.location_index]['longitude']
+            self.location_index += 1
+            n = datetime.now()
+            timeStamp = datetime(n.year,n.month,n.day,n.hour,n.minute,n.second)
+            lat_message = self.make_measurement_item('latitude','lat',float(lat),timestamp = timeStamp)
+            lon_message = self.make_measurement_item('longitude','lon',float(lon),timestamp = timeStamp)
+            self.send_measurement_to_queue([lat_message,lon_message])
+            sleep(cycle_interval)
+
 class AquirerFactory():
     
     def makeSerialAcquirer(self, config):
@@ -721,7 +748,12 @@ class AquirerFactory():
         acquirer = SerialPolledAcquirer(config)
         return acquirer
     
-    selector = {'simpleSerial':makeSerialAcquirer, 'simulated':makeSimulatorAcquirer, 'networkStreaming':makeNetworkStreamingAcquirer, 'serial_nmea_GPS':makeSerialNmeaGPSAcquirer, 'serialPolled':makeSerialPolledAcquirer}
+    def makeSimulatedGPSAcquirer(self, config):
+        acquirer = SimulatedGPSAcquirer(config)
+        return acquirer
+
+
+    selector = {'simpleSerial':makeSerialAcquirer, 'simulated':makeSimulatorAcquirer, 'networkStreaming':makeNetworkStreamingAcquirer, 'serial_nmea_GPS':makeSerialNmeaGPSAcquirer, 'serialPolled':makeSerialPolledAcquirer, 'simulated_GPS': makeSimulatedGPSAcquirer }
 
     def make(self,config):
         maker = self.selector[config['type']]
