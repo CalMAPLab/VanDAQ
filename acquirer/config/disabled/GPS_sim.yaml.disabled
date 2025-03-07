@@ -1,0 +1,20 @@
+---
+platform: van1
+instrument: GPS_sim
+type: simulated_GPS
+datafile: /home/vandaq/vandaq/acquirer/test_data/filtered_gps_data.csv
+cycletime: 1
+#verbose: 1
+queue:
+  name: "/dev-measurements"
+  max_msg_size: 8000
+  max_msgs: 50
+measurement_delay_secs: 0 
+  
+logs:
+  log_dir: "/home/vandaq/vandaq/acquirer/log"
+  log_file: "simulated_GPS.log"
+  log_level: "INFO"
+  logger_name: "simulated_GPS"
+
+      
