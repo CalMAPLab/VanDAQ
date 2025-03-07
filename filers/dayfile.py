@@ -4,11 +4,12 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import pandas as pd
 from sqlalchemy import create_engine, text
-from vandaq_2step_measurements_query import get_2step_query_with_alarms
-from vandaq_2step_measurements_query import get_measurements_with_alarms_and_locations
 import pytz   # Or use from zoneinfo import ZoneInfo for Python 3.9+
 import yaml
 import argparse
+sys.path.append('/home/vandaq/vandaq/common')
+from vandaq_2step_measurements_query import get_2step_query_with_alarms
+from vandaq_2step_measurements_query import get_measurements_with_alarms_and_locations
 
 
 def add_timezone_column(df, time_col, target_tz):
@@ -122,6 +123,7 @@ for platform in config['platforms']:
         if no_gps:
             nogeo = 'no-geolocations_'
         file_name = f"measurements_{platform}_{start_time.strftime('%Y-%m-%d')}_{nogeo}long.csv"
+        print(f'at {datetime.now()} writing file {file_name}')
         df.to_csv(os.path.join(filedir,file_name), index=False)
 
 
