@@ -460,6 +460,7 @@ def get_measurements_with_alarms_and_locations(engine, start_time=None, acquisit
             FactAlarm.measurement_id,
             func.count(FactAlarm.id).label("alarm_count"),
             func.max(FactAlarm.alarm_level_id).label("max_alarm_level"),
+            func.bool_or(FactAlarm.data_impacted).label("data_impacted"),
             func.string_agg(FactAlarm.message, "|").label("concatenated_messages")
         )
         .where(FactAlarm.measurement_id.in_(
@@ -486,6 +487,7 @@ def get_measurements_with_alarms_and_locations(engine, start_time=None, acquisit
             geolocation_subquery.c.longitude,
             func.coalesce(alarm_aggregation.c.alarm_count, 0).label("alarm_count"),
             func.coalesce(alarm_aggregation.c.max_alarm_level, 0).label("max_alarm_level"),
+            func.coalesce(alarm_aggregation.c.data_impacted).label("data_impacted"),
             func.coalesce(alarm_aggregation.c.concatenated_messages, "").label("alarm_messages")
         )
         .join(DimInstrument, measurement_subquery.c.instrument_id == DimInstrument.id)
