@@ -33,6 +33,8 @@ class MapMachine(object):
         self.machine.add_transition('date_selector_changed','wait_old_data','wait_new_data',conditions=self.is_today,before='set_date',after='order_date_data')
         self.machine.add_transition('date_selector_changed','idle','wait_old_data',conditions=self.is_not_today,before='set_date',after='order_date_data')
         self.machine.add_transition('date_selector_changed','idle','wait_new_data',conditions=self.is_today,before='set_date',after='order_date_data')
+        self.machine.add_transition('date_selector_changed','refresh_new_map','wait_old_data',conditions=self.is_not_today,before='set_date',after='order_date_data')
+        self.machine.add_transition('date_selector_changed','refresh_old_map','wait_new_data',conditions=self.is_today,before='set_date',after='order_date_data')
         self.machine.add_transition('data_arrived','wait_new_data','refresh_new_map')
         self.machine.add_transition('data_arrived','wait_old_data','refresh_old_map')
         self.machine.add_transition('map_refreshed','refresh_new_map','wait_new_data')
@@ -325,9 +327,9 @@ def update_map_page(app, engine, config):
             if fsm.data_ready():
                 df = fsm.get_data()
                 if len(df) > map_state['today_data_len']:
+                    inst_params = get_instruments_and_params(df)
                     if map_state['today_data_len'] == 0:
                         # this is a first update, populate the selectors
-                        inst_params = get_instruments_and_params(df)
                         platforms = inst_params['platforms']
                         platform = platforms[0]
                         gpss = inst_params['gps_instruments']
@@ -336,6 +338,10 @@ def update_map_page(app, engine, config):
                         instrument = instruments[0]
                         parameters = inst_params['instruments'][instrument]
                         parameter = parameters[0]
+                    elif sorted(list(inst_params['instruments'].keys())) != sorted(list(instrument_selector)):
+                        # a new instrument has shown up during the drive
+                        # Don't disturb the selcted instrument
+                        instruments = list(inst_params['instruments'].keys())                
                     print(f'check_needs_update before new data arrives state = {fsm.state}')
                     try:
                         fsm.data_arrived()
@@ -396,12 +402,13 @@ def update_map_page(app, engine, config):
             fsm = MapMachine(config)
         if fsm.state == 'start':
             return fsm.serialize(), no_update, no_update, no_update, no_update, no_update
-        
+
+        picker_date = datetime.strptime(date, '%Y-%m-%d').date()
+
 
         logger.debug(f'got to date_change:  date= {date} today={today} map_state={map_state} ')
         for t in ctx.triggered:
             if 'date-picker' in t['prop_id']:
-                picker_date = datetime.strptime(t['value'], '%Y-%m-%d').date()
                 try:
                     fsm.date_selector_changed(date=picker_date)
                 except Exception as e:
@@ -414,9 +421,9 @@ def update_map_page(app, engine, config):
             if today == ["today"]:
                 today = today_date(myConfig)
                 disable_date_picker = True
+                fsm.date_selector_changed(date=today)               
                 date_changed_to = today
             else:
-                picker_date = datetime.strptime(date, '%Y-%m-%d').date()
                 print(f'in date_change before fsm.date_selector_changed, date = {picker_date} state = {fsm.state}')
                 fsm.date_selector_changed(date=picker_date)               
                 date_changed_to = picker_date
@@ -535,7 +542,7 @@ def update_map_page(app, engine, config):
                             name="Current Location"
                         )
 
-                    map = dcc.Graph(figure=fig, id="map-graph", responsive=True, config={"scrollZoom": True})
+                    map = dcc.Graph(figure=fig, id="map-graph", responsive=True, config={"scrollZoom": True, 'responsive':True})
                     logger.debug(f'update-map: map created {(datetime.now()-spy_time).total_seconds()} sec')
                 except Exception as e:
                     logger.debug(f'update-map: died in exception {e} {(datetime.now()-spy_time).total_seconds()} sec')
@@ -613,11 +620,16 @@ def update_map_page(app, engine, config):
         Output('parameter-selector','options',allow_duplicate=True),
         Output('parameter-selector','value',allow_duplicate=True),
         Input('instrument-selector','value'),
+        State('fsm-store', 'data'),
         prevent_initial_call=True
     )
-    def set_instrument_param_options(instrument):
+    def set_instrument_param_options(instrument, fsm_data):
         global query_results
         logger.debug(f'Callback thread set_instrument_param_options {instrument} ')
+        if fsm_data:
+            fsm = MapMachine.deserialize(config, json.loads(fsm_data))
+        else:
+            fsm = MapMachine(config)
         df = fsm.get_data()
         if df is not None and len(df) > 0:
             spy_time = datetime.now()
