@@ -148,5 +148,24 @@ class FactAlarm(Base):
     alarm_type = relationship("DimAlarmType", foreign_keys=[alarm_type_id])
     alarm_level = relationship("DimAlarmLevel", foreign_keys=[alarm_level_id])
 
+class ViewMeasurementAndAlarm(Base):
+    __tablename__ = 'measurement_alarm_view'
+    measurement_id= Column(BigInteger, primary_key=True)
+    platform_name = Column(String)
+    acquisition_time = Column(DateTime)
+    instrument_time = Column(DateTime)
+    sample_time = Column(DateTime)
+    instrument_name = Column(String)
+    parameter_name = Column(String)
+    unit_name = Column(String)
+    acquisition_type_name = Column(String)
+    value = Column(Double)
+    string = Column(String)
+    platform_name = Column(String)
+    alarm_count = Column(Integer)
+    max_alarm_level = Column(Integer)
+    data_impacted = Column(Boolean)
+    alarm_messages = Column(String)    
+
 
  

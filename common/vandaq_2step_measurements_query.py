@@ -231,6 +231,91 @@ def get_2step_query_with_alarms(engine, start_time, end_time=None, platform=None
 
     return df
 
+def get_measurements_with_alarms_from_view(engine, start_time, end_time=None, platform=None, wide=True):
+    session = sessionmaker(bind=engine)()
+
+    if not end_time:
+        end_time = datetime.now()
+
+    platform_id = None
+
+    if platform:
+        platform_query = (
+            select(DimPlatform)
+            .where(DimPlatform.platform == platform))
+        compiled_query = platform_query.compile(session.bind, compile_kwargs={"literal_binds": True})
+
+        pdf = pd.read_sql(str(compiled_query), session.bind)
+        if pdf.shape[0]:
+            platform_id = int(pdf['id'][0])
+
+    # View query
+    if platform:
+        measurement_query = (
+            select(ViewMeasurementAndAlarm)
+            .where(and_((ViewMeasurementAndAlarm.sample_time >= start_time),
+                        (ViewMeasurementAndAlarm.sample_time <= end_time),
+                        (ViewMeasurementAndAlarm.platform_name == platform)))
+            .order_by(ViewMeasurementAndAlarm.sample_time)
+
+        )
+    else:
+        measurement_query = (
+            select(ViewMeasurementAndAlarm)
+            .where(and_((ViewMeasurementAndAlarm.sample_time >= start_time),
+                        (ViewMeasurementAndAlarm.sample_time <= end_time)))
+            .order_by(ViewMeasurementAndAlarm.sample_time)
+            .subquery()
+        )
+
+
+    compiled_query = measurement_query.compile(session.bind, compile_kwargs={"literal_binds": True})
+
+    # Use pandas to execute the compiled query and load it into a DataFrame
+    df = pd.read_sql(str(compiled_query), session.bind)
+
+    df.set_index('sample_time', inplace=True, drop=False)
+    if wide:
+
+        # Create a column name from the combination of instrument, parameter, unit, and acquisition_type
+        df['measurement'] = (
+            df['instrument'] + ' | ' + df['parameter'] + ' | ' + df['unit'] + ' | ' + df['acquisition_type']
+        )
+
+        # Pivot the DataFrame
+        df_pivot = df.pivot(index='sample_time', columns='measurement', values=[
+            'value', 'string', 'alarm_count', 'max_alarm_level', 'alarm_messages'
+        ])
+
+        # Flatten the multi-index columns
+        df_pivot.columns = [' | '.join(col).strip() for col in df_pivot.columns.values]
+
+        # Drop rows with no measurements (all NaNs in "value" columns)
+        value_columns = [col for col in df_pivot.columns if 'value' in col]
+        df_pivot.dropna(subset=value_columns, how='all', inplace=True)
+
+        # Sort columns by instrument and parameter, and reorder within each measurement group
+        def column_sort_key(col_name):
+            parts = col_name.split(" | ")
+            measurement_part = " | ".join(parts[1:3])  # Instrument and Parameter
+            column_type = parts[0]  # value, string, etc.
+            column_order = ['value', 'string', 'alarm_count', 'max_alarm_level', 'alarm_messages']
+            return (measurement_part, column_order.index(column_type) if column_type in column_order else 99)
+
+        df_pivot = df_pivot[sorted(df_pivot.columns, key=column_sort_key)]
+
+        # Add the time index as the first column
+        df_pivot['sample_time'] = df_pivot.index
+        cols = df_pivot.columns.tolist()
+        cols = cols[-1:] + cols[:-1]
+        df_pivot = df_pivot[cols]
+        df = df_pivot
+
+    # Close the session
+    session.close()
+
+    return df
+
 def get_all_geolocations(engine):
     session = sessionmaker(bind=engine)()
 
