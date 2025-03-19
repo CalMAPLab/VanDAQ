@@ -1,3 +1,14 @@
+import time
+
+def debugwait(message, iters):
+    print(message+' waiting...')
+    for i in range(0,iters):
+        print('.',end='')
+        time.sleep(0.1)
+    print(':')
+
+
+
 import sys
 import os
 from datetime import datetime, timedelta
@@ -8,8 +19,9 @@ import pytz   # Or use from zoneinfo import ZoneInfo for Python 3.9+
 import yaml
 import argparse
 sys.path.append('/home/vandaq/vandaq/common')
-from vandaq_2step_measurements_query import get_2step_query_with_alarms
+from vandaq_2step_measurements_query import get_measurements_with_alarms_from_view
 from vandaq_2step_measurements_query import get_measurements_with_alarms_and_locations
+
 
 
 def add_timezone_column(df, time_col, target_tz):
@@ -71,12 +83,12 @@ engine = create_engine(DATABASE_URI)
 gmt_timezone = pytz.timezone('GMT')
 
 
-
 parser.add_argument('data_date', nargs='?', default=None,
                     help='the date of the data (local timezone)')
 parser.add_argument('--nogps', action='store_true',
                     help='dump all data regardless of if there are geolocations')
 args = parser.parse_args()
+
 
 # Set date filter
 if args.data_date:
@@ -105,8 +117,12 @@ for platform in config['platforms']:
     destDir = os.path.join(filedir,config[platform]['subdir']) 
 
     if no_gps:
-        df = get_2step_query_with_alarms(engine, start_time=gmt_start_time, end_time=gmt_end_time, platform = platform, wide=False)
+        st_time = datetime.now()
+        print(f'Starting non-geolocated query at {datetime.now()}')
+        df = get_measurements_with_alarms_from_view(engine, start_time=gmt_start_time, end_time=gmt_end_time, platform = platform, wide=False)
+        print(f'non-geolocated query completed at {datetime.now()}, took {(datetime.now()-st_time).total_seconds()} seconds')
     else:
+        print('Starting geolocated query at {datetime.now()}')
         df = get_measurements_with_alarms_and_locations(engine, start_time=gmt_start_time, end_time=gmt_end_time, gps_instrument=main_gps, platform = platform)
     if len(df) > 0:
         df = add_timezone_column(df, 'sample_time', 'US/Pacific')

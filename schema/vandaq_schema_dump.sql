@@ -2,8 +2,8 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 14.15 (Ubuntu 14.15-0ubuntu0.22.04.1)
--- Dumped by pg_dump version 14.15 (Ubuntu 14.15-0ubuntu0.22.04.1)
+-- Dumped from database version 14.17 (Ubuntu 14.17-0ubuntu0.22.04.1)
+-- Dumped by pg_dump version 14.17 (Ubuntu 14.17-0ubuntu0.22.04.1)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -288,10 +288,14 @@ CREATE VIEW public.geolocation_view AS
  SELECT m_lat.sample_time_id,
     m_lat.platform_id,
     m_lat.instrument_id,
+    t."time",
+    pl.platform,
+    i.instrument,
     m_lat.value AS latitude,
     m_lon.value AS longitude
-   FROM (((((((public.measurement m_lat
+   FROM ((((((((public.measurement m_lat
      JOIN public.measurement m_lon ON (((m_lat.sample_time_id = m_lon.sample_time_id) AND (m_lat.instrument_id = m_lon.instrument_id) AND (m_lat.platform_id = m_lon.platform_id))))
+     JOIN public."time" t ON ((t.id = m_lat.sample_time_id)))
      JOIN public.platform pl ON ((m_lat.platform_id = pl.id)))
      JOIN public.instrument i ON ((m_lat.instrument_id = i.id)))
      JOIN public.acquisition_type at_lat ON ((m_lat.acquisition_type_id = at_lat.id)))
@@ -374,6 +378,47 @@ CREATE TABLE public.unit (
 
 
 ALTER TABLE public.unit OWNER TO postgres;
+
+--
+-- Name: measurement_alarm_view; Type: VIEW; Schema: public; Owner: vandaq
+--
+
+CREATE VIEW public.measurement_alarm_view AS
+ SELECT m.id AS measurement_id,
+    t1."time" AS acquisition_time,
+    t2."time" AS instrument_time,
+    t3."time" AS sample_time,
+    i.instrument AS instrument_name,
+    p.parameter AS parameter_name,
+    u.unit AS unit_name,
+    at.acquisition_type AS acquisition_type_name,
+    m.value,
+    m.string,
+    plat.platform AS platform_name,
+    al.alarm_count,
+    al.max_alarm_level,
+    al.data_impacted,
+    al.concatenated_messages AS alarm_messages
+   FROM (((((((((public.measurement m
+     LEFT JOIN public."time" t1 ON ((m.acquisition_time_id = t1.id)))
+     LEFT JOIN public."time" t2 ON ((m.instrument_time_id = t2.id)))
+     LEFT JOIN public."time" t3 ON ((m.sample_time_id = t3.id)))
+     LEFT JOIN public.instrument i ON ((m.instrument_id = i.id)))
+     LEFT JOIN public.parameter p ON ((m.parameter_id = p.id)))
+     LEFT JOIN public.unit u ON ((m.unit_id = u.id)))
+     LEFT JOIN public.acquisition_type at ON ((m.acquisition_type_id = at.id)))
+     LEFT JOIN public.platform plat ON ((m.platform_id = plat.id)))
+     LEFT JOIN ( SELECT a.measurement_id,
+            count(a.id) AS alarm_count,
+            max(a.alarm_level_id) AS max_alarm_level,
+            bool_or(a.data_impacted) AS data_impacted,
+            string_agg((a.message)::text, ' | '::text) AS concatenated_messages
+           FROM public.alarm a
+          GROUP BY a.measurement_id) al ON ((m.id = al.measurement_id)))
+  ORDER BY t3."time";
+
+
+ALTER TABLE public.measurement_alarm_view OWNER TO vandaq;
 
 --
 -- Name: measurement_expanded; Type: VIEW; Schema: public; Owner: postgres
@@ -799,6 +844,13 @@ CREATE INDEX idx_alarm_type_id ON public.alarm_type USING btree (id) WITH (dedup
 
 
 --
+-- Name: idx_geolocation_instrument_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_geolocation_instrument_id ON public.geolocation USING btree (instrument_id) WITH (deduplicate_items='true');
+
+
+--
 -- Name: idx_geolocation_sample_time_id; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -824,6 +876,13 @@ CREATE INDEX idx_instrument_id ON public.instrument USING btree (id);
 --
 
 CREATE INDEX idx_measurement_id ON public.measurement USING btree (id) WITH (deduplicate_items='true');
+
+
+--
+-- Name: idx_measurement_instrument_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_measurement_instrument_id ON public.measurement USING btree (instrument_id) WITH (deduplicate_items='true');
 
 
 --
@@ -1081,8 +1140,8 @@ ALTER TABLE ONLY public.alarm
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 14.15 (Ubuntu 14.15-0ubuntu0.22.04.1)
--- Dumped by pg_dump version 14.15 (Ubuntu 14.15-0ubuntu0.22.04.1)
+-- Dumped from database version 14.17 (Ubuntu 14.17-0ubuntu0.22.04.1)
+-- Dumped by pg_dump version 14.17 (Ubuntu 14.17-0ubuntu0.22.04.1)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
