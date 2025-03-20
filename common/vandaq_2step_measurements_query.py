@@ -255,7 +255,7 @@ def get_measurements_with_alarms_from_view(engine, start_time, end_time=None, pl
             select(ViewMeasurementAndAlarm)
             .where(and_((ViewMeasurementAndAlarm.sample_time >= start_time),
                         (ViewMeasurementAndAlarm.sample_time <= end_time),
-                        (ViewMeasurementAndAlarm.platform_name == platform)))
+                        (ViewMeasurementAndAlarm.platform == platform)))
             .order_by(ViewMeasurementAndAlarm.sample_time)
 
         )
