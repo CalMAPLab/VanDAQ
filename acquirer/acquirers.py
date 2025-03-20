@@ -639,6 +639,7 @@ class SerialNmeaGPSAcquirer(SerialStreamAcquirer):
                     for line in lines[:-1]:
                         line = line.strip()
                         if line.startswith('$'):
+                            self.logger.debug('NMEA sentence: ' + line)
                             message = self.process_nmea_sentence(line)
                             if message:
                                 message = self.apply_alarms(message)
@@ -648,6 +649,78 @@ class SerialNmeaGPSAcquirer(SerialStreamAcquirer):
 
                     # Keep the last incomplete sentence in the buffer
                     buffer = lines[-1] if lines[-1] else ""
+                except Exception as e:
+                    self.logger.error('Error reading serial port ' + self.config['serial']['device'] + ' :' + str(e))
+
+class SerialNmeaAcquirer(SerialStreamAcquirer):
+    def __init__(self, configdict):
+        SerialStreamAcquirer.__init__(self, configdict)
+
+    def make_measurement_item(self, parameter, unit, value, acquisition_type='GPS', string=None, timestamp=None):
+        acquisition_time = datetime.now().replace(microsecond=0)
+        sample_time = acquisition_time - timedelta(seconds = self.measurement_delay)
+
+        resultDict = {
+            'platform':self.config['platform'],
+            'instrument':self.config['instrument'],
+            'parameter':parameter,
+            'unit':unit,
+            'acquisition_type': acquisition_type,
+            'acquisition_time': acquisition_time,
+            'sample_time':  sample_time,
+            'value':value}
+        if timestamp:
+            resultDict['instrument_time'] = timestamp
+        if string:
+            resultDict['string'] = string
+        return resultDict
+            
+
+    def process_nmea_sentence(self, sentence):
+        try:
+            # Parse the NMEA sentence
+            msg = pynmea2.parse(sentence)
+            msg_type = msg.sentence_type
+            messages = []
+            if msg_type in self.config['data']['sentence_types']:
+                for item in self.config['data']['sentence_types'][msg_type].keys():
+                    value = getattr(msg, item, None)
+                    if value is not None:
+                        parameter = self.config['data']['sentence_types'][msg_type][item]['parameter']
+                        unit = self.config['data']['sentence_types'][msg_type][item]['unit']
+                        aquType = self.config['data']['sentence_types'][msg_type][item]['acqType'] 
+                        format = self.config['data']['sentence_types'][msg_type][item]['format']
+                        if format == 'f':
+                            value = float(value)
+                            scaler = self.config['data']['sentence_types'][msg_type][item].get('scaler', None)
+                            if scaler:
+                                value = value * scaler
+                        elif format == 's':
+                            value = str(value)
+                        # filter out lonigitudes and latitudes of zero
+                        if (parameter == 'latitude' or parameter == 'longitude') and value == 0:
+                            continue
+                        message = self.make_measurement_item(parameter, unit, value, acquisition_type=aquType, string=(format == 's'))
+                        messages.append(message)
+            return messages
+        except pynmea2.ParseError as e:
+            self.logger.error(f"Failed to parse NMEA sentence: {e}")
+            return None
+
+    def run(self):
+        timer = datetime.now()
+        while True:
+            if self.check_serial_open():
+                try:
+                    line = self.getline()
+                    if line.startswith('$'):
+                        self.logger.debug('NMEA sentence: ' + line)
+                        message = self.process_nmea_sentence(line)
+                        if message:
+                            message = self.apply_alarms(message)
+                            if (datetime.now() - timer).total_seconds() >= 1:
+                                self.send_measurement_to_queue(message)
+                                timer = datetime.now()
                 except Exception as e:
                     self.logger.error('Error reading serial port ' + self.config['serial']['device'] + ' :' + str(e))
 
@@ -743,7 +816,11 @@ class AquirerFactory():
     def makeSerialNmeaGPSAcquirer(self, config):
         acquirer = SerialNmeaGPSAcquirer(config)
         return acquirer
-    
+
+    def makeSerialNmeaAcquirer(self, config):
+        acquirer = SerialNmeaAcquirer(config)
+        return acquirer
+
     def makeSerialPolledAcquirer(self, config):
         acquirer = SerialPolledAcquirer(config)
         return acquirer
@@ -753,7 +830,7 @@ class AquirerFactory():
         return acquirer
 
 
-    selector = {'simpleSerial':makeSerialAcquirer, 'simulated':makeSimulatorAcquirer, 'networkStreaming':makeNetworkStreamingAcquirer, 'serial_nmea_GPS':makeSerialNmeaGPSAcquirer, 'serialPolled':makeSerialPolledAcquirer, 'simulated_GPS': makeSimulatedGPSAcquirer }
+    selector = {'simpleSerial':makeSerialAcquirer, 'simulated':makeSimulatorAcquirer, 'networkStreaming':makeNetworkStreamingAcquirer, 'serial_nmea_GPS':makeSerialNmeaGPSAcquirer, 'serial_nmea':makeSerialNmeaAcquirer, 'serialPolled':makeSerialPolledAcquirer, 'simulated_GPS': makeSimulatedGPSAcquirer }
 
     def make(self,config):
         maker = self.selector[config['type']]
