@@ -14,7 +14,7 @@ from logging.handlers import TimedRotatingFileHandler
 # import other dashboard pages
 from Dash_Alarm_Table import *
 from Dash_Dashboard import *
-from Dash_Mapper_FSM import layout_map_display, update_map_page
+from Dash_Mapper import layout_map_display, update_map_page
 
 # Initialize the Dash app
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
@@ -41,7 +41,7 @@ logging.basicConfig(
     filemode="a",
     format="{asctime} - {levelname} - {message}",
     style="{",
-    datefmt="%Y-%m-%d %H:%M:%S.%f",    
+    datefmt="%Y-%m-%d %H:%M:%S",    
 )
 logger = logging.getLogger(config['logs']['logger_name'])
 logger.setLevel(config['logs']['log_level'])
