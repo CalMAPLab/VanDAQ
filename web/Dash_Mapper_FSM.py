@@ -18,6 +18,7 @@ from vandaq_2step_measurements_query import get_measurements_with_alarms_and_loc
 from vandaq_2step_measurements_query import get_all_geolocations
 
 global query_results
+global logger
 query_results = {}
 
 class MapMachine(object):
@@ -43,33 +44,33 @@ class MapMachine(object):
         self.machine.add_transition('param_changed','idle','refresh_old_map')
 
     def set_date(self,date=date.today()):
-        print(f'set_date -> {date}')
+        logger.debug(f'set_date -> {date}')
         self.date = date
     
     def order_date_data(self, **kwargs):
         global query_results
         global lock
         date = kwargs.get("date", self.date)  # Use self.date if date isn't explicitly passed
-        print(f'order_date_data -> {date}')
+        logger.debug(f'order_date_data -> {date}')
         with lock:
             if query_results['data'].get(date, None) is None:
                 query_results['data'][date] = None
     
     def is_today(self, **kwargs):
         date = kwargs.get("date", self.date)  # Use self.date if date isn't explicitly passed
-        print(f'{date} is_today -> {date == today_date(self.config)}')
+        logger.debug(f'{date} is_today -> {date == today_date(self.config)}')
         return date == today_date(self.config)
 
     def is_not_today(self, **kwargs):
         date = kwargs.get("date", self.date)
-        print(f'{date} is_not_today -> {date != today_date(self.config)}')
+        logger.debug(f'{date} is_not_today -> {date != today_date(self.config)}')
         return date != today_date(self.config)        
 
     def data_ready(self):
         global query_results
         global lock
         dataReady = (query_results['data'].get(self.date,None) is not None)
-        print(f'{self.date} data_ready -> {dataReady}')
+        logger.debug(f'{self.date} data_ready -> {dataReady}')
         with lock:
             return dataReady
 
@@ -77,7 +78,7 @@ class MapMachine(object):
         global query_results
         global lock
         with lock:
-            return query_results['data'].get(self.date,None)
+            return copy.copy(query_results['data'].get(self.date,None))
     
     def serialize(self):
         """Serialize FSM state."""
@@ -146,6 +147,7 @@ def layout_map_display(config):
     global query_results
     platform = config['mapping'].get('default_platform')
     gps = config['mapping'].get('default_gps')
+    check_interval = config['mapping'].get('map_check_secs', 2)
 
     while query_results.get('gps_dates') == None:
         time.sleep(0.1)
@@ -161,7 +163,7 @@ def layout_map_display(config):
     ),
     dcc.Store(id="refresh-trigger", data=0), 
     #html.Button('Do',id="do-something", n_clicks=0), 
-    dcc.Store(id="map-state", data={'state':None, 'today_data_len':0}), 
+    dcc.Store(id="map-state", data={'today_data_len':0, 'map_displayed':False}), 
     dcc.Store(id="fsm-store", data=None, storage_type="session"), 
     html.Div([
         #html.H3("platform"),
@@ -175,7 +177,7 @@ def layout_map_display(config):
                     disabled_days=find_missing_dates(query_results['gps_dates']),
                     display_format='YYYY-MM-DD',
                     date=today_date(config),
-                    disabled=False
+                    disabled=True
                 ))
             ]),
         html.Div([
@@ -263,12 +265,17 @@ def today_date(config):
         local_tz =  pytz.timezone(config['display_timezone'])
     return pytz.utc.localize(datetime.now()).astimezone(local_tz).date()
 
-logger = None
+
 
 def update_map_page(app, engine, config):
-    global query_results
     global myConfig
     global lock
+    global logger
+
+    # for debug:
+    global mapState
+    mapState = None
+
     myConfig = config
     logger = config['logger']
 
@@ -295,7 +302,6 @@ def update_map_page(app, engine, config):
         prevent_initial_call=True
     )
     def check_needs_update(check_interval, map_state, refresh_trigger, instrument_selector, fsm_data):
-        global query_results
         global myConfig
         # Reconstruct FSM from stored state or create a new one
         if fsm_data:
@@ -305,14 +311,12 @@ def update_map_page(app, engine, config):
 
         if fsm.state == 'start':
             fsm.request_new_data(date=today_date(myConfig))
-            print(f'new state = {fsm.state}')
-            map_state['state'] = fsm.state
         elif fsm.state == 'refresh_old_map':
             fsm.machine.set_state('wait_old_data')
         elif fsm.state == 'refresh_new_map':
             fsm.machine.set_state('wait_new_data')
 
-        print(f'check_needs_update, state = {fsm.state} check interval = {check_interval}')
+        logger.debug(f'check_needs_update, state = {fsm.state} check interval = {check_interval}')
         # prepare selector value variables
         instruments = no_update
         instrument = no_update
@@ -322,11 +326,10 @@ def update_map_page(app, engine, config):
         gps = no_update
         parameters = no_update
         parameter = no_update
-        #fsm.set_state(map_state['state'])
         if fsm.state == 'wait_new_data':
             if fsm.data_ready():
                 df = fsm.get_data()
-                if len(df) > map_state['today_data_len']:
+                if len(df) > map_state['today_data_len'] or map_state['map_displayed'] is False:
                     inst_params = get_instruments_and_params(df)
                     if map_state['today_data_len'] == 0:
                         # this is a first update, populate the selectors
@@ -342,13 +345,14 @@ def update_map_page(app, engine, config):
                         # a new instrument has shown up during the drive
                         # Don't disturb the selcted instrument
                         instruments = list(inst_params['instruments'].keys())                
-                    print(f'check_needs_update before new data arrives state = {fsm.state}')
+                    logger.debug(f'check_needs_update before new data arrives state = {fsm.state}')
                     try:
                         fsm.data_arrived()
                     except Exception as e:
-                        print(f'wait_new_data Exception on fsm,data_arrived e= {e}')
-                    print(f'check_needs_update after new data arrives state = {fsm.state}')
+                        logger.debug(f'wait_new_data Exception on fsm,data_arrived e= {e}')
+                    logger.debug(f'check_needs_update after new data arrives state = {fsm.state}')
                     map_state['today_data_len'] = len(df)
+                    logger.debug(f'check_needs_update exiting, map_state = {map_state}')
                 return fsm.serialize(), refresh_trigger+1,map_state,platforms,platform,gpss,gps,instruments,instrument,parameters,parameter   
         elif fsm.state == 'wait_old_data':
             if fsm.data_ready():
@@ -362,14 +366,13 @@ def update_map_page(app, engine, config):
                 gps = gpss[0]
                 parameters = inst_params['instruments'][instrument]
                 parameter = parameters[0]
-                print(f'check_needs_update before old data arrives state = {fsm.state}')
+                logger.debug(f'check_needs_update before old data arrives state = {fsm.state}')
                 try:
                     fsm.data_arrived()
                 except Exception as e:
-                    print(f'wait_old_data Exception on fsm,data_arrived e= {e}')
-                print(f'check_needs_update after old data arrives state = {fsm.state}')
-                map_state['state'] = fsm.state
-                return fsm.serialize(),refresh_trigger+1,map_state,platforms,platform,gpss,gps,instruments,instrument,parameters,parameter   
+                    logger.debug(f'wait_old_data Exception on fsm,data_arrived e= {e}')
+                logger.debug(f'check_needs_update after old data arrives state = {fsm.state}')
+                return fsm.serialize(),refresh_trigger+1,no_update,platforms,platform,gpss,gps,instruments,instrument,parameters,parameter   
 
         return fsm.serialize(),no_update,no_update,no_update,no_update,no_update,no_update,no_update,no_update,no_update,no_update  
 
@@ -378,17 +381,14 @@ def update_map_page(app, engine, config):
         Output("date-picker", "disabled"),
         Output("refresh-trigger", "data"),
         Output("date-picker", "date"),
-        Output('map-state','data', allow_duplicate=True),
         Output("map-container", "children",allow_duplicate=True),
         Input("today-checkbox", "value"),
         Input("date-picker", "date"),
         State("refresh-trigger", "data"),
-        State('map-state', 'data'),
         State('fsm-store', 'data'),
         prevent_initial_call=True
     )
-    def date_change(today, date, refresh, map_state, fsm_data):
-        global query_results
+    def date_change(today, date, refresh, fsm_data):
         global myConfig
         date_changed_to = no_update
         today_cb_changed = False
@@ -406,25 +406,24 @@ def update_map_page(app, engine, config):
         picker_date = datetime.strptime(date, '%Y-%m-%d').date()
 
 
-        logger.debug(f'got to date_change:  date= {date} today={today} map_state={map_state} ')
+        logger.debug(f'got to date_change:  date= {date} today={today}')
         for t in ctx.triggered:
             if 'date-picker' in t['prop_id']:
                 try:
                     fsm.date_selector_changed(date=picker_date)
                 except Exception as e:
-                    print(f'fsm.date_selector_changed failed with {e}')               
+                    logger.debug(f'fsm.date_selector_changed failed with {e}')               
             if 'today-checkbox' in t['prop_id']:
                 today_cb_changed = True
 
         if today_cb_changed:
-            map_state['needs_refresh'] = True
             if today == ["today"]:
                 today = today_date(myConfig)
                 disable_date_picker = True
                 fsm.date_selector_changed(date=today)               
                 date_changed_to = today
             else:
-                print(f'in date_change before fsm.date_selector_changed, date = {picker_date} state = {fsm.state}')
+                logger.debug(f'in date_change before fsm.date_selector_changed, date = {picker_date} state = {fsm.state}')
                 fsm.date_selector_changed(date=picker_date)               
                 date_changed_to = picker_date
 
@@ -432,9 +431,9 @@ def update_map_page(app, engine, config):
             map = html.H2('Awaiting data...')
 
             
-            return fsm.serialize(), disable_date_picker, refresh+1, date_changed_to, map_state, map
+            return fsm.serialize(), disable_date_picker, refresh+1, date_changed_to, map
 
-        return fsm.serialize(), no_update, no_update, no_update, no_update, no_update
+        return fsm.serialize(), no_update, no_update, no_update, no_update
 
 
         
@@ -454,38 +453,47 @@ def update_map_page(app, engine, config):
         prevent_initial_call=True
     )
     def update_map(refresh, sel_platform, sel_gps, sel_parameter, sel_instrument, date, map_state, fsm_data):
-        global query_results
         # Combine date and time
         spy_time = datetime.now()
+
+        global mapState
+
+        logger.debug(f'got to update-map at {(datetime.now()-spy_time).total_seconds()} sec, map_state = {map_state}')
+        logger.debug(f'update-map , map_state global mapState = {mapState}')
+
+        # this is a horrible kluge
+        # map_state store has not been updating upon map panning/zooming
+        # so we use the global mapState to get the last updated map_state
+        # if mapState and mapState.get('_last_updated'):
+        #     map_state = mapState
+
+        parameter_changed = False
+        for t in ctx.triggered:
+            trigger = t['prop_id']
+            if trigger == 'parameter-selector.value':
+                parameter_changed = True
+            logger.debug(f'update-map trigger {trigger} ')
+            logger.debug(f'update-map trigger {trigger} ')
+
         # Reconstruct FSM from stored state or return
         if fsm_data:
             fsm = MapMachine.deserialize(config, json.loads(fsm_data))
         else:
             return no_update, no_update, no_update
 
-        if 'wait' in fsm.state:
+        # if the parameter has changed, we need to refresh the map regardless of state
+        if parameter_changed:
+            logger.debug('map parameter has changed')
+        if (not parameter_changed) and ('wait' in fsm.state):
             return no_update, no_update, no_update
 
-
-
-        logger.debug(f'got to update-map at {(datetime.now()-spy_time).total_seconds()} sec')
-        print(f'got to update-map at {(datetime.now()-spy_time).total_seconds()} sec')
-        for t in ctx.triggered:
-            trigger = t['prop_id']
-            logger.debug(f'update-map trigger {trigger} ')
-            print(f'update-map trigger {trigger} ')
 
         if ':' in date:
             date = datetime.strptime(date, "%Y-%m-%dT%H:%M:%S").date()
         else:
             date = datetime.strptime(date, "%Y-%m-%d").date()
         
-        df = None
-        with lock:
-            new_df = query_results['data'].get(date,None)
-            if isinstance(new_df, pd.DataFrame):
-                df = copy.copy(new_df)
-        
+        df = fsm.get_data()        
         
         if isinstance(df, pd.DataFrame):
             logger.debug(f'update-map: about to filter {len(df)} records of data {(datetime.now()-spy_time).total_seconds()} sec')
@@ -502,6 +510,7 @@ def update_map_page(app, engine, config):
             logger.debug(f'update-map: now have {len(filtered_df)} data points')
             if len(filtered_df) > 0:
                 if map_state.get('map-position'):
+                    logger.debug(f'update-map: mapbox map-position = {map_state["map-position"]}')
                     zoom =  map_state['map-position']['zoom']
                     center = map_state['map-position']['center']
                 else:
@@ -514,6 +523,7 @@ def update_map_page(app, engine, config):
                     # Calculate the 5th and 95th percentiles
                     lower_bound = filtered_df["value"].quantile(0.05)
                     upper_bound = filtered_df["value"].quantile(0.95)
+                    logger.debug(f'About to render map, center = {center}, zoom = {zoom}, map state = {map_state}')
                     fig = px.scatter_mapbox(
                         filtered_df,
                         lat="latitude",
@@ -543,6 +553,7 @@ def update_map_page(app, engine, config):
                         )
 
                     map = dcc.Graph(figure=fig, id="map-graph", responsive=True, config={"scrollZoom": True, 'responsive':True})
+                    map_state['map_displayed'] = True
                     logger.debug(f'update-map: map created {(datetime.now()-spy_time).total_seconds()} sec')
                 except Exception as e:
                     logger.debug(f'update-map: died in exception {e} {(datetime.now()-spy_time).total_seconds()} sec')
@@ -556,35 +567,41 @@ def update_map_page(app, engine, config):
         #print(f'finished update at {(datetime.now()-spy_time).microseconds} usec')
         
         logger.debug(f'update-map: exiting at {(datetime.now()-spy_time).total_seconds()} sec')
-        try:
-            fsm.map_refreshed()
-        except Exception as e:
-            print(f'Exception at fsm.map_refreshed() - e={e}')
+        if not 'wait' in fsm.state:
+            try:
+                fsm.map_refreshed()
+            except Exception as e:
+                logger.debug(f'Exception at fsm.map_refreshed() - e={e}')
         
-        print(f'about to return from map refresh, state ={fsm.state}')
+        logger.debug(f'about to return from map refresh, state ={fsm.state}, map_state = {map_state}')
 
         return fsm.serialize(), map, map_state
 
     @app.callback(
         Output("refresh-trigger", "data", allow_duplicate=True),
-        Output("map-state", "data", allow_duplicate=True),
+        #Output("map-state", "data", allow_duplicate=True),
+        Output("map-state", "data", allow_duplicate=False),
         Input("center-button", "n_clicks"),
         State("map-state", "data"),
         State("refresh-trigger", "data"),
+        State('fsm-store', 'data'),
         prevent_initial_call=True
     )
-    def center_map(n_clicks, map_state, trigger_data):
-        global query_results
+    def center_map(n_clicks, map_state, trigger_data, fsm_data):
         lastcoord = None
-        with lock:
-            df = query_results['latest_data_frame'].get(query_results['day'],None)
-            if isinstance(df, pd.DataFrame) and (len(df) > 0):
-                rec = df.iloc[-1]
-                lastcoord = {'lat':rec['latitude'], 'lon':rec['longitude']}
-            else:
-                return no_update, no_update
+        if fsm_data:
+            fsm = MapMachine.deserialize(config, json.loads(fsm_data))
+        else:
+            fsm = MapMachine(config)
+        df = fsm.get_data()
+        if isinstance(df, pd.DataFrame) and (len(df) > 0):
+            rec = df.iloc[-1]
+            lastcoord = {'lat':float(rec['latitude']), 'lon':float(rec['longitude'])}
+        else:
+            return no_update, no_update
         if lastcoord:
             map_state['map-position']["center"] = lastcoord
+            logger.debug(f'centered map to {lastcoord}, map_state = {map_state}')
             return trigger_data+1, map_state
         return no_update, no_update
 
@@ -596,10 +613,13 @@ def update_map_page(app, engine, config):
         prevent_initial_call=True
     )
     def store_map_view(relayoutData, map_state):
+        global mapState
+        logger.debug(f'got to store_map_view, relayoutData = {relayoutData}, map_state = {map_state}')
         if not relayoutData:
-            raise dash.exceptions.PreventUpdate
+            return no_update
         
-        new_state = map_state.copy()
+        #new_state = map_state.copy()
+        new_state = map_state
         if not new_state.get('map-position'):
             new_state['map-position'] = {}
         # Capture zoom level
@@ -612,6 +632,9 @@ def update_map_page(app, engine, config):
             new_state['map-position']["center"] = relayoutData["mapbox.center"]
             logger.debug(f'Map panned to {relayoutData["mapbox.center"]}')
 
+        new_state["_last_updated"] = datetime.now().isoformat()
+        logger.debug(f'exiting store_map_view, map_state = {new_state}')
+        mapState = new_state
         return new_state
 
 
@@ -624,7 +647,6 @@ def update_map_page(app, engine, config):
         prevent_initial_call=True
     )
     def set_instrument_param_options(instrument, fsm_data):
-        global query_results
         logger.debug(f'Callback thread set_instrument_param_options {instrument} ')
         if fsm_data:
             fsm = MapMachine.deserialize(config, json.loads(fsm_data))
@@ -635,7 +657,7 @@ def update_map_page(app, engine, config):
             spy_time = datetime.now()
             inst_params = get_instruments_and_params(df)
             logger.debug(f'set_instrument_param_options, get_instruments_and_params took  {(datetime.now()-spy_time).total_seconds()} seconds')
-            params = inst_params[instrument]
+            params = inst_params['instruments'][instrument]
             #print(f'setting instrument params to {params}')
             return params, params[0]
         return no_update, no_update
@@ -667,6 +689,9 @@ def requery_geo(engine, config, lock):
     while True:
         # first check for new data for today (if today's data previously fetched)
         today = today_date(config)
+        # In case map is run overnight into a new day 
+        if not today in query_results['data']:
+            query_results['data'][today] = None
         if query_results['data'][today] is not None:
             first_time = local_tz.localize(datetime(today.year, today.month, today.day, 0, 0, 0)).astimezone(pytz.utc)
             last_time = local_tz.localize(datetime(today.year, today.month, today.day, 23, 59, 59)).astimezone(pytz.utc)
@@ -678,7 +703,7 @@ def requery_geo(engine, config, lock):
             )
             # if there's new data to add to today
             if len(df) > 0:
-                print(f'requery_geo got additional data for today: {len(df)} records')
+                logger.debug(f'requery_geo got additional data for today: {len(df)} records')
                 # convert to local time
                 df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config.get('display_timezone', 'UTC'))
                 df.set_index('sample_time', inplace=True, drop=False)
@@ -700,7 +725,7 @@ def requery_geo(engine, config, lock):
                 engine, start_time=first_time, end_time=last_time,
                 platform=None, gps_instrument=None, acquisition_type='measurement_calibrated'
             )
-            print(f'requery_geo got new data for day {day}: {len(df)} records')
+            logger.debug(f'requery_geo got new data for day {day}: {len(df)} records')
  
             if not df.empty:
                 df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config.get('display_timezone', 'UTC'))

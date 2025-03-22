@@ -107,7 +107,7 @@ def layout_map_display(config):
             html.Div(
                 dcc.Dropdown(
                     id='platform-selector',
-                    options=query_results.get('gps_platforms',[]),
+                    options=query_results.get('gps_platforms',[platform]),
                     value=platform,
                     clearable=False
                 )
@@ -118,7 +118,7 @@ def layout_map_display(config):
             html.Div(
                 dcc.Dropdown(
                     id='gps-selector',
-                    options=query_results.get('gps_instruments',[]),
+                    options=query_results.get('gps_instruments',[gps]),
                     value=gps,
                     clearable=False
                 )

@@ -1,17 +1,20 @@
 dashboard_refresh_secs: 5
 alarm_shapes: True
 master_GPS: "ublox_M8Q_GPS"
-db_connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-test"
+#master_GPS: "GPS_sim"
+db_connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-dev"
 show_mute_instruments: True
 display_timezone: "US/Pacific"
 logs:
   log_dir: "/home/vandaq/vandaq/web/log"
   log_file: "VanDAQ_Dashboard.log"
-  log_level: "INFO"
+  log_level: "DEBUG"
   logger_name: "dashboard"
 mapping:
-  default_platform: "van1"
+  #default_platform: "van1"
   default_gps: "ublox_M8Q_GPS"
+  default_gps: "GPS_sim"
+  map_check_secs: 3
 display_params:
   CAPS_NO2:
     graph:
@@ -26,27 +29,22 @@ display_params:
     display:
       - "N2O"
       - "CO"
-      - "H2O"
   Aeris_CH4_C2H6:
     separate_scales: True
     graph:
       - "CH4"
       - "C2H6"
-      - "H2O"
     display:
       - "CH4"
       - "C2H6"
-      - "H2O"
   Aeris_CH4_C2H6:
     separate_scales: True
     graph:
       - "CH4"
       - "C2H6"
-      - "H2O"
     display:
       - "CH4"
       - "C2H6"
-      - "H2O"
   Licor_7200_CO2:
     separate_scales: True
     graph:
@@ -60,6 +58,11 @@ display_params:
       - "BC_mass"
     display:
       - "BC_mass"
+  MAGEE_AE33_Aethalometer:
+    graph:
+      - "BC6"
+    display:
+      - "BC6"
   2BTech_211_G:
     graph:
       - "O3"
@@ -83,6 +86,7 @@ display_params:
       - "m/z 59"
       - "m/z 69"
   ublox_M8Q_GPS:
+    separate_scales: True
     graph:
       - "latitude"
       - "longitude"
@@ -102,8 +106,8 @@ display_params:
       - "PM4"
       - "PM10"
       - "PMtot"
-  PseudoTech_Bozometer:
-    graph:
-      - "Bozons"
-    display:
-      - 'Bozons'
+  # PseudoTech_Bozometer:
+  #   graph:
+  #     - "Bozons"
+  #   display:
+  #     - 'Bozons'
