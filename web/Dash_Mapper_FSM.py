@@ -699,7 +699,7 @@ def requery_geo(engine, config, lock):
             # Fetch new measurements
             df = get_measurements_with_alarms_and_locations(
                 engine, start_time=first_time, end_time=last_time,
-                platform=None, gps_instrument=None, acquisition_type='measurement_calibrated'
+                platform=None, gps_instrument=None, acquisition_type='measurement_calibrated,measurement_raw'
             )
             # if there's new data to add to today
             if len(df) > 0:
