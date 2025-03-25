@@ -488,15 +488,29 @@ def get_measurements_with_alarms_and_locations(engine, start_time=None, acquisit
 
     acquisition_type_id = None
 
-    if acquisition_type:
-        acquisition_type_query = (
-            select(DimAcquisitionType)
-            .where(DimAcquisitionType.acquisition_type == acquisition_type))
-        compiled_query = acquisition_type_query.compile(session.bind, compile_kwargs={"literal_binds": True})
+    # if acquisition_type:
+    #     acquisition_type_query = (
+    #         select(DimAcquisitionType)
+    #         .where(DimAcquisitionType.acquisition_type == acquisition_type))
+    #     compiled_query = acquisition_type_query.compile(session.bind, compile_kwargs={"literal_binds": True})
 
+    #     pdf = pd.read_sql(str(compiled_query), session.bind)
+    #     if pdf.shape[0]:
+    #         acquisition_type_id = int(pdf['id'][0])
+
+    if acquisition_type:
+        acquisition_types = [atype.strip() for atype in acquisition_type.split(",")]
+        
+        acquisition_type_query = (
+            select(DimAcquisitionType.id)
+            .where(DimAcquisitionType.acquisition_type.in_(acquisition_types))
+        )
+        
+        compiled_query = acquisition_type_query.compile(session.bind, compile_kwargs={"literal_binds": True})
+        
         pdf = pd.read_sql(str(compiled_query), session.bind)
-        if pdf.shape[0]:
-            acquisition_type_id = int(pdf['id'][0])
+        
+        acquisition_type_ids = pdf['id'].astype(int).tolist() if not pdf.empty else []
    
 
     # subquery for geolocations
@@ -530,8 +544,11 @@ def get_measurements_with_alarms_and_locations(engine, start_time=None, acquisit
         .order_by(FactMeasurement.sample_time)
     )
 
-    if acquisition_type_id:
-        measurement_query = measurement_query.where(FactMeasurement.acquisition_type_id == acquisition_type_id)
+    # if acquisition_type_id:
+    #     measurement_query = measurement_query.where(FactMeasurement.acquisition_type_id == acquisition_type_id)
+
+    if acquisition_type_ids:  # Check if the list is not empty
+        measurement_query = measurement_query.where(FactMeasurement.acquisition_type_id.in_(acquisition_type_ids))
 
     if after_id:
         measurement_query = measurement_query.where(FactMeasurement.id > after_id)
