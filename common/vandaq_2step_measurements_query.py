@@ -486,7 +486,7 @@ def get_measurements_with_alarms_and_locations(engine, start_time=None, acquisit
         if pdf.shape[0]:
             gps_instrument_id = int(pdf['id'][0])
 
-    acquisition_type_id = None
+    acquisition_type_ids = None
 
     # if acquisition_type:
     #     acquisition_type_query = (

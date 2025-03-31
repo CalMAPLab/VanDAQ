@@ -151,4 +151,6 @@ for platform in config['platforms']:
         # df.to_csv(os.path.join(filedir,file_name), index=False)
 
         print(f"Measurements saved to {file_name}")
-
+    else:
+        print(f"No measurements found for {platform} between {start_time} and {end_time}.")
+        continue
