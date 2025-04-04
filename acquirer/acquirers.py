@@ -176,6 +176,7 @@ class RecordParser:
                 agg_method = aggregate_items[i]
                 aggregated_value = None
                 if formats[i] == 'f':
+                    values = [float(v) for v in values if v is not None]  # Filter out None values
                     if agg_method == 'mean':
                         aggregated_value = mean(values)
                     elif agg_method == 'min':
@@ -713,7 +714,7 @@ class SerialNmeaAcquirer(SerialStreamAcquirer):
             if self.check_serial_open():
                 try:
                     line = self.getline()
-                    if line.startswith('$'):
+                    if line is not None and line.startswith('$'):
                         self.logger.debug('NMEA sentence: ' + line)
                         message = self.process_nmea_sentence(line)
                         if message:
