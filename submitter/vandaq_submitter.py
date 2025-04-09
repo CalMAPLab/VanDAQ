@@ -5,6 +5,8 @@ import shutil
 import yaml
 import paramiko
 import subprocess
+import logging
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 config = {}
@@ -40,7 +42,7 @@ def is_host_available(host, port, ssh_client, private_key, timeout=5):
         ssh_client.close()
         return True
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logger.info(f"An error occurred: {e}")
         return False
 
 def transfer_files(ssh_client, private_key):
@@ -60,18 +62,18 @@ def transfer_files(ssh_client, private_key):
                 try:
                     remote_path = config['REMOTE_PATH'] +file.name # Adjust remote path as needed
                     sftp_client.put(str(file), remote_path)
-                    print(f"Transferred: {file}")
+                    logger.info(f"Transferred: {file}")
                     shutil.move(str(file), os.path.join(config['ARCHIVE_DIR'], file.name))
                 except Exception as e:
-                    print(f"Failed to transfer {file}: {e}")
+                    logger.error(f"Failed to transfer {file}: {e}")
         sftp_client.close()
         ssh_client.close()
     except Exception as e:
-        print(f"Error in SFTP connection: {e}")
+        logger.error(f"Error in SFTP connection: {e}")
 
 
     except Exception as e:
-        print(f"Error in SFTP connection: {e}")
+        logger.error(f"Error in SFTP connection: {e}")
 
 def main():
     """Main loop to repeatedly check network and host availability and transfer files."""
@@ -80,14 +82,14 @@ def main():
     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     while True:
         if is_network_available(host = config['PING_HOST']):
-            print("Network is available.")
+            logger.info("Network is available.")
             if is_host_available(config['STATIONARY_HOST'], config['SSH_PORT'], ssh_client, private_key):
-                print(f"Host {config['STATIONARY_HOST']} is reachable. Transferring files...")
+                logger.info(f"Host {config['STATIONARY_HOST']} is reachable. Transferring files...")
                 transfer_files(ssh_client, private_key)
             else:
-                print(f"Host {config['STATIONARY_HOST']} is not reachable.")
+                logger.info(f"Host {config['STATIONARY_HOST']} is not reachable.")
         else:
-            print("Network is unavailable.")
+            logger.info("Network is unavailable.")
         time.sleep(config['CHECK_INTERVAL'])
 
 config_file_name = '/home/vandaq/vandaq/submitter/vandaq_submitter.yaml'
@@ -100,6 +102,22 @@ config = load_config_file(config_file_name)
 
 # Ensure archive directory exists
 os.makedirs(config['ARCHIVE_DIR'], exist_ok=True)
+
+# create logger
+log_file = os.path.join(config['logs']['log_dir'], config['logs']['log_file'])
+logging.basicConfig(
+    filename = log_file,
+    encoding="utf-8",
+    filemode="a",
+    format="{asctime} - {levelname} - {message}",
+    style="{",
+    datefmt="%Y-%m-%d %H:%M:%S",    
+)
+logger = logging.getLogger(config['logs']['logger_name'])
+logger.setLevel(config['logs']['log_level'])
+handler = TimedRotatingFileHandler(log_file, when="midnight", interval=1, backupCount=30)
+handler.setLevel(logging.INFO)
+logger.addHandler(handler)
 
 
 if __name__ == "__main__":
