@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker, relationship
 from vandaq_schema import *
 from collections import defaultdict
+import re
 
 
 first_insert = True
@@ -414,13 +415,27 @@ def open_queue(config, logger):
     queue._maxsize = attribs['max_size']
     return queue
 
+def get_time_from_submit_filename(filename):
+    fn = os.path.basename(filename)
+    match = re.search(r'\d{8}_\d{6}', fn)
+    file_time_string = match.group(0) if match else None
+    if file_time_string:
+        file_time = datetime.strptime(file_time_string, '%Y%m%d_%H%M%S')
+        if 'submit_file_timezone' in config['submissions']:
+            timezone = config['submissions']['submit_file_timezone']
+            file_time = file_time.replace(tzinfo=pytz.timezone(timezone))
+        else:
+            file_time = file_time.replace(tzinfo=timezone.utc)
+        return file_time
+    return None
+
 def get_submission_files(directory,file_pattern):
     pattern = os.path.join(directory,file_pattern)
     files = glob(pattern)
     if files:
         current_time = time.time()
-        files = [{'filename':file, 'age_seconds':current_time - os.path.getmtime(file)} for file in files]
-        files.sort(key=operator.itemgetter('age_seconds'), reverse=True)    
+        files = [{'filename':file, 'filetime': get_time_from_submit_filename(file), 'age_seconds':current_time - os.path.getmtime(file)} for file in files]
+        files.sort(key=operator.itemgetter('filetime'), reverse=True)    
     return files
      
 
