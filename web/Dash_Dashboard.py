@@ -31,12 +31,15 @@ def get_last_valid_value(df, column):
 def get_instrument_measurements(engine,config):
     # Fetch the latest measurement set
     #df = get_measurements(engine, start_time=datetime.datetime.now()-datetime.timedelta(minutes=5))
+    st_time = datetime.datetime.now()
+    logger.debug(f'get_instrument_measurements: Starting query at {st_time}')
     df = get_2step_query_with_alarms(engine, datetime.datetime.now()-datetime.timedelta(minutes=5),wide=False)
     if len(df) > 0:
         if 'display_timezone' in config:
             df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config['display_timezone'])
             df.set_index('sample_time', inplace = True, drop=False)
     data = transform_instrument_dataframe(df)
+    logger.debug(f'get_instrument_measurements: Finished query in {(datetime.datetime.now()-st_time).total_seconds()} seconds')
     return data, df          
 
 graph_line_colors = ["rgba(0, 123, 255, 0.8)",# light blue line with transparency
@@ -316,7 +319,7 @@ local_styles ={
     'color':'white'
 }
 
-refresh_secs = 1
+refresh_secs = 5
 
 # Layout for the dashboard page
 def layout_dashboard(config):
@@ -351,6 +354,8 @@ latest_measurements_dict = None
 
 def update_dashboard(app, engine, config):
 
+    global logger
+    logger = config['logger']
     lock = Lock()
     Thread(target=regenerate_pages, args=(engine, config, lock), daemon=True).start()
 
@@ -443,12 +448,14 @@ def regenerate_pages(engine, config, lock):
     regpage = True
     count = 0
     pages = {}
+    logger.info('regenerate_pages: Starting dashboard background page regeneration thread')
     while True:
         if regpage:
             # Here is the expensive query and page-build
             #print(f'Starting dash regenerate {datetime.datetime.now()}')                
             st_time = datetime.datetime.now()
             pages['dashboard'], sample_time, dataFrame, measurements = build_page_contents(engine, config)
+            logger.debug(f'regenerate_pages: Main Page build took {(datetime.datetime.now() - st_time).total_seconds()} seconds')
             instruments = dataFrame['instrument'].unique()
             for instrument in instruments:
                 pages[instrument],stime,df,meas = build_page_contents(engine, config, measurements=measurements, zoom_to_instrument=instrument)
@@ -464,6 +471,7 @@ def regenerate_pages(engine, config, lock):
                 latest_data_frame = dataFrame
                 latest_measurements_dict = measurements
             #print(f'Finished dash regenerate {datetime.datetime.now()} {(datetime.datetime.now() - st_time).total_seconds()}')                
+            logger.debug(f'regenerate_pages: Finished all page regenerations {(datetime.datetime.now() - st_time).total_seconds()} seconds')
         time.sleep(0.1)  # give some time back to the main thread
 
 

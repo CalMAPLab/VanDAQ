@@ -33,7 +33,7 @@ except:
     exit()
 
 # create logger
-global logger
+#global logger
 log_file = os.path.join(config['logs']['log_dir'], config['logs']['log_file'])
 logging.basicConfig(
     filename = log_file,

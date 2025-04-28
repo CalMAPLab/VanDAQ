@@ -685,6 +685,8 @@ def requery_geo(engine, config, lock):
         'data':{today_date(config):None}
     })
 
+    FULL_REFERESH_EVERY = 10
+    full_refresh_counter = FULL_REFERESH_EVERY
 
     while True:
         # first check for new data for today (if today's data previously fetched)
@@ -695,7 +697,14 @@ def requery_geo(engine, config, lock):
         if query_results['data'][today] is not None:
             first_time = local_tz.localize(datetime(today.year, today.month, today.day, 0, 0, 0)).astimezone(pytz.utc)
             last_time = local_tz.localize(datetime(today.year, today.month, today.day, 23, 59, 59)).astimezone(pytz.utc)
-            first_time = query_results['data'][today]['sample_time'].max().astimezone(pytz.utc)+timedelta(0,1) if isinstance(query_results['data'][today], pd.DataFrame) and not query_results['data'][today].empty else first_time
+            full_refresh_counter -= 1
+            full_refresh = False
+            if full_refresh_counter <= 0:
+                full_refresh = True
+                full_refresh_counter = FULL_REFERESH_EVERY
+                logger.debug(f'requery_geo full_refresh = {full_refresh}, first_time = {first_time}, last_time = {last_time}')
+            else:
+                first_time = query_results['data'][today]['sample_time'].max().astimezone(pytz.utc)+timedelta(0,1) if isinstance(query_results['data'][today], pd.DataFrame) and not query_results['data'][today].empty else first_time
             # Fetch new measurements
             df = get_measurements_with_alarms_and_locations(
                 engine, start_time=first_time, end_time=last_time,
@@ -703,13 +712,22 @@ def requery_geo(engine, config, lock):
             )
             # if there's new data to add to today
             if len(df) > 0:
-                logger.debug(f'requery_geo got additional data for today: {len(df)} records')
-                # convert to local time
-                df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config.get('display_timezone', 'UTC'))
-                df.set_index('sample_time', inplace=True, drop=False)
-                # concatinate data to today's dataframe
-                with lock: 
-                    query_results['data'][today] = pd.concat([query_results['data'][today], df])            
+                if not full_refresh:
+                    logger.debug(f'requery_geo got additional data for today: {len(df)} records')
+                    # convert to local time
+                    df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config.get('display_timezone', 'UTC'))
+                    df.set_index('sample_time', inplace=True, drop=False)
+                    # concatinate data to today's dataframe
+                    with lock: 
+                        query_results['data'][today] = pd.concat([query_results['data'][today], df])            
+                else:
+                    logger.debug(f'requery_geo got new data for today: {len(df)} records')
+                    # convert to local time
+                    df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config.get('display_timezone', 'UTC'))
+                    df.set_index('sample_time', inplace=True, drop=False)
+                    # set today's dataframe to the new data
+                    with lock: 
+                        query_results['data'][today] = df
 
         # query for any selected days that do not yet have data 
         empty_days = [day for day in query_results['data'].keys() if query_results['data'][day] is None]
@@ -723,7 +741,7 @@ def requery_geo(engine, config, lock):
             # Fetch new measurements
             df = get_measurements_with_alarms_and_locations(
                 engine, start_time=first_time, end_time=last_time,
-                platform=None, gps_instrument=None, acquisition_type='measurement_calibrated'
+                platform=None, gps_instrument=None, acquisition_type='measurement_calibrated,measurement_raw'
             )
             logger.debug(f'requery_geo got new data for day {day}: {len(df)} records')
  
