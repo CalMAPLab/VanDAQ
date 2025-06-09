@@ -9,6 +9,7 @@ import pickle
 import pandas as pd 
 import random
 from datetime import datetime, timedelta, time
+from statistics import mean
 from time import sleep
 import pynmea2
 
@@ -800,6 +801,134 @@ class SimulatedGPSAcquirer(SerialNmeaGPSAcquirer):
             self.send_measurement_to_queue([lat_message,lon_message])
             sleep(cycle_interval)
 
+from labjack import ljm
+
+class LabJackAcquirer(Acquirer):
+    def __init__(self, config_dict):
+        super().__init__(config_dict)
+        self.handle = None
+        self.params = config_dict['Parameters']
+        self.data_freq = config_dict.get('data_freq_secs', 1)
+        self.buffers = {}  # {param_name: [list of samples]}
+        self.aggregate_info = {}  # {param_name: (agg_type, hz)}
+        self.open_labjack()
+        self.setup_buffers()
+
+    def open_labjack(self):
+        try:
+            self.handle = ljm.openS(
+                self.config.get('device_type', 'ANY'),
+                self.config.get('connection_type', 'ANY'),
+                self.config.get('identifier', 'ANY')
+            )
+            self.logger.info("LabJack device opened successfully.")
+        except Exception as e:
+            self.logger.error(f"Failed to open LabJack: {str(e)}")
+            raise
+
+    def setup_buffers(self):
+        for param_entry in self.params:
+            for param_name, cfg in param_entry.items():
+                if cfg.get("signal_type") == "Analog" and "aggregate_hz" in cfg and "aggregate" in cfg:
+                    self.buffers[param_name] = []
+                    self.aggregate_info[param_name] = (cfg["aggregate"], cfg["aggregate_hz"])
+
+    def read_analog(self, name, cfg):
+        try:
+            raw_voltage = ljm.eReadName(self.handle, name)
+            gain = cfg.get('preamp_gain', 1.0)
+            v_offset = cfg.get('v_offset', 0.0)
+            v_per_unit = cfg.get('v_per_unit', 1.0)
+            value = (raw_voltage - v_offset) / (v_per_unit * gain)
+            return value
+        except Exception as e:
+            self.logger.error(f"Error reading analog channel {name}: {str(e)}")
+            return None
+
+    def read_digital(self, name):
+        try:
+            state = ljm.eReadName(self.handle, name)
+            return int(state)
+        except Exception as e:
+            self.logger.error(f"Error reading digital channel {name}: {str(e)}")
+            return None
+
+    def run(self):
+        aggregate_cycle_secs = self.data_freq
+        next_output_time = datetime.now() + timedelta(seconds=aggregate_cycle_secs)
+
+        while True:
+            loop_start = datetime.now()
+            now = datetime.now()
+
+            results = []
+
+            for param_entry in self.params:
+                for param_name, cfg in param_entry.items():
+                    signal_type = cfg.get('signal_type')
+                    channel = cfg.get('channel_name')
+
+                    is_aggregated = param_name in self.buffers
+
+                    if signal_type == 'Analog':
+                        value = self.read_analog(channel, cfg)
+                        if value is not None:
+                            if is_aggregated:
+                                self.buffers[param_name].append(value)
+                            elif now >= next_output_time:
+                                record = self.make_record(param_name, value, cfg)
+                                results.append(record)
+
+                    elif signal_type == 'Digital':
+                        if now >= next_output_time:
+                            value = self.read_digital(channel)
+                            if value is not None:
+                                record = self.make_record(param_name, value, cfg)
+                                results.append(record)
+
+            if now >= next_output_time:
+                for param_name, (agg_type, _) in self.aggregate_info.items():
+                    samples = self.buffers.get(param_name, [])
+                    if samples:
+                        if agg_type == 'mean':
+                            agg_value = mean(samples)
+                        elif agg_type == 'max':
+                            agg_value = max(samples)
+                        elif agg_type == 'min':
+                            agg_value = min(samples)
+                        else:
+                            continue
+                        self.buffers[param_name] = []
+                        cfg = next(entry[param_name] for entry in self.params if param_name in entry)
+                        record = self.make_record(param_name, agg_value, cfg)
+                        results.append(record)
+
+                if results:
+                    self.send_measurement_to_queue(self.apply_alarms(results))
+                next_output_time = now + timedelta(seconds=aggregate_cycle_secs)
+
+            # Sleep to match aggregate_hz (if any); otherwise 10 Hz default
+            max_hz = max((hz for _, hz in self.aggregate_info.values()), default=10)
+            sleep_time = 1.0 / max_hz
+            elapsed = (datetime.now() - loop_start).total_seconds()
+            sleep(max(0, sleep_time - elapsed))
+
+
+    def make_record(self, param_name, value, cfg):
+            now = datetime.now().replace(microsecond=0)
+            sample_time = now - timedelta(seconds=self.measurement_delay)
+            return {
+                'platform': self.config['platform'],
+                'instrument': self.config['instrument'],
+                'parameter': param_name,
+                'unit': cfg.get('unit', ''),
+                'acquisition_type': cfg.get('aquisition_type', ''),
+                'acquisition_time': now,
+                'sample_time': sample_time,
+                'value': value
+            }
+
+
 class AquirerFactory():
     
     def makeSerialAcquirer(self, config):
@@ -830,8 +959,11 @@ class AquirerFactory():
         acquirer = SimulatedGPSAcquirer(config)
         return acquirer
 
+    def makeLabJackAcquirer(self, config):
+        return LabJackAcquirer(config)
 
-    selector = {'simpleSerial':makeSerialAcquirer, 'simulated':makeSimulatorAcquirer, 'networkStreaming':makeNetworkStreamingAcquirer, 'serial_nmea_GPS':makeSerialNmeaGPSAcquirer, 'serial_nmea':makeSerialNmeaAcquirer, 'serialPolled':makeSerialPolledAcquirer, 'simulated_GPS': makeSimulatedGPSAcquirer }
+
+    selector = {'simpleSerial':makeSerialAcquirer, 'simulated':makeSimulatorAcquirer, 'networkStreaming':makeNetworkStreamingAcquirer, 'serial_nmea_GPS':makeSerialNmeaGPSAcquirer, 'serial_nmea':makeSerialNmeaAcquirer, 'serialPolled':makeSerialPolledAcquirer, 'simulated_GPS': makeSimulatedGPSAcquirer, 'LabJack': makeLabJackAcquirer, }
 
     def make(self,config):
         maker = self.selector[config['type']]
