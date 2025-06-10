@@ -243,7 +243,10 @@ def build_page_contents(engine, config, measurements = None, dataFrame = None, z
                     graph = None
                     separate_scales = config['display_params'][instrument_text].get('separate_scales',False)
                     graph = create_trend_plot(graph_data, config, show_axes = True, separate_scales=separate_scales)
-                    alarm_level = max([max(list(data['measurements']['max_alarm_level'][-5:])) for data in graph_data])
+                    try:
+                        alarm_level = max([max(list(data['measurements']['max_alarm_level'][-5:])) for data in graph_data])
+                    except ValueError as e:
+                        alarm_level = 0
                     alarm_box_style = None
                     if alarm_level == 2:
                         alarm_box_style = 'flashing-box-alarm'
