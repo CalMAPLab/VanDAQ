@@ -685,7 +685,7 @@ def requery_geo(engine, config, lock):
         'data':{today_date(config):None}
     })
 
-    FULL_REFERESH_EVERY = 10
+    FULL_REFERESH_EVERY = 100  # Number of times to query for new data before doing a full refresh
     full_refresh_counter = FULL_REFERESH_EVERY
 
     while True:
@@ -706,10 +706,13 @@ def requery_geo(engine, config, lock):
             else:
                 first_time = query_results['data'][today]['sample_time'].max().astimezone(pytz.utc)+timedelta(0,1) if isinstance(query_results['data'][today], pd.DataFrame) and not query_results['data'][today].empty else first_time
             # Fetch new measurements
+            before_time = datetime.now()
             df = get_measurements_with_alarms_and_locations(
                 engine, start_time=first_time, end_time=last_time,
                 platform=None, gps_instrument=None, acquisition_type='measurement_calibrated,measurement_raw'
             )
+            after_time = datetime.now()
+            logger.debug(f'requery_geo queried new data for today: {len(df)} records, took {(after_time-before_time).total_seconds()} seconds')
             # if there's new data to add to today
             if len(df) > 0:
                 if not full_refresh:
@@ -751,7 +754,7 @@ def requery_geo(engine, config, lock):
                 with lock:
                     query_results['data'][day] = df           
 
-        time.sleep(0.5)  # Prevent excessive CPU usage
+        time.sleep(1)  # Prevent excessive CPU usage
 
 if __name__ == "__main__":
     app = dash.Dash(__name__)

@@ -370,6 +370,7 @@ def update_dashboard(app, engine, config):
     )
     def instrument_cell_clicked(clicks1):
         global latest_pages
+        logger.debug(f'Dashboard:  Got to instrument_cell_clicked: {datetime.datetime.now()}')
         for t in ctx.triggered:
             if t['value']:
                 tr = json.loads(t['prop_id'].replace('.n_clicks',''))
@@ -378,6 +379,8 @@ def update_dashboard(app, engine, config):
                 with lock:
                     page = latest_pages[instrument]
                 return tr['index'], page
+        logger.debug(f'Returning from instrument_cell_clicked: {datetime.datetime.now()}')
+
         raise PreventUpdate
 
     @app.callback(
@@ -388,11 +391,13 @@ def update_dashboard(app, engine, config):
     )
     def zoom_back_clicked(clicks):
         global latest_pages
+        logger.debug(f'Dashboard:  Got to zoom_back_clicked: {datetime.datetime.now()}')
         if clicks > 0:
             global latest_pages
             with lock:
                 page = latest_pages['dashboard']
             #print(f'Clicked back button {datetime.datetime.now()}')
+            logger.debug(f'Dashboard:  Returning from zoom_back_clicked: {datetime.datetime.now()}')
             return None, page
         raise PreventUpdate
 
@@ -418,6 +423,7 @@ def update_dashboard(app, engine, config):
         global latest_measurements_dict
         
         #print(f'In dash update_page {datetime.datetime.now()}')                
+        logger.debug(f'Dashboard:  Got to update_page: {datetime.datetime.now()}')
 
         if 'suspend' in suspend_updates:
             raise PreventUpdate
@@ -439,9 +445,11 @@ def update_dashboard(app, engine, config):
                     items = latest_pages[instrument_zoom]                
                                 
                 #print(f'Returning updated page {instrument_zoom}')
+                logger.debug(f'Dashboard:  Returning from to update_page -- page updated: {datetime.datetime.now()}')
                 return items, sample_timestamp, cached_timestamp
 
         #print(f'Preventing update {datetime.datetime.now()}')                
+        logger.debug(f'Dashboard:  Returning from to update_page -- no update: {datetime.datetime.now()}')
         return no_update, no_update, no_update
         #raise PreventUpdate
 
@@ -451,14 +459,14 @@ def regenerate_pages(engine, config, lock):
     regpage = True
     count = 0
     pages = {}
-    logger.info('regenerate_pages: Starting dashboard background page regeneration thread')
+    logger.info('Dashboard:  regenerate_pages: Starting dashboard background page regeneration thread')
     while True:
         if regpage:
             # Here is the expensive query and page-build
             #print(f'Starting dash regenerate {datetime.datetime.now()}')                
             st_time = datetime.datetime.now()
             pages['dashboard'], sample_time, dataFrame, measurements = build_page_contents(engine, config)
-            logger.debug(f'regenerate_pages: Main Page build took {(datetime.datetime.now() - st_time).total_seconds()} seconds')
+            logger.debug(f'Dashboard:  regenerate_pages: Main Page build took {(datetime.datetime.now() - st_time).total_seconds()} seconds')
             instruments = dataFrame['instrument'].unique()
             for instrument in instruments:
                 pages[instrument],stime,df,meas = build_page_contents(engine, config, measurements=measurements, zoom_to_instrument=instrument)
