@@ -691,6 +691,7 @@ def requery_geo(engine, config, lock):
     while True:
         # first check for new data for today (if today's data previously fetched)
         today = today_date(config)
+        instruments = config['mapping'].get('instruments', None)
         # In case map is run overnight into a new day 
         if not today in query_results['data']:
             query_results['data'][today] = None
@@ -708,7 +709,7 @@ def requery_geo(engine, config, lock):
             # Fetch new measurements
             before_time = datetime.now()
             df = get_measurements_with_alarms_and_locations(
-                engine, start_time=first_time, end_time=last_time,
+                engine, start_time=first_time, end_time=last_time, instruments=instruments,
                 platform=None, gps_instrument=None, acquisition_type='measurement_calibrated,measurement_raw'
             )
             after_time = datetime.now()
@@ -743,7 +744,7 @@ def requery_geo(engine, config, lock):
             logger.debug(f'requery_geo about to query start_time={first_time}, end_time={last_time}')
             # Fetch new measurements
             df = get_measurements_with_alarms_and_locations(
-                engine, start_time=first_time, end_time=last_time,
+                engine, start_time=first_time, end_time=last_time, instruments=instruments,
                 platform=None, gps_instrument=None, acquisition_type='measurement_calibrated,measurement_raw'
             )
             logger.debug(f'requery_geo got new data for day {day}: {len(df)} records')
