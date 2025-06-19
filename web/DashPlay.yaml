@@ -11,11 +11,20 @@ logs:
   log_level: "DEBUG"
   logger_name: "dashboard"
 mapping:
-  #default_platform: "van1"
+  default_platform: "van1"
   default_gps: "ublox_M8Q_GPS"
-  default_gps: "GPS_sim"
+  #default_gps: "GPS_sim"
   map_check_secs: 3
+  instruments:
+    - Aeris_CH4_C2H6
+    - Aeris_N2O_CO   
 display_params:
+  LabJack_T7_1:
+    separate_scales: True
+    graph:
+      - "SolarRadiation"
+    display:
+      - "SolarRadiation"
   CAPS_NO2:
     graph:
       - "NO2"
@@ -79,12 +88,17 @@ display_params:
       - "NOx"
   VOCUS:
     graph:
-      - "m/z 59"
+      - "m/z 47"
+      - "m/z 79"
+      - "m/z 117"
+      - "m/z 121"
+      - "m/z 371"
     display:
-      - "m/z 45"
-      - "m/z 33"
-      - "m/z 59"
-      - "m/z 69"
+      - "m/z 47"
+      - "m/z 79"
+      - "m/z 117"
+      - "m/z 121"
+      - "m/z 371"
   ublox_M8Q_GPS:
     separate_scales: True
     graph:
@@ -106,6 +120,13 @@ display_params:
       - "PM4"
       - "PM10"
       - "PMtot"
+  Airmar_WX200:
+    graph:
+      - "Wind_Speed"
+      - "Wind_Angle"
+    display:
+      - "Wind_Speed"
+      - "Wind_Angle"
   # PseudoTech_Bozometer:
   #   graph:
   #     - "Bozons"
