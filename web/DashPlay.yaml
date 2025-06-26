@@ -12,9 +12,13 @@ logs:
   logger_name: "dashboard"
 mapping:
   default_platform: "van1"
+  default_platform: "van1"
   default_gps: "ublox_M8Q_GPS"
-  #default_gps: "GPS_sim"
+  default_gps: "ublox_M8Q_GPS"
   map_check_secs: 3
+  instruments:
+    - Aeris_CH4_C2H6
+    - Aeris_N2O_CO   
 display_params:
   LabJack_T7_1:
     separate_scales: True
@@ -117,14 +121,6 @@ display_params:
       - "PM4"
       - "PM10"
       - "PMtot"
-  Airmar_WX200:
-    separate_scales: True
-    graph:
-      - "Wind_Speed"
-      - "Wind_Angle"
-    display:
-      - "Wind_Speed"
-      - "Wind_Angle"
   # PseudoTech_Bozometer:
   #   graph:
   #     - "Bozons"
