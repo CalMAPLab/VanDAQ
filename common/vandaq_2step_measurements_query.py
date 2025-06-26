@@ -458,9 +458,21 @@ def get_measurements_with_alarms_and_locations_tooSlow(engine, start_time=None, 
 
     return df
 
-def get_measurements_with_alarms_and_locations(engine, start_time=None, acquisition_type=None, gps_instrument=None, end_time=None, platform=None, after_id=None):
+def get_measurements_with_alarms_and_locations(engine, start_time=None, acquisition_type=None, instruments=None, gps_instrument=None, end_time=None, platform=None, after_id=None):
     session = sessionmaker(bind=engine)()
 
+    instrument_ids = None
+
+    if instruments:
+        if isinstance(instruments, str):
+            instruments = [instruments]
+        instrument_query = (
+            select(DimInstrument.id)
+            .where(DimInstrument.instrument.in_(instruments))
+        )
+        compiled_query = instrument_query.compile(session.bind, compile_kwargs={"literal_binds": True})
+        pdf = pd.read_sql(str(compiled_query), session.bind)
+        instrument_ids = pdf['id'].astype(int).tolist() if not pdf.empty else []
 
     platform_id = None
 
@@ -553,6 +565,9 @@ def get_measurements_with_alarms_and_locations(engine, start_time=None, acquisit
     if after_id:
         measurement_query = measurement_query.where(FactMeasurement.id > after_id)
 
+    if instrument_ids is not None:
+        measurement_query = measurement_query.where(FactMeasurement.instrument_id.in_(instrument_ids))
+    
     measurement_subquery = measurement_query.subquery()
 
     
