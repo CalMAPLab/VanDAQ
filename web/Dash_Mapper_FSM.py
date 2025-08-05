@@ -10,12 +10,14 @@ import time
 import pytz
 import random
 import json
+from glob import glob
 from threading import Thread, Lock
 from sqlalchemy import create_engine
 from transitions import Machine
 
 from vandaq_2step_measurements_query import get_measurements_with_alarms_and_locations
 from vandaq_2step_measurements_query import get_all_geolocations
+import os
 
 global query_results
 global logger
@@ -148,6 +150,13 @@ def layout_map_display(config):
     platform = config['mapping'].get('default_platform')
     gps = config['mapping'].get('default_gps')
     check_interval = config['mapping'].get('map_check_secs', 2)
+    shapefiles = glob(f"{config['shape_file_dir']}/*.geojson")
+    shapes = ['']
+    for sf in shapefiles:
+        if sf.endswith('.geojson'):
+            sf = os.path.basename(sf)
+            shape = sf.replace('.geojson','')
+            shapes.append(shape)
 
     while query_results.get('gps_dates') == None:
         time.sleep(0.1)
@@ -219,6 +228,17 @@ def layout_map_display(config):
             dcc.Dropdown(
                 id='parameter-selector',
                 options=query_results.get('env_parameters',[]),
+                value=None,
+                clearable=False
+            )
+            )
+        ]),
+        html.Div([
+            html.Div("Community"),
+            html.Div(
+            dcc.Dropdown(
+                id='community-selector',
+                options=shapes,
                 value=None,
                 clearable=False
             )
@@ -446,13 +466,14 @@ def update_map_page(app, engine, config):
         Input('platform-selector','value'),
         Input('gps-selector','value'),
         Input('parameter-selector','value'),
+        Input('community-selector','value'),
         State('instrument-selector','value'),
         State('date-picker','date'),
         State('map-state', 'data'),
         State('fsm-store', 'data'),
         prevent_initial_call=True
     )
-    def update_map(refresh, sel_platform, sel_gps, sel_parameter, sel_instrument, date, map_state, fsm_data):
+    def update_map(refresh, sel_platform, sel_gps, sel_parameter, sel_community, sel_instrument, date, map_state, fsm_data):
         # Combine date and time
         spy_time = datetime.now()
 
@@ -551,7 +572,34 @@ def update_map_page(app, engine, config):
                             showlegend=False,
                             name="Current Location"
                         )
+                    # Add community polygons if selected
+                    if sel_community and sel_community != ['']:
+                            shape = config['shape_file_dir'] + f'/{sel_community}.geojson'
+                            with open(shape) as f:
+                                geojson_data = json.load(f)
+                            # Add boundary polygon
+                            fig.update_layout(
+                                mapbox={
+                                    "layers": [{
+                                        "source": geojson_data,
+                                        "type": "line",
+                                        "color": "red",
+                                        "line": {"width": 3},
+                                        # "type": "fill",
+                                        # "color": "rgba(255, 0, 0, 0.3)",
+                                    }]
+                                }
+                            )
 
+                            # fig.add_trace(go.Choroplethmapbox(
+                            #     geojson=shape,
+                            #     locations=[sel_community],
+                            #     z=filtered_df[filtered_df['community'] == community]['value'],
+                            #     colorscale="Viridis",
+                            #     showscale=False
+                            #     ))
+
+                            
                     map = dcc.Graph(figure=fig, id="map-graph", responsive=True, config={"scrollZoom": True, 'responsive':True})
                     map_state['map_displayed'] = True
                     logger.debug(f'update-map: map created {(datetime.now()-spy_time).total_seconds()} sec')
