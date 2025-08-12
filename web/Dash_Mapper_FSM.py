@@ -99,9 +99,10 @@ class MapMachine(object):
 
 def get_geolocations(engine, config, timezone= None):
     geo_df = get_all_geolocations(engine)
-    if timezone:
-        geo_df['sample_time'] = geo_df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(timezone)
-        geo_df.set_index('sample_time', inplace = True, drop=False)
+    if not geo_df.empty:
+        if timezone:
+            geo_df['sample_time'] = geo_df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(timezone)
+            geo_df.set_index('sample_time', inplace = True, drop=False)
     return geo_df
 
 def find_missing_dates(dates):
@@ -157,9 +158,35 @@ def layout_map_display(config):
             sf = os.path.basename(sf)
             shape = sf.replace('.geojson','')
             shapes.append(shape)
-
-    while query_results.get('gps_dates') == None:
+    i = 0
+    max_retries = 10
+    
+    while query_results.get('gps_dates') == None and i < max_retries:
         time.sleep(0.1)
+        i += 1
+
+    date_picker = None
+    
+    gps_dates = query_results.get('gps_dates', None)
+    if gps_dates:
+        # Normal case: valid dates
+        date_picker = dcc.DatePickerSingle(
+            id='date-picker',
+            min_date_allowed=min(gps_dates),
+            max_date_allowed=max(gps_dates),
+            disabled_days=find_missing_dates(gps_dates),
+            display_format='YYYY-MM-DD',
+            date=today_date(config),
+            disabled=False
+        )
+    else:
+        # No dates available: disable the picker entirely
+        date_picker = dcc.DatePickerSingle(
+            id='date-picker',
+            display_format='YYYY-MM-DD',
+            disabled=True
+        )
+
 
     page = html.Div([
     html.H1("Drive Map"),
@@ -178,16 +205,7 @@ def layout_map_display(config):
         #html.H3("platform"),
         html.Div([
             html.Div("Date"),
-            html.Div(
-                dcc.DatePickerSingle(
-                    id='date-picker',
-                    min_date_allowed=min(query_results['gps_dates']),
-                    max_date_allowed=max(query_results['gps_dates']),
-                    disabled_days=find_missing_dates(query_results['gps_dates']),
-                    display_format='YYYY-MM-DD',
-                    date=today_date(config),
-                    disabled=True
-                ))
+            html.Div(date_picker)
             ]),
         html.Div([
             html.Div("Platform"),
@@ -725,85 +743,86 @@ def requery_geo(engine, config, lock):
 
     # Get initial geolocation data
     gf = get_geolocations(engine, config, timezone=config.get('display_timezone', 'UTC'))
-    query_results.update({
-        'gps_dates': [datetime.fromordinal(d.toordinal()) for d in gf['sample_time'].dt.date.unique()],
-        'gps_instruments': gf['instrument'].unique(),
-        'gps_platforms': gf['platform'].unique(),
-        'all_geolocations': gf,
-        'data':{today_date(config):None}
-    })
+    if not gf.empty:
+        query_results.update({
+            'gps_dates': [datetime.fromordinal(d.toordinal()) for d in gf['sample_time'].dt.date.unique()],
+            'gps_instruments': gf['instrument'].unique(),
+            'gps_platforms': gf['platform'].unique(),
+            'all_geolocations': gf,
+            'data':{today_date(config):None}
+        })
 
-    FULL_REFERESH_EVERY = 100  # Number of times to query for new data before doing a full refresh
-    full_refresh_counter = FULL_REFERESH_EVERY
+        FULL_REFERESH_EVERY = 100  # Number of times to query for new data before doing a full refresh
+        full_refresh_counter = FULL_REFERESH_EVERY
 
-    while True:
-        # first check for new data for today (if today's data previously fetched)
-        today = today_date(config)
-        instruments = config['mapping'].get('instruments', None)
-        # In case map is run overnight into a new day 
-        if not today in query_results['data']:
-            query_results['data'][today] = None
-        if query_results['data'][today] is not None:
-            first_time = local_tz.localize(datetime(today.year, today.month, today.day, 0, 0, 0)).astimezone(pytz.utc)
-            last_time = local_tz.localize(datetime(today.year, today.month, today.day, 23, 59, 59)).astimezone(pytz.utc)
-            full_refresh_counter -= 1
-            full_refresh = False
-            if full_refresh_counter <= 0:
-                full_refresh = True
-                full_refresh_counter = FULL_REFERESH_EVERY
-                logger.debug(f'requery_geo full_refresh = {full_refresh}, first_time = {first_time}, last_time = {last_time}')
-            else:
-                first_time = query_results['data'][today]['sample_time'].max().astimezone(pytz.utc)+timedelta(0,1) if isinstance(query_results['data'][today], pd.DataFrame) and not query_results['data'][today].empty else first_time
-            # Fetch new measurements
-            before_time = datetime.now()
-            df = get_measurements_with_alarms_and_locations(
-                engine, start_time=first_time, end_time=last_time, instruments=instruments,
-                platform=None, gps_instrument=None, acquisition_type='measurement_calibrated,measurement_raw'
-            )
-            after_time = datetime.now()
-            logger.debug(f'requery_geo queried new data for today: {len(df)} records, took {(after_time-before_time).total_seconds()} seconds')
-            # if there's new data to add to today
-            if len(df) > 0:
-                if not full_refresh:
-                    logger.debug(f'requery_geo got additional data for today: {len(df)} records')
-                    # convert to local time
-                    df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config.get('display_timezone', 'UTC'))
-                    df.set_index('sample_time', inplace=True, drop=False)
-                    # concatinate data to today's dataframe
-                    with lock: 
-                        query_results['data'][today] = pd.concat([query_results['data'][today], df])            
+        while True:
+            # first check for new data for today (if today's data previously fetched)
+            today = today_date(config)
+            instruments = config['mapping'].get('instruments', None)
+            # In case map is run overnight into a new day 
+            if not today in query_results['data']:
+                query_results['data'][today] = None
+            if query_results['data'][today] is not None:
+                first_time = local_tz.localize(datetime(today.year, today.month, today.day, 0, 0, 0)).astimezone(pytz.utc)
+                last_time = local_tz.localize(datetime(today.year, today.month, today.day, 23, 59, 59)).astimezone(pytz.utc)
+                full_refresh_counter -= 1
+                full_refresh = False
+                if full_refresh_counter <= 0:
+                    full_refresh = True
+                    full_refresh_counter = FULL_REFERESH_EVERY
+                    logger.debug(f'requery_geo full_refresh = {full_refresh}, first_time = {first_time}, last_time = {last_time}')
                 else:
-                    logger.debug(f'requery_geo got new data for today: {len(df)} records')
-                    # convert to local time
+                    first_time = query_results['data'][today]['sample_time'].max().astimezone(pytz.utc)+timedelta(0,1) if isinstance(query_results['data'][today], pd.DataFrame) and not query_results['data'][today].empty else first_time
+                # Fetch new measurements
+                before_time = datetime.now()
+                df = get_measurements_with_alarms_and_locations(
+                    engine, start_time=first_time, end_time=last_time, instruments=instruments,
+                    platform=None, gps_instrument=None, acquisition_type='measurement_calibrated,measurement_raw'
+                )
+                after_time = datetime.now()
+                logger.debug(f'requery_geo queried new data for today: {len(df)} records, took {(after_time-before_time).total_seconds()} seconds')
+                # if there's new data to add to today
+                if len(df) > 0:
+                    if not full_refresh:
+                        logger.debug(f'requery_geo got additional data for today: {len(df)} records')
+                        # convert to local time
+                        df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config.get('display_timezone', 'UTC'))
+                        df.set_index('sample_time', inplace=True, drop=False)
+                        # concatinate data to today's dataframe
+                        with lock: 
+                            query_results['data'][today] = pd.concat([query_results['data'][today], df])            
+                    else:
+                        logger.debug(f'requery_geo got new data for today: {len(df)} records')
+                        # convert to local time
+                        df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config.get('display_timezone', 'UTC'))
+                        df.set_index('sample_time', inplace=True, drop=False)
+                        # set today's dataframe to the new data
+                        with lock: 
+                            query_results['data'][today] = df
+
+            # query for any selected days that do not yet have data 
+            empty_days = [day for day in query_results['data'].keys() if query_results['data'][day] is None]
+            for day in empty_days:
+                first_time = local_tz.localize(datetime(day.year, day.month, day.day, 0, 0, 0)).astimezone(pytz.utc)
+                last_time = local_tz.localize(datetime(day.year, day.month, day.day, 23, 59, 59)).astimezone(pytz.utc)
+                logger.debug(f'requery_geo original first time ={first_time}, end_time={last_time}')
+                start_time = datetime.now()
+
+                logger.debug(f'requery_geo about to query start_time={first_time}, end_time={last_time}')
+                # Fetch new measurements
+                df = get_measurements_with_alarms_and_locations(
+                    engine, start_time=first_time, end_time=last_time, instruments=instruments,
+                    platform=None, gps_instrument=None, acquisition_type='measurement_calibrated,measurement_raw'
+                )
+                logger.debug(f'requery_geo got new data for day {day}: {len(df)} records')
+    
+                if not df.empty:
                     df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config.get('display_timezone', 'UTC'))
                     df.set_index('sample_time', inplace=True, drop=False)
-                    # set today's dataframe to the new data
-                    with lock: 
-                        query_results['data'][today] = df
+                    with lock:
+                        query_results['data'][day] = df           
 
-        # query for any selected days that do not yet have data 
-        empty_days = [day for day in query_results['data'].keys() if query_results['data'][day] is None]
-        for day in empty_days:
-            first_time = local_tz.localize(datetime(day.year, day.month, day.day, 0, 0, 0)).astimezone(pytz.utc)
-            last_time = local_tz.localize(datetime(day.year, day.month, day.day, 23, 59, 59)).astimezone(pytz.utc)
-            logger.debug(f'requery_geo original first time ={first_time}, end_time={last_time}')
-            start_time = datetime.now()
-
-            logger.debug(f'requery_geo about to query start_time={first_time}, end_time={last_time}')
-            # Fetch new measurements
-            df = get_measurements_with_alarms_and_locations(
-                engine, start_time=first_time, end_time=last_time, instruments=instruments,
-                platform=None, gps_instrument=None, acquisition_type='measurement_calibrated,measurement_raw'
-            )
-            logger.debug(f'requery_geo got new data for day {day}: {len(df)} records')
- 
-            if not df.empty:
-                df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config.get('display_timezone', 'UTC'))
-                df.set_index('sample_time', inplace=True, drop=False)
-                with lock:
-                    query_results['data'][day] = df           
-
-        time.sleep(1)  # Prevent excessive CPU usage
+    time.sleep(1)  # Prevent excessive CPU usage
 
 if __name__ == "__main__":
     app = dash.Dash(__name__)
