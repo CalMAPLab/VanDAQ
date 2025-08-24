@@ -159,7 +159,7 @@ def layout_map_display(config):
             shape = sf.replace('.geojson','')
             shapes.append(shape)
     i = 0
-    max_retries = 10
+    max_retries = 100
     
     while query_results.get('gps_dates') == None and i < max_retries:
         time.sleep(0.1)
@@ -183,8 +183,11 @@ def layout_map_display(config):
         # No dates available: disable the picker entirely
         date_picker = dcc.DatePickerSingle(
             id='date-picker',
+            min_date_allowed=today_date(config),
+            max_date_allowed=today_date(config),
             display_format='YYYY-MM-DD',
-            disabled=True
+            date=today_date(config),
+            disabled=False
         )
 
 
@@ -252,12 +255,13 @@ def layout_map_display(config):
             )
         ]),
         html.Div([
-            html.Div("Community"),
+            html.Div("Places"),
             html.Div(
             dcc.Dropdown(
                 id='community-selector',
                 options=shapes,
                 value=None,
+                multi=True,
                 clearable=False
             )
             )
@@ -591,32 +595,26 @@ def update_map_page(app, engine, config):
                             name="Current Location"
                         )
                     # Add community polygons if selected
+                    layers = []
+
                     if sel_community and sel_community != ['']:
-                            shape = config['shape_file_dir'] + f'/{sel_community}.geojson'
+                        for item in sel_community:
+                            shape = config['shape_file_dir'] + f'/{item}.geojson'
                             with open(shape) as f:
                                 geojson_data = json.load(f)
-                            # Add boundary polygon
-                            fig.update_layout(
-                                mapbox={
-                                    "layers": [{
-                                        "source": geojson_data,
-                                        "type": "line",
-                                        "color": "red",
-                                        "line": {"width": 3},
-                                        # "type": "fill",
-                                        # "color": "rgba(255, 0, 0, 0.3)",
-                                    }]
-                                }
-                            )
+                            # Append each boundary polygon as a layer
+                            layers.append({
+                                "source": geojson_data,
+                                "type": "line",
+                                "color": "red",
+                                "line": {"width": 3},
+                                # For filled polygons, uncomment:
+                                # "type": "fill",
+                                # "color": "rgba(255, 0, 0, 0.3)",
+                            })
 
-                            # fig.add_trace(go.Choroplethmapbox(
-                            #     geojson=shape,
-                            #     locations=[sel_community],
-                            #     z=filtered_df[filtered_df['community'] == community]['value'],
-                            #     colorscale="Viridis",
-                            #     showscale=False
-                            #     ))
-
+                    # Update layout once with all the layers
+                    fig.update_layout(mapbox={"layers": layers})
                             
                     map = dcc.Graph(figure=fig, id="map-graph", responsive=True, config={"scrollZoom": True, 'responsive':True})
                     map_state['map_displayed'] = True
