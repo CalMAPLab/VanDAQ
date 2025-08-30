@@ -49,6 +49,13 @@ handler = TimedRotatingFileHandler(log_file, when="midnight", interval=1, backup
 handler.setLevel(logging.INFO)
 logger.addHandler(handler)
 
+# # Set log file permissions to read/write for all users
+# import stat
+# try:
+#     os.chmod(log_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH)
+# except Exception as e:
+#     print(f"Failed to set permissions on log file {log_file}: {e}")
+
 config['logger'] = logger
 
 # Database connection
