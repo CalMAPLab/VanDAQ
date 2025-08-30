@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import copy
 from datetime import datetime, timedelta, date
+import plotly.graph_objects as go
 import time
 import pytz
 import random
@@ -596,25 +597,44 @@ def update_map_page(app, engine, config):
                         )
                     # Add community polygons if selected
                     layers = []
+                    point_lats = []
+                    point_lons = []
 
                     if sel_community and sel_community != ['']:
                         for item in sel_community:
                             shape = config['shape_file_dir'] + f'/{item}.geojson'
                             with open(shape) as f:
                                 geojson_data = json.load(f)
-                            # Append each boundary polygon as a layer
-                            layers.append({
-                                "source": geojson_data,
-                                "type": "line",
-                                "color": "red",
-                                "line": {"width": 3},
-                                # For filled polygons, uncomment:
-                                # "type": "fill",
-                                # "color": "rgba(255, 0, 0, 0.3)",
-                            })
+                            for feature in geojson_data["features"]:
+                                geom_type = feature["geometry"]["type"]
+
+                                if geom_type in ["Polygon", "MultiPolygon", "LineString", "MultiLineString"]:
+                                    # Add as boundary layer
+                                    layers.append({
+                                        "source": {
+                                            "type": "FeatureCollection",
+                                            "features": [feature]  # isolate this feature
+                                        },
+                                        "type": "line",
+                                        "color": "red",
+                                        "line": {"width": 3},
+                                    })
+
+                                elif geom_type == "Point":
+                                    lon, lat = feature["geometry"]["coordinates"]
+                                    point_lons.append(lon)
+                                    point_lats.append(lat)
 
                     # Update layout once with all the layers
                     fig.update_layout(mapbox={"layers": layers})
+                    if point_lats and point_lons:
+                        fig.add_trace(go.Scattermapbox(
+                            lat=point_lats,
+                            lon=point_lons,
+                            mode="markers",
+                            marker=dict(size=20, color="blue", symbol="circle"),
+                            name="Community Points"
+                        ))
                             
                     map = dcc.Graph(figure=fig, id="map-graph", responsive=True, config={"scrollZoom": True, 'responsive':True})
                     map_state['map_displayed'] = True
