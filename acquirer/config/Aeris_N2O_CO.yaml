@@ -1,6 +1,6 @@
 ---
 platform: van1
-instrument: Aeris_CH4_C2H6
+instrument: Aeris_N2O_CO
 type: simpleSerial
 queue:
   name: "/dev-measurements"
@@ -8,57 +8,57 @@ queue:
   max_msgs: 50
 connection: serial
 serial:
-  device: "/dev/usb_serial_AERIS_CH4_C2H6"
+  device: "/dev/usb_serial_AERIS_N2O_CO"
   baud: 9600
 measurement_delay_secs: 0 
 stream:
   line_delimiter: "\r\n"
   item_delimiter: ","
-  items: "inst_datetime,Inlet_Number,P,T0,T1,T2,T5,Tgas,CH4,H2O,C2H6,R,x,TEC_sink_temp,Wall_Code,x,x"
+  items: "inst_datetime,Inlet_Number,P,T0,T1,T2,T5,Tgas,CO,H2O,N2O,amb_T,amb_P,latitude,longitude"
   formats: "%m/%d/%Y %H:%M:%S.%f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,x,x" 
-  units: "datetime,count,mbar,deg_c,deg_c,deg_c,deg_c,deg_c,ppm,ppm,ppb,const,ratio,deg_c,count,x,x"
-  acqTypes: "inst_datetime,engineering,engineering,engineering,engineering,engineering,engineering,engineering,measurement_calibrated,measurement_calibrated,measurement_calibrated,engineering,measurement_calibrated,engineering,engineering,x,x"
+  units: "datetime,count,mbar,deg_c,deg_c,deg_c,deg_c,deg_c,ppm,ppm,ppb,deg_c,torr,lat,lon"
+  acqTypes: "inst_datetime,engineering,engineering,engineering,engineering,engineering,engineering,engineering,measurement_calibrated,measurement_calibrated,measurement_calibrated,engineering,engineering,GPS,GPS"
   
 logs:
   log_dir: "/home/vandaq/vandaq/acquirer/log"
-  log_file: "acquirer_Aeris_CH4_C2H6.log"
+  log_file: "acquirer_Aeris_N2O_CO.log"
   log_level: "INFO"
-  logger_name: "Aeris_CH4_C2H6"
+  logger_name: "Aeris_N2O_CO"
 
 alarms:
   P:
     - value_<: 
-        value: 235  
+        value: 135
         alarm_level: alarm
         alarm_type: underrange
-        alarm_message: "Pressure below 235 mbar"
+        alarm_message: "Pressure below 135 mbar"
         impacts_data: true
     - value_>:
-        value: 245  
+        value: 145 
         alarm_level: alarm
         alarm_type: overrange
-        alarm_message: "Pressure above 245 mbar"
+        alarm_message: "Pressure above 145 mbar"
         impacts_data: true
-  CH4:
+  CO:
     - value_<: 
-        value: 1.9  
+        value: 0
         alarm_level: alarm
         alarm_type: underrange
-        alarm_message: "CH4 concentration is below 1.9 ppm"
+        alarm_message: "CO concentration is below zero"
         impacts_data: true
-  C2H6:
+  N2O:
     - value_<: 
-        value: 0  
+        value: 0
         alarm_level: alarm
         alarm_type: underrange
-        alarm_message: "C2H6 concentration is below 0 ppm"
+        alarm_message: "N2O concentration is below zero"
         impacts_data: true
   T2:
-    - value_>: 
-        value: 30
+    - value_<: 
+        value: 35
         alarm_level: alarm
-        alarm_type: overrange
-        alarm_message: "T2 is above 30 deg C"
+        alarm_type: underrange
+        alarm_message: "T2 is below 35 deg C"
         impacts_data: true
   Inlet_Number:
     - value_!=: 

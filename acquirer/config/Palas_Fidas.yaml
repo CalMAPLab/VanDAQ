@@ -28,8 +28,44 @@ poll:
     key_delimiter: "="
     items: "flowrate,velocity,Cn,PM1,PM2.5,PM4,PM10,PMtot"
     formats: "f,f,f,f,f,f,f,f" 
-    units: "lpm, m/s, P/cm^3, mg/m3, mg/m3, mg/m3, mg/m3, mg/m3"
+    scalers: "x,x,x,1000,1000,1000,1000,1000"
+    units: "lpm, m/s, P/cm^3, ug/m3, ug/m3, ug/m3, ug/m3, ug/m3"
+    scalers: "1,1,1,1000,1000,1000,1000,1000"
     acqTypes: "engineering,engineering,engineering,measurement_calibrated,measurement_calibrated,measurement_calibrated,measurement_calibrated,measurement_calibrated"
+alarms:
+  flowrate:
+    - value_<: 
+        value: 4.4
+        alarm_level: alarm
+        alarm_type: underrange
+        alarm_message: "flowrate below 4.4 lpm"
+        impacts_data: true
+    - value_>: 
+        value: 5.2
+        alarm_level: alarm
+        alarm_type: overrange
+        alarm_message: "flowrate above 5.2 lpm"
+        impacts_data: true
+  velocity:
+    - value_<: 
+        value: 8
+        alarm_level: alarm
+        alarm_type: underrange
+        alarm_message: "velocity below 8 m/s"
+        impacts_data: true
+    - value_>: 
+        value: 10
+        alarm_level: alarm
+        alarm_type: overrange
+        alarm_message: "velocity above 10 m/s"
+        impacts_data: true
+  PMtot:
+    - value_<: 
+        value: 0
+        alarm_level: alarm
+        alarm_type: underrange
+        alarm_message: "PMtot below 0 ug/m3"
+        impacts_data: true
   
 logs:
   log_dir: "/home/vandaq/vandaq/acquirer/log"

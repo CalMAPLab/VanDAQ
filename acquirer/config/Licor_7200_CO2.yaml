@@ -1,0 +1,47 @@
+---
+platform: van1
+instrument: Licor_7200_CO2
+type: simpleSerial
+connection: serial
+serial:
+  device: "/dev/usb_serial_Licor_LI-7550"
+  baud: 9600
+queue:
+  name: "/dev-measurements"
+  max_msg_size: 8000
+  max_msgs: 50
+measurement_delay_secs: 0 
+stream:
+  line_delimiter: "\r\n"
+  item_delimiter: "\t"
+  items: "Ndx,DiagVal,DiagVal2,inst_date,inst_time,CO2Raw,H2ORaw,CO2D,CO2MG,H2OD,H2OG,Temp,Pres,APres,DPres,Aux,Aux2,Aux3,Aux4,Cooler,ChopperCooler,CO2MF,CO2MFd,H2OMF,H2OMFd,DewPt,AvgTemp,TempIn,TempOut,CO2SS,H2OSS,MeasFlowRate,VolFlowRate,FlowPressure,FlowPower,FlowDrive,H2OAW,H2OAWO,CO2AW,CO2AWO"
+  formats: "f,f,f,%Y-%m-%d,%H:%M:%S:%f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f"
+  units: "counts,counts,counts,date,time,counts,counts,mmol/m3,mg/m3,mmol/m3,g/m3,deg_c,kPa,kPa,kPa,counts,counts,counts,counts,V,V,µmol/mol,µmol/mol,mmol/mol,mmol/mol,deg_c,deg_c,deg_c,deg_c,%,%,slpm,lpm,kPa,V,%,counts,counts,counts,counts"
+  acqTypes: "engineering,engineering,engineering,engineering,engineering,engineering,engineering,measurement_calibrated,measurement_calibrated,measurement_calibrated,measurement_calibrated,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,measurement_calibrated,measurement_calibrated,measurement_calibrated,measurement_calibrated,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering"
+logs:
+  log_dir: "/home/vandaq/vandaq/acquirer/log"
+  log_file: "Licor_7200_CO2.log"
+  log_level: "INFO"
+  logger_name: "Licor_7200_CO2"
+
+alarms:
+  MeasFlowRate:
+    - value_<: 
+        value: 8  
+        alarm_level: alarm
+        alarm_type: underrange
+        alarm_message: "MeasFlowRate below 8 slpm"
+        impacts_data: true
+    - value_>:
+        value: 12  
+        alarm_level: alarm
+        alarm_type: overrange
+        alarm_message: "MeasFlowRate above 12 slpm"
+        impacts_data: true
+  AvgTemp :
+    - value_>: 
+        value: 35   
+        alarm_level: alarm
+        alarm_type: overrange
+        alarm_message: "AvgTemp above 35 deg C"
+        impacts_data: true
