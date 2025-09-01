@@ -27,19 +27,26 @@ logs:
   logger_name: "CAPS_NO2"
 
 alarms:
-  NO2:
+  Pressure:
     - value_<:
-        value: 0
+        value: 700
         alarm_level: alarm
-        alarm_type: underrange
-        alarm_message: "NO2 negative"
+        alarm_type: pressure_low
+        alarm_message: "Pressure below 700 torr"
         impacts_data: true
     - value_>:
-        value: 200
-        alarm_level: warning
-        alarm_type: overrange
-        alarm_message: "NO2 above threshold of 200 ppb"
-        impacts_data: false
+        value: 800 
+        alarm_level: alarm
+        alarm_type: pressure_high
+        alarm_message: "Pressure above 800 torr"
+        impacts_data: true
+  Loss:
+    - value_>:
+        value: 1000
+        alarm_level: alarm
+        alarm_type: loss_high
+        alarm_message: "Loss > 1000 Mm-1"
+        impacts_data: true
   Status:
     - substr_is:
         substr_begin: 0

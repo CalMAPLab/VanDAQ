@@ -18,6 +18,55 @@ stream:
   formats: "f,f,f,f,f,f,%d/%m/%y,%H:%M:%S"
   units: "ppb,temp_C,mbar,cc/min,cc/min,temp_C,date,time"
   acqTypes: "measurement_calibrated,engineering,engineering,engineering,engineering,engineering,inst_date,inst_time"
+
+alarms:
+  O3:
+    - value_<:
+        value: 0
+        alarm_level: alarm
+        alarm_type: underrange
+        alarm_message: "O3 below 0 ppb"
+        impacts_data: true
+  cell_P:
+    - value_<:
+        value: 982
+        alarm_level: alarm
+        alarm_type: underrange
+        alarm_message: "cell_P below 982 mbar"
+        impacts_data: true
+    - value_>:
+        value: 990 
+        alarm_level: alarm
+        alarm_type: pressure_high
+        alarm_message: "Pressure above 990 mbar"
+        impacts_data: true
+  cell_a_flow:
+    - value_<:
+        value: 950
+        alarm_level: alarm
+        alarm_type: underrange
+        alarm_message: "cell_a_flow below 950 cc/min"
+        impacts_data: true
+    - value_>:
+        value: 1100 
+        alarm_level: alarm
+        alarm_type: overrange
+        alarm_message: "cell_a_flow above 1100 cc/min"
+        impacts_data: true
+  cell_b_flow:
+    - value_<:
+        value: 1000 
+        alarm_level: alarm
+        alarm_type: underrange
+        alarm_message: "cell_b_flow below 1000 cc/min"
+        impacts_data: true
+    - value_>:
+        value: 1150 
+        alarm_level: alarm
+        alarm_type: overrange
+        alarm_message: "cell_b_flow above 1150 cc/min"
+        impacts_data: true
+
 logs:
   log_dir: "/home/vandaq/vandaq/acquirer/log"
   log_file: "acquirer_2BTech_211_G.log"

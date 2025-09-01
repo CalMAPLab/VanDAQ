@@ -1,0 +1,77 @@
+---
+platform: van1
+instrument: Airmar_WX200
+type: serial_nmea
+#verbose: 1
+queue:
+  name: "/dev-measurements"
+  max_msg_size: 8000
+  max_msgs: 50
+connection: serial
+serial:
+  device: "/dev/usb_serial_Airmar_200WX"
+  baud: 4800
+measurement_delay_secs: 0 
+data:
+  sentence_delimiter: "\n\n"
+  sentence_types:
+    MWV:
+      wind_speed:
+          parameter: "Wind_Speed"
+          unit: "m/s"
+          format: "f"
+          acqType: "measurement_calibrated"
+      wind_angle:
+          parameter: "Wind_Angle"
+          unit: "degrees"
+          format: "f"
+          acqType: "measurement_calibrated"
+    GGA:
+      latitude:
+          parameter: "latitude"
+          unit: "lat"
+          format: "f"
+          acqType: "measurement_calibrated"
+      longitude:
+          parameter: "longitude"
+          unit: "lon"
+          format: "f"
+          acqType: "measurement_calibrated"
+      altitude:
+          parameter: "altitude"
+          unit: "meters"
+          format: "f"
+          acqType: "measurement_calibrated"
+    MDA: 
+      b_pressure_bar:
+          parameter: "amb_P"
+          unit: "mbar"
+          format: "f"
+          scaler: 1000
+          acqType: "measurement_calibrated"
+      air_temp:
+          parameter: "amb_T"
+          unit: "deg_c"
+          format: "f"
+          acqType: "measurement_calibrated"    
+      rel_humidity:
+          parameter: "RH"
+          unit: "%"
+          format: "f"
+          acqType: "measurement_calibrated"
+      abs_humidity:
+          parameter: "AH"
+          unit: "%"
+          format: "f"
+          acqType: "measurement_calibrated"
+      dew_point:
+          parameter: "Dewpoint"
+          unit: "deg_c"
+          format: "f"
+          acqType: "measurement_calibrated"
+logs:
+  log_dir: "/home/vandaq/vandaq/acquirer/log"
+  log_file: "Airmar_WX200.log"
+  log_level: "INFO"
+  logger_name: "Airmar_WX200"
+
