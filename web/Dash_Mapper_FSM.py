@@ -7,6 +7,9 @@ import numpy as np
 import copy
 from datetime import datetime, timedelta, date
 import plotly.graph_objects as go
+import plotly.io as pio
+import base64
+
 import time
 import pytz
 import random
@@ -303,12 +306,38 @@ def calculate_zoom_level(dataframe):
     return zoom, center
 
 def today_date(config):
+    the_date = None
     local_tz = pytz.utc
     if 'display_timezone' in config:
         local_tz =  pytz.timezone(config['display_timezone'])
-    return pytz.utc.localize(datetime.now()).astimezone(local_tz).date()
+    if config['mapping'].get('test_day', None):
+        test_day = datetime.strptime(config['mapping']['test_day'], '%m/%d/%Y').date()
+        if config['mapping'].get('test_hour_offset', None):
+            hour_offset = int(config['mapping']['test_hour_offset'])
+            the_date = pytz.utc.localize(datetime.now() + timedelta(hours=hour_offset)).astimezone(local_tz).date()
+            if the_date != test_day:
+                the_date = test_day
+        else:
+            the_date = test_day
+    else:
+        the_date = pytz.utc.localize(datetime.now()).astimezone(local_tz).date()
+    return the_date
 
+def today_end_time(config):
+    local_tz = pytz.utc
+    if 'display_timezone' in config:
+        local_tz =  pytz.timezone(config['display_timezone'])
+    if config['mapping'].get('test_day', None):
+        end_time = pytz.utc.localize(datetime.now()).astimezone(local_tz).time()
+        if config['mapping'].get('test_hour_offset', None):
+            hour_offset = int(config['mapping']['test_hour_offset'])
+            # Convert time to datetime, add timedelta, then extract time
+            end_datetime = datetime.combine(date.today(), end_time) + timedelta(hours=hour_offset)
+            end_time = end_datetime.time()
+    else:
+        end_time = datetime.time(23, 59, 59)
 
+    return end_time
 
 def update_map_page(app, engine, config):
     global myConfig
@@ -595,6 +624,65 @@ def update_map_page(app, engine, config):
                             showlegend=False,
                             name="Current Location"
                         )
+                    wind_fig = None
+                    if config['mapping'].get('wind_rose', None) and config['mapping']['wind_rose'].get('show', False):
+                        wr_instrument = config['mapping']['wind_rose'].get('instrument',None)
+                        wr_speed_param = config['mapping']['wind_rose'].get('wind_speed_param',None)
+                        wr_dir_param = config['mapping']['wind_rose'].get('wind_dir_param',None)
+                        if wr_instrument and wr_speed_param and wr_dir_param:
+                            ws_recs = df[(df["instrument"] == wr_instrument)
+                                        & (df["parameter"]  == wr_speed_param)
+                                        ].sort_index()
+                            wd_recs = df[(df["instrument"] == wr_instrument)
+                                        & (df["parameter"]  == wr_dir_param)
+                                        ].sort_index()
+                            num_wr_points = config['mapping']['wind_rose'].get('num_points',1)
+                            if not ws_recs.empty and not wd_recs.empty:
+                                # Collect the last num_wr_points wind speed values into a list
+                                wind_speeds = ws_recs["value"].tail(num_wr_points).tolist()
+                                wind_dirs = wd_recs["value"].tail(num_wr_points).tolist()
+                                wind_fig = go.Figure()
+
+                                # Add wind rose as an inset in the upper right corner
+                                if len(wind_speeds) > 0 and len(wind_dirs) > 0:
+                                    speeds = wind_speeds
+                                    angles = wind_dirs
+                                    # Create wind rose figure
+                                    wind_fig = go.Figure()
+
+                                    wind_fig.add_trace(go.Barpolar(
+                                        r=speeds,
+                                        theta=angles,
+                                        width=45,
+                                        marker_color=speeds,
+                                        marker_colorscale="Viridis",
+                                        opacity=0.7,
+                                        hovertemplate="dir [deg]: %{theta}<br>speed [m/s]: %{r}<extra></extra>"
+                                    ))
+
+                                    wind_fig.update_layout(
+                                        title=dict(text="Wind", x=0.5, xanchor="center"),
+                                        margin=dict(l=0, r=0, t=30, b=20),  # give room for title
+                                        polar=dict(
+                                            radialaxis=dict(
+                                                showticklabels=False,
+                                                ticks=''
+                                            ),
+                                            angularaxis=dict(
+                                                rotation=90,           # 0° at top
+                                                direction="clockwise", # degrees increase clockwise
+                                                tickmode="array",
+                                                tickvals=[0, 90, 180, 270],
+                                                ticktext=["N", "E", "S", "W"]
+                                            )
+                                        ),
+                                        showlegend=False,
+                                        paper_bgcolor='rgba(0,0,0,0)',
+                                        plot_bgcolor='rgba(0,0,0,0)',
+                                        width=200,
+                                        height=200
+                                    )                                    
+
                     # Add community polygons if selected
                     layers = []
                     point_lats = []
@@ -635,8 +723,26 @@ def update_map_page(app, engine, config):
                             marker=dict(size=20, color="blue", symbol="circle"),
                             name="Community Points"
                         ))
-                            
-                    map = dcc.Graph(figure=fig, id="map-graph", responsive=True, config={"scrollZoom": True, 'responsive':True})
+
+                    if wind_fig is None:
+                        map = html.Div([dcc.Graph(figure=fig, id="map-graph", responsive=True, config={"scrollZoom": True, 'responsive':True})])
+                    else:
+                        map = html.Div([dcc.Graph(figure=fig, id="map-graph", responsive=True, config={"scrollZoom": True, 'responsive':True}),
+                            dcc.Graph(
+                                id="wind-rose",
+                                figure=wind_fig,   # or update via a callback
+                                style={
+                                    "position": "absolute",
+                                    "top": "100px",
+                                    "right": "100px",
+                                    "width": "200px",
+                                    "height": "200px",
+                                    "background": "rgba(255,255,255,0.7)",
+                                    "border": "1px solid black",
+                                    "border-radius": "5px",
+                                }
+                            )
+                        ], style={"position": "relative"})
                     map_state['map_displayed'] = True
                     logger.debug(f'update-map: map created {(datetime.now()-spy_time).total_seconds()} sec')
                 except Exception as e:
@@ -782,7 +888,8 @@ def requery_geo(engine, config, lock):
                 query_results['data'][today] = None
             if query_results['data'][today] is not None:
                 first_time = local_tz.localize(datetime(today.year, today.month, today.day, 0, 0, 0)).astimezone(pytz.utc)
-                last_time = local_tz.localize(datetime(today.year, today.month, today.day, 23, 59, 59)).astimezone(pytz.utc)
+                day_end_time = today_end_time(config)
+                last_time = local_tz.localize(datetime(day.year, day.month, day.day, day_end_time.hour, day_end_time.minute, day_end_time.second)).astimezone(pytz.utc)
                 full_refresh_counter -= 1
                 full_refresh = False
                 if full_refresh_counter <= 0:
@@ -822,7 +929,8 @@ def requery_geo(engine, config, lock):
             empty_days = [day for day in query_results['data'].keys() if query_results['data'][day] is None]
             for day in empty_days:
                 first_time = local_tz.localize(datetime(day.year, day.month, day.day, 0, 0, 0)).astimezone(pytz.utc)
-                last_time = local_tz.localize(datetime(day.year, day.month, day.day, 23, 59, 59)).astimezone(pytz.utc)
+                day_end_time = today_end_time(config)
+                last_time = local_tz.localize(datetime(day.year, day.month, day.day, day_end_time.hour, day_end_time.minute, day_end_time.second)).astimezone(pytz.utc)
                 logger.debug(f'requery_geo original first time ={first_time}, end_time={last_time}')
                 start_time = datetime.now()
 
