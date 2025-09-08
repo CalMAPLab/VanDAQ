@@ -335,7 +335,7 @@ def today_end_time(config):
             end_datetime = datetime.combine(date.today(), end_time) + timedelta(hours=hour_offset)
             end_time = end_datetime.time()
     else:
-        end_time = datetime.time(23, 59, 59)
+        end_time = datetime.now().time().replace(hour=23, minute=59, second=59, microsecond=0)
 
     return end_time
 
