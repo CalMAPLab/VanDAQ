@@ -15,6 +15,7 @@ from logging.handlers import TimedRotatingFileHandler
 from Dash_Alarm_Table import *
 from Dash_Dashboard import *
 from Dash_Mapper_FSM import layout_map_display, update_map_page
+from Dash_Instrument_Controls import layout_instrument_controls, instrument_controls
 
 # Initialize the Dash app
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
@@ -62,6 +63,7 @@ engine = create_engine(connect_string, echo=False)
 update_dashboard(app, engine, config)
 update_alarm_table(app, engine, config)
 update_map_page(app, engine, config)
+instrument_controls(app, engine, config)
 
 tabstyle = {'padding':'5px 25px', 'position': 'sticky'}
 # Main layout with tabs
@@ -70,12 +72,14 @@ app.layout = html.Div([
     dcc.Tabs(id='tabs', className="tab-container", value='dashboard', children=[
         dcc.Tab(label='Dashboard', value='dashboard', style=tabstyle, selected_style=tabstyle),
         dcc.Tab(label='Alarm Table', value='alarm-table', style=tabstyle, selected_style=tabstyle),
-        dcc.Tab(label='Map', value='map-display', style=tabstyle, selected_style=tabstyle)
+        dcc.Tab(label='Map', value='map-display', style=tabstyle, selected_style=tabstyle),
+        dcc.Tab(label='Controls', value='instrument-controls', style=tabstyle, selected_style=tabstyle)
     ]),
     html.Div([
         html.Div(layout_dashboard(config), id="dashboard-content", style={"display": "block"}),
         html.Div(layout_alarm_table(config), id="alarm-table-content", style={"display": "none"}),
-        html.Div(layout_map_display(config), id="map-content", style={"display": "none"})                
+        html.Div(layout_map_display(config), id="map-content", style={"display": "none"}),
+        html.Div(layout_instrument_controls(config), id="instrument-controls-content", style={"display": "none"})
     ], id='app-content', className='page-content')
 ])
 
@@ -85,17 +89,20 @@ app.layout = html.Div([
     Output('dashboard-content', 'style'),
     Output('alarm-table-content', 'style'),
     Output('map-content', 'style'),
+    Output('instrument-controls-content', 'style'),
     Input('tabs', 'value'),
     suppress_callback_exceptions=True
 )
 def render_tab(tab_name):
     logger.debug(f'Changing to tab {tab_name}')
     if tab_name == 'dashboard':
-        return {"display": "block"}, {"display": "none"}, {"display": "none"}
+        return {"display": "block"}, {"display": "none"}, {"display": "none"}, {"display": "none"}
     elif tab_name == 'alarm-table':
-        return {"display": "none"}, {"display": "block"}, {"display": "none"}
+        return {"display": "none"}, {"display": "block"}, {"display": "none"}, {"display": "none"}
     elif tab_name == 'map-display':
-        return {"display": "none"}, {"display": "none"}, {"display": "block"}
+        return {"display": "none"}, {"display": "none"}, {"display": "block"}, {"display": "none"}
+    elif tab_name == 'instrument-controls':
+        return {"display": "none"}, {"display": "none"}, {"display": "none"}, {"display": "block"}
     raise PreventUpdate
 
 

@@ -217,8 +217,37 @@ class RecordParser:
 
         return resultList
 
+logger = None
+
+def open_queue(qname, maxmsgs, maxmsgsize, destroy_first=False):
+    qExists = False
+    queue = None
+    # check if queue already exists
+    try:
+        queue = posixmq.Queue(qname)
+        qExists = True
+    except OSError as e:
+        logger.debug('Queue does not yet exist')
+    if qExists:
+        if destroy_first:
+            queue.close()
+            queue.unlink()
+            qExists = False
+        else:
+            attribs = queue.qattr()
+            # if queue exists, check to make sure it is big enough
+            if attribs['max_size'] < maxmsgs or attribs['max_msgbytes'] < maxmsgsize:
+                # destroy the queue if it is too small
+                queue.close()
+                queue.unlink()
+                qExists = False
+    if not qExists:
+        # create the queue if it doesn't exist or has been detroyed
+        queue = posixmq.Queue(qname, maxsize=maxmsgs, maxmsgsize=maxmsgsize)
+    return queue
 
 class Acquirer:
+    global logger
     def __init__(self, config_dict):  
         self.verbose = False  
         self.last_acquire_time = datetime.now()
@@ -230,7 +259,10 @@ class Acquirer:
         self.sim_previous_value = 0
         self.sim_direction = 1
         self.config = config_dict
+        self.command_queue = None
+        self.response_queue = None
         self.logger = logging.getLogger(self.config['logs']['logger_name'])
+        logger = self.logger
         try:
             if self.config['verbose'] > 0:
                 self.verbose = True
@@ -242,33 +274,45 @@ class Acquirer:
         except Exception as e:
             pass
         if doqueue:
-            self.open_queue()
-
-    def open_queue(self):
-        myMaxMsgSize = self.config['queue']['max_msg_size']
-        myMaxMsgs = self.config['queue']['max_msgs']
-        myQname = self.config['queue']['name']
-        qExists = False
-        # check if queue already exists
-        try:
-            queue = posixmq.Queue(myQname)
-            qExists = True
-        except OSError as e:
-            self.logger.debug('Queue does not yet exist')
-        if qExists:
-            attribs = queue.qattr()
-            # if queue exists, check to make sure it is big enough
-            if attribs['max_size'] < myMaxMsgs or attribs['max_msgbytes'] < myMaxMsgSize:
-                # destroy the queue if it is too small
-                queue.close()
-                queue.unlink()
-                qExists = False
-        if not qExists:
-            # create the queue if it doesn't exist or has been detroyed
-            queue = posixmq.Queue(myQname, maxsize=myMaxMsgs, maxmsgsize=myMaxMsgSize)
-        self.queue = queue
-
-
+            myMaxMsgSize = self.config['queue']['max_msg_size']
+            myMaxMsgs = self.config['queue']['max_msgs']
+            myQname = self.config['queue']['name']
+            self.queue = open_queue(myQname, myMaxMsgs, myMaxMsgSize)
+        command_queue_config = self.config.get('command_queue')
+        if command_queue_config:
+            self.command_queue = open_queue(
+                command_queue_config['name'],
+                command_queue_config['max_msgs'],
+                command_queue_config['max_msg_size'],
+                destroy_first=True
+            )
+        response_queue_config = self.config.get('response_queue')
+        if response_queue_config:
+            self.response_queue = open_queue(
+                response_queue_config['name'],
+                response_queue_config['max_msgs'],
+                response_queue_config['max_msg_size'],
+                destroy_first=True
+            )
+    
+    def get_command_from_queue(self):
+        command = None
+        if self.command_queue and self.command_queue.qsize() > 0:
+            try:
+                sleep(0.5)  # give time for the full message to arrive
+                command = self.command_queue.get()
+            except (OSError, posixmq.QueueError) as e:
+                self.logger.error(f"Failed to unload queue {name}: {e}")
+        return command
+    
+    def put_response_to_queue(self, response):
+        if self.response_queue and response:
+            try:
+                self.response_queue.put(response)
+            except Exception as e:
+                self.logger.error('Error putting response to queue: '+ str(e))
+        return
+    
     def get_next_instrument_record(self):
         # this is always overridden
         # gets a measurement record from the instrument
@@ -401,6 +445,7 @@ class SerialStreamAcquirer(Acquirer):
                 
     def run(self):
         cycle_time = self.config['stream'].get('cycle_time',1)
+        command = None
         while True:
             if self.check_serial_open():
                 try:
@@ -410,14 +455,30 @@ class SerialStreamAcquirer(Acquirer):
                     self.logger.error('Error reading serial port '+self.config['serial']['device']+' :'+ str(e))
                     sleep(cycle_time)
                 else:
-
+                    if self.config.get('response_header'):
+                        header = self.config['response_header']
+                        if line and line[0:len(header)] == header:
+                            self.logger.info('Received response from instrument: '+line.strip()) 
+                            response = {'response': line}
+                            self.put_response_to_queue(response)
+                            continue
                     if line and len(line.split(self.config['stream']['item_delimiter'])) == self.num_items_per_line:
                         #print(str(line))
+                        command = None
                         dataMessage = self.parse_simple_string_to_record(line,config_dict=self.config['stream'])
                         dataMessage = self.apply_alarms(dataMessage)
                         if dataMessage and len(dataMessage) > 0:
                             #print(str(dataMessage))
                             self.send_measurement_to_queue(dataMessage)
+                if self.command_queue:
+                    command = self.get_command_from_queue()
+                    if command:
+                        self.logger.info('Received command from queue: '+ str(command))
+                        if 'command' in command:
+                            try:
+                                self.serial_port.write(str.encode(command['command']))
+                            except Exception as e:
+                                self.logger.error('Error writing to serial port '+self.config['serial']['device']+' :'+ str(e))
             else:
                 sleep(cycle_time)
 
@@ -495,7 +556,7 @@ class NetworkAcquirer(Acquirer):
 
         if not self.socket or not self.socket_open:
             context = zmq.Context()
-            self.socket = context.socket(zmq.PULL)  # Reply socket
+            self.socket = context.socket(zmq.PULL)  # response socket
             try:
                 self.socket.bind('tcp://*:'+str(port))
                 self.socket_open = True
@@ -772,6 +833,7 @@ class SimulatedAcquirer(Acquirer):
             line = self.make_data_line()
             record = self.parse_simple_string_to_record(line,config_dict=self.config['stream'])
             record = self.apply_alarms(record)
+            print(str(record))
             self.send_measurement_to_queue(record)
             time_since_last_cycle = datetime.now() - cycle_time
             to = (cycle_interval.seconds * 1000 - time_since_last_cycle.microseconds) / 1000
