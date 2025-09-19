@@ -2,7 +2,8 @@ dashboard_refresh_secs: 5
 alarm_shapes: False
 master_GPS: "ublox_M8Q_GPS"
 #master_GPS: "GPS_sim"
-db_connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-dev"
+db_connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-test"
+shape_file_dir: "/home/vandaq/vandaq/web/shapefiles"
 show_mute_instruments: True
 display_timezone: "US/Pacific"
 logs:
@@ -11,10 +12,12 @@ logs:
   log_level: "INFO"
   logger_name: "dashboard"
 mapping:
-  #default_platform: "van1"
+  default_platform: "van1"
   default_gps: "ublox_M8Q_GPS"
-  default_gps: "GPS_sim"
   map_check_secs: 3
+  # instruments:
+  #   - Aeris_CH4_C2H6
+  #   - Aeris_N2O_CO   
 display_params:
   PseudoTech_Bozometer:
     graph:

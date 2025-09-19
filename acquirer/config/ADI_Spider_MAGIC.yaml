@@ -1,0 +1,26 @@
+---
+platform: van1
+instrument: ADI_Spider_MAGIC
+type: simpleSerial
+queue:
+  name: "/dev-measurements"
+  max_msg_size: 8000
+  max_msgs: 50
+connection: serial
+serial:
+  device: "/dev/usb_serial_ADI_Spider_MAGIC"
+  baud: 115200
+measurement_delay_secs: 0 
+stream:
+  line_delimiter: "\r\n"
+  item_delimiter: ","
+  items: "inst_datetime,Conc,DewPoint,Input_T,Input_RH,Cond_T,Init_T,Mod_T,Opt_T,HeatSink_T,Case_T,Wick,ModSet,Humid_Exit_DP,Wick_Raw_ADC,DMA_Voltage,Sheath_Flow,Abs_P,Aerosol_Flow,Corr_Live_Time,Meas_Dead_Time,Raw_Counts,dthr2_Pctl,dtrh3,dthr4,StatusHex,Status,SerNum"
+  formats: "%Y/%m/%d %H:%M:%S,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,h,s,x" 
+  units: "datetime,count/cm3,deg_c,deg_c,%_rh,deg_c,deg_c,deg_c,deg_c,deg_c,deg_c,%,deg_c,deg_c,count,V,cm3/min,mbar,cm3/min,frac*10000,frac*10000,count,mV,mV,mV,Status,Status,x"
+  acqTypes: "inst_datetime,measurement_calibrated,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,x"
+  
+logs:
+  log_dir: "/home/vandaq/vandaq/acquirer/log"
+  log_file: "ADI_Spider_MAGIC.log"
+  log_level: "INFO"
+  logger_name: "ADI_Spider_MAGIC"

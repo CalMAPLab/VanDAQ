@@ -42,9 +42,12 @@ class RecordParser:
         instrument_date = None
         instrument_time = None
         next_day = False
-        items = config_dict['items'].split(config_dict['item_delimiter'])
+        items = config_dict['items'].split(',')
         parts = line.split(config_dict['item_delimiter'])
-        formats = config_dict['formats'].split(config_dict['item_delimiter'])
+        formats = config_dict['formats'].split(',')
+        scalers = config_dict.get('scalers', None)
+        if scalers:
+            scalers = scalers.split(',')
         try:
             if 'inst_datetime' in items:
                 idx = items.index('inst_datetime')
@@ -94,7 +97,10 @@ class RecordParser:
             if items[i] != 'x':
                 try:
                     if config_dict['formats'].split(',')[i] == 'f':
-                        self.buffer[instrument_key][items[i]].append(float(part))
+                        value = float(part)
+                        if scalers and scalers[i] != '1':
+                            value *= float(scalers[i])
+                        self.buffer[instrument_key][items[i]].append(value)
                     elif config_dict['formats'].split(',')[i] in ['s', 'h']:
                         self.buffer[instrument_key][items[i]].append(part)
                 except ValueError:
@@ -120,6 +126,9 @@ class RecordParser:
         formats = config_dict['formats'].split(',')
         units = config_dict['units'].split(',')
         acqTypes = config_dict['acqTypes'].split(',')
+        scalers = config_dict.get('scalers', None)
+        if scalers:
+            scalers = scalers.split(',')
         
         resultList = []
         acquisition_time = datetime.now().replace(microsecond=0)
@@ -132,6 +141,8 @@ class RecordParser:
                     string = None
                     if formats[i] == 'f':
                         value = float(parts[i])
+                        if scalers and scalers[i] != '1':
+                            value *= float(scalers[i])
                     elif formats[i] in ['s','h']:
                         string = parts[i]
                     
@@ -601,7 +612,13 @@ class NetworkStreamingAcquirer(NetworkAcquirer):
         except Exception as e:
             self.logger.error('Error converting measurement dict to string, err:' + str(e))
             return None
-        
+
+    def whole_dict_string_message(self, values_dict, config, dict):
+        message = {'platform':config['platform'], 'instrument':config['instrument'], 'parameter':config[dict]['wholeDict']['parameter'], 'unit':config[dict]['wholeDict']['unit'], 'acquisition_type':config[dict]['wholeDict']['acqType'], 'acquisition_time':datetime.now().replace(microsecond=0), 'sample_time':datetime.now().replace(microsecond=0) - timedelta(seconds = self.measurement_delay)}
+        value_string = str(values_dict).replace(',', ';')
+        message['string'] = value_string
+        return message
+    
     def run(self):
         while True:
             if self.check_socket_open():
@@ -630,6 +647,11 @@ class NetworkStreamingAcquirer(NetworkAcquirer):
                                     dataMessage = self.apply_alarms(dataMessage)
                                     if len(dataMessage) > 0:
                                         self.send_measurement_to_queue(dataMessage)
+                                if 'wholeDict' in self.config[dict]:
+                                    dataMessage = self.whole_dict_string_message(values_dict, self.config, dict)
+                                    if len(dataMessage) > 0:
+                                        self.send_measurement_to_queue(dataMessage)
+
             else:
                 sleep(1)
 
