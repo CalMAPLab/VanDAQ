@@ -6,16 +6,22 @@ import pandas as pd
 import numpy as np
 import copy
 from datetime import datetime, timedelta, date
+import plotly.graph_objects as go
+import plotly.io as pio
+import base64
+
 import time
 import pytz
 import random
 import json
+from glob import glob
 from threading import Thread, Lock
 from sqlalchemy import create_engine
 from transitions import Machine
 
 from vandaq_2step_measurements_query import get_measurements_with_alarms_and_locations
 from vandaq_2step_measurements_query import get_all_geolocations
+import os
 
 global query_results
 global logger
@@ -97,9 +103,10 @@ class MapMachine(object):
 
 def get_geolocations(engine, config, timezone= None):
     geo_df = get_all_geolocations(engine)
-    if timezone:
-        geo_df['sample_time'] = geo_df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(timezone)
-        geo_df.set_index('sample_time', inplace = True, drop=False)
+    if not geo_df.empty:
+        if timezone:
+            geo_df['sample_time'] = geo_df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(timezone)
+            geo_df.set_index('sample_time', inplace = True, drop=False)
     return geo_df
 
 def find_missing_dates(dates):
@@ -148,9 +155,45 @@ def layout_map_display(config):
     platform = config['mapping'].get('default_platform')
     gps = config['mapping'].get('default_gps')
     check_interval = config['mapping'].get('map_check_secs', 2)
-
-    while query_results.get('gps_dates') == None:
+    shapefiles = glob(f"{config['shape_file_dir']}/*.geojson")
+    shapes = ['']
+    for sf in shapefiles:
+        if sf.endswith('.geojson'):
+            sf = os.path.basename(sf)
+            shape = sf.replace('.geojson','')
+            shapes.append(shape)
+    i = 0
+    max_retries = 100
+    
+    while query_results.get('gps_dates') == None and i < max_retries:
         time.sleep(0.1)
+        i += 1
+
+    date_picker = None
+    
+    gps_dates = query_results.get('gps_dates', None)
+    if gps_dates:
+        # Normal case: valid dates
+        date_picker = dcc.DatePickerSingle(
+            id='date-picker',
+            min_date_allowed=min(gps_dates),
+            max_date_allowed=max(gps_dates),
+            disabled_days=find_missing_dates(gps_dates),
+            display_format='YYYY-MM-DD',
+            date=today_date(config),
+            disabled=False
+        )
+    else:
+        # No dates available: disable the picker entirely
+        date_picker = dcc.DatePickerSingle(
+            id='date-picker',
+            min_date_allowed=today_date(config),
+            max_date_allowed=today_date(config),
+            display_format='YYYY-MM-DD',
+            date=today_date(config),
+            disabled=False
+        )
+
 
     page = html.Div([
     html.H1("Drive Map"),
@@ -169,16 +212,7 @@ def layout_map_display(config):
         #html.H3("platform"),
         html.Div([
             html.Div("Date"),
-            html.Div(
-                dcc.DatePickerSingle(
-                    id='date-picker',
-                    min_date_allowed=min(query_results['gps_dates']),
-                    max_date_allowed=max(query_results['gps_dates']),
-                    disabled_days=find_missing_dates(query_results['gps_dates']),
-                    display_format='YYYY-MM-DD',
-                    date=today_date(config),
-                    disabled=True
-                ))
+            html.Div(date_picker)
             ]),
         html.Div([
             html.Div("Platform"),
@@ -224,6 +258,18 @@ def layout_map_display(config):
             )
             )
         ]),
+        html.Div([
+            html.Div("Places"),
+            html.Div(
+            dcc.Dropdown(
+                id='community-selector',
+                options=shapes,
+                value=None,
+                multi=True,
+                clearable=False
+            )
+            )
+        ]),
         html.Button('Center',id="center-button", className='map-control-button', n_clicks=0),
     ]
     ,style={"display": "flex", "flexDirection": "row", "gap": "10px"}),
@@ -260,12 +306,38 @@ def calculate_zoom_level(dataframe):
     return zoom, center
 
 def today_date(config):
+    the_date = None
     local_tz = pytz.utc
     if 'display_timezone' in config:
         local_tz =  pytz.timezone(config['display_timezone'])
-    return pytz.utc.localize(datetime.now()).astimezone(local_tz).date()
+    if config['mapping'].get('test_day', None):
+        test_day = datetime.strptime(config['mapping']['test_day'], '%m/%d/%Y').date()
+        if config['mapping'].get('test_hour_offset', None):
+            hour_offset = int(config['mapping']['test_hour_offset'])
+            the_date = pytz.utc.localize(datetime.now() + timedelta(hours=hour_offset)).astimezone(local_tz).date()
+            if the_date != test_day:
+                the_date = test_day
+        else:
+            the_date = test_day
+    else:
+        the_date = pytz.utc.localize(datetime.now()).astimezone(local_tz).date()
+    return the_date
 
+def today_end_time(config):
+    local_tz = pytz.utc
+    if 'display_timezone' in config:
+        local_tz =  pytz.timezone(config['display_timezone'])
+    if config['mapping'].get('test_day', None):
+        end_time = pytz.utc.localize(datetime.now()).astimezone(local_tz).time()
+        if config['mapping'].get('test_hour_offset', None):
+            hour_offset = int(config['mapping']['test_hour_offset'])
+            # Convert time to datetime, add timedelta, then extract time
+            end_datetime = datetime.combine(date.today(), end_time) + timedelta(hours=hour_offset)
+            end_time = end_datetime.time()
+    else:
+        end_time = datetime.now().time().replace(hour=23, minute=59, second=59, microsecond=0)
 
+    return end_time
 
 def update_map_page(app, engine, config):
     global myConfig
@@ -446,13 +518,14 @@ def update_map_page(app, engine, config):
         Input('platform-selector','value'),
         Input('gps-selector','value'),
         Input('parameter-selector','value'),
+        Input('community-selector','value'),
         State('instrument-selector','value'),
         State('date-picker','date'),
         State('map-state', 'data'),
         State('fsm-store', 'data'),
         prevent_initial_call=True
     )
-    def update_map(refresh, sel_platform, sel_gps, sel_parameter, sel_instrument, date, map_state, fsm_data):
+    def update_map(refresh, sel_platform, sel_gps, sel_parameter, sel_community, sel_instrument, date, map_state, fsm_data):
         # Combine date and time
         spy_time = datetime.now()
 
@@ -551,8 +624,125 @@ def update_map_page(app, engine, config):
                             showlegend=False,
                             name="Current Location"
                         )
+                    wind_fig = None
+                    if config['mapping'].get('wind_rose', None) and config['mapping']['wind_rose'].get('show', False):
+                        wr_instrument = config['mapping']['wind_rose'].get('instrument',None)
+                        wr_speed_param = config['mapping']['wind_rose'].get('wind_speed_param',None)
+                        wr_dir_param = config['mapping']['wind_rose'].get('wind_dir_param',None)
+                        if wr_instrument and wr_speed_param and wr_dir_param:
+                            ws_recs = df[(df["instrument"] == wr_instrument)
+                                        & (df["parameter"]  == wr_speed_param)
+                                        ].sort_index()
+                            wd_recs = df[(df["instrument"] == wr_instrument)
+                                        & (df["parameter"]  == wr_dir_param)
+                                        ].sort_index()
+                            num_wr_points = config['mapping']['wind_rose'].get('num_points',1)
+                            if not ws_recs.empty and not wd_recs.empty:
+                                # Collect the last num_wr_points wind speed values into a list
+                                wind_speeds = ws_recs["value"].tail(num_wr_points).tolist()
+                                wind_dirs = wd_recs["value"].tail(num_wr_points).tolist()
+                                wind_fig = go.Figure()
 
-                    map = dcc.Graph(figure=fig, id="map-graph", responsive=True, config={"scrollZoom": True, 'responsive':True})
+                                # Add wind rose as an inset in the upper right corner
+                                if len(wind_speeds) > 0 and len(wind_dirs) > 0:
+                                    speeds = wind_speeds
+                                    angles = wind_dirs
+                                    # Create wind rose figure
+                                    wind_fig = go.Figure()
+
+                                    wind_fig.add_trace(go.Barpolar(
+                                        r=speeds,
+                                        theta=angles,
+                                        width=45,
+                                        marker_color=speeds,
+                                        marker_colorscale="Viridis",
+                                        opacity=0.7,
+                                        hovertemplate="dir [deg]: %{theta}<br>speed [m/s]: %{r}<extra></extra>"
+                                    ))
+
+                                    wind_fig.update_layout(
+                                        title=dict(text="Wind", x=0.5, xanchor="center"),
+                                        margin=dict(l=0, r=0, t=30, b=20),  # give room for title
+                                        polar=dict(
+                                            radialaxis=dict(
+                                                showticklabels=False,
+                                                ticks=''
+                                            ),
+                                            angularaxis=dict(
+                                                rotation=90,           # 0° at top
+                                                direction="clockwise", # degrees increase clockwise
+                                                tickmode="array",
+                                                tickvals=[0, 90, 180, 270],
+                                                ticktext=["N", "E", "S", "W"]
+                                            )
+                                        ),
+                                        showlegend=False,
+                                        paper_bgcolor='rgba(0,0,0,0)',
+                                        plot_bgcolor='rgba(0,0,0,0)',
+                                        width=200,
+                                        height=200
+                                    )                                    
+
+                    # Add community polygons if selected
+                    layers = []
+                    point_lats = []
+                    point_lons = []
+
+                    if sel_community and sel_community != ['']:
+                        for item in sel_community:
+                            shape = config['shape_file_dir'] + f'/{item}.geojson'
+                            with open(shape) as f:
+                                geojson_data = json.load(f)
+                            for feature in geojson_data["features"]:
+                                geom_type = feature["geometry"]["type"]
+
+                                if geom_type in ["Polygon", "MultiPolygon", "LineString", "MultiLineString"]:
+                                    # Add as boundary layer
+                                    layers.append({
+                                        "source": {
+                                            "type": "FeatureCollection",
+                                            "features": [feature]  # isolate this feature
+                                        },
+                                        "type": "line",
+                                        "color": "red",
+                                        "line": {"width": 3},
+                                    })
+
+                                elif geom_type == "Point":
+                                    lon, lat = feature["geometry"]["coordinates"]
+                                    point_lons.append(lon)
+                                    point_lats.append(lat)
+
+                    # Update layout once with all the layers
+                    fig.update_layout(mapbox={"layers": layers})
+                    if point_lats and point_lons:
+                        fig.add_trace(go.Scattermapbox(
+                            lat=point_lats,
+                            lon=point_lons,
+                            mode="markers",
+                            marker=dict(size=20, color="blue", symbol="circle"),
+                            name="Community Points"
+                        ))
+
+                    if wind_fig is None:
+                        map = html.Div([dcc.Graph(figure=fig, id="map-graph", responsive=True, config={"scrollZoom": True, 'responsive':True})])
+                    else:
+                        map = html.Div([dcc.Graph(figure=fig, id="map-graph", responsive=True, config={"scrollZoom": True, 'responsive':True}),
+                            dcc.Graph(
+                                id="wind-rose",
+                                figure=wind_fig,   # or update via a callback
+                                style={
+                                    "position": "absolute",
+                                    "top": "100px",
+                                    "right": "100px",
+                                    "width": "200px",
+                                    "height": "200px",
+                                    "background": "rgba(255,255,255,0.7)",
+                                    "border": "1px solid black",
+                                    "border-radius": "5px",
+                                }
+                            )
+                        ], style={"position": "relative"})
                     map_state['map_displayed'] = True
                     logger.debug(f'update-map: map created {(datetime.now()-spy_time).total_seconds()} sec')
                 except Exception as e:
@@ -677,81 +867,88 @@ def requery_geo(engine, config, lock):
 
     # Get initial geolocation data
     gf = get_geolocations(engine, config, timezone=config.get('display_timezone', 'UTC'))
-    query_results.update({
-        'gps_dates': [datetime.fromordinal(d.toordinal()) for d in gf['sample_time'].dt.date.unique()],
-        'gps_instruments': gf['instrument'].unique(),
-        'gps_platforms': gf['platform'].unique(),
-        'all_geolocations': gf,
-        'data':{today_date(config):None}
-    })
+    if not gf.empty:
+        query_results.update({
+            'gps_dates': [datetime.fromordinal(d.toordinal()) for d in gf['sample_time'].dt.date.unique()],
+            'gps_instruments': gf['instrument'].unique(),
+            'gps_platforms': gf['platform'].unique(),
+            'all_geolocations': gf,
+            'data':{today_date(config):None}
+        })
 
-    FULL_REFERESH_EVERY = 10
-    full_refresh_counter = FULL_REFERESH_EVERY
+        FULL_REFERESH_EVERY = 100  # Number of times to query for new data before doing a full refresh
+        full_refresh_counter = FULL_REFERESH_EVERY
 
-    while True:
-        # first check for new data for today (if today's data previously fetched)
-        today = today_date(config)
-        # In case map is run overnight into a new day 
-        if not today in query_results['data']:
-            query_results['data'][today] = None
-        if query_results['data'][today] is not None:
-            first_time = local_tz.localize(datetime(today.year, today.month, today.day, 0, 0, 0)).astimezone(pytz.utc)
-            last_time = local_tz.localize(datetime(today.year, today.month, today.day, 23, 59, 59)).astimezone(pytz.utc)
-            full_refresh_counter -= 1
-            full_refresh = False
-            if full_refresh_counter <= 0:
-                full_refresh = True
-                full_refresh_counter = FULL_REFERESH_EVERY
-                logger.debug(f'requery_geo full_refresh = {full_refresh}, first_time = {first_time}, last_time = {last_time}')
-            else:
-                first_time = query_results['data'][today]['sample_time'].max().astimezone(pytz.utc)+timedelta(0,1) if isinstance(query_results['data'][today], pd.DataFrame) and not query_results['data'][today].empty else first_time
-            # Fetch new measurements
-            df = get_measurements_with_alarms_and_locations(
-                engine, start_time=first_time, end_time=last_time,
-                platform=None, gps_instrument=None, acquisition_type='measurement_calibrated,measurement_raw'
-            )
-            # if there's new data to add to today
-            if len(df) > 0:
-                if not full_refresh:
-                    logger.debug(f'requery_geo got additional data for today: {len(df)} records')
-                    # convert to local time
-                    df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config.get('display_timezone', 'UTC'))
-                    df.set_index('sample_time', inplace=True, drop=False)
-                    # concatinate data to today's dataframe
-                    with lock: 
-                        query_results['data'][today] = pd.concat([query_results['data'][today], df])            
+        while True:
+            # first check for new data for today (if today's data previously fetched)
+            today = today_date(config)
+            instruments = config['mapping'].get('instruments', None)
+            # In case map is run overnight into a new day 
+            if not today in query_results['data']:
+                query_results['data'][today] = None
+            if query_results['data'][today] is not None:
+                first_time = local_tz.localize(datetime(today.year, today.month, today.day, 0, 0, 0)).astimezone(pytz.utc)
+                day_end_time = today_end_time(config)
+                last_time = local_tz.localize(datetime(day.year, day.month, day.day, day_end_time.hour, day_end_time.minute, day_end_time.second)).astimezone(pytz.utc)
+                full_refresh_counter -= 1
+                full_refresh = False
+                if full_refresh_counter <= 0:
+                    full_refresh = True
+                    full_refresh_counter = FULL_REFERESH_EVERY
+                    logger.debug(f'requery_geo full_refresh = {full_refresh}, first_time = {first_time}, last_time = {last_time}')
                 else:
-                    logger.debug(f'requery_geo got new data for today: {len(df)} records')
-                    # convert to local time
+                    first_time = query_results['data'][today]['sample_time'].max().astimezone(pytz.utc)+timedelta(0,1) if isinstance(query_results['data'][today], pd.DataFrame) and not query_results['data'][today].empty else first_time
+                # Fetch new measurements
+                before_time = datetime.now()
+                df = get_measurements_with_alarms_and_locations(
+                    engine, start_time=first_time, end_time=last_time, instruments=instruments,
+                    platform=None, gps_instrument=None, acquisition_type='measurement_calibrated,measurement_raw'
+                )
+                after_time = datetime.now()
+                logger.debug(f'requery_geo queried new data for today: {len(df)} records, took {(after_time-before_time).total_seconds()} seconds')
+                # if there's new data to add to today
+                if len(df) > 0:
+                    if not full_refresh:
+                        logger.debug(f'requery_geo got additional data for today: {len(df)} records')
+                        # convert to local time
+                        df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config.get('display_timezone', 'UTC'))
+                        df.set_index('sample_time', inplace=True, drop=False)
+                        # concatinate data to today's dataframe
+                        with lock: 
+                            query_results['data'][today] = pd.concat([query_results['data'][today], df])            
+                    else:
+                        logger.debug(f'requery_geo got new data for today: {len(df)} records')
+                        # convert to local time
+                        df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config.get('display_timezone', 'UTC'))
+                        df.set_index('sample_time', inplace=True, drop=False)
+                        # set today's dataframe to the new data
+                        with lock: 
+                            query_results['data'][today] = df
+
+            # query for any selected days that do not yet have data 
+            empty_days = [day for day in query_results['data'].keys() if query_results['data'][day] is None]
+            for day in empty_days:
+                first_time = local_tz.localize(datetime(day.year, day.month, day.day, 0, 0, 0)).astimezone(pytz.utc)
+                day_end_time = today_end_time(config)
+                last_time = local_tz.localize(datetime(day.year, day.month, day.day, day_end_time.hour, day_end_time.minute, day_end_time.second)).astimezone(pytz.utc)
+                logger.debug(f'requery_geo original first time ={first_time}, end_time={last_time}')
+                start_time = datetime.now()
+
+                logger.debug(f'requery_geo about to query start_time={first_time}, end_time={last_time}')
+                # Fetch new measurements
+                df = get_measurements_with_alarms_and_locations(
+                    engine, start_time=first_time, end_time=last_time, instruments=instruments,
+                    platform=None, gps_instrument=None, acquisition_type='measurement_calibrated,measurement_raw'
+                )
+                logger.debug(f'requery_geo got new data for day {day}: {len(df)} records')
+    
+                if not df.empty:
                     df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config.get('display_timezone', 'UTC'))
                     df.set_index('sample_time', inplace=True, drop=False)
-                    # set today's dataframe to the new data
-                    with lock: 
-                        query_results['data'][today] = df
+                    with lock:
+                        query_results['data'][day] = df           
 
-        # query for any selected days that do not yet have data 
-        empty_days = [day for day in query_results['data'].keys() if query_results['data'][day] is None]
-        for day in empty_days:
-            first_time = local_tz.localize(datetime(day.year, day.month, day.day, 0, 0, 0)).astimezone(pytz.utc)
-            last_time = local_tz.localize(datetime(day.year, day.month, day.day, 23, 59, 59)).astimezone(pytz.utc)
-            logger.debug(f'requery_geo original first time ={first_time}, end_time={last_time}')
-            start_time = datetime.now()
-
-            logger.debug(f'requery_geo about to query start_time={first_time}, end_time={last_time}')
-            # Fetch new measurements
-            df = get_measurements_with_alarms_and_locations(
-                engine, start_time=first_time, end_time=last_time,
-                platform=None, gps_instrument=None, acquisition_type='measurement_calibrated,measurement_raw'
-            )
-            logger.debug(f'requery_geo got new data for day {day}: {len(df)} records')
- 
-            if not df.empty:
-                df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config.get('display_timezone', 'UTC'))
-                df.set_index('sample_time', inplace=True, drop=False)
-                with lock:
-                    query_results['data'][day] = df           
-
-        time.sleep(0.5)  # Prevent excessive CPU usage
+    time.sleep(1)  # Prevent excessive CPU usage
 
 if __name__ == "__main__":
     app = dash.Dash(__name__)

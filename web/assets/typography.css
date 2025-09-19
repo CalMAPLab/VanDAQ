@@ -137,6 +137,10 @@ h1, h2, h3, h4, h5, h6 {
     width:130px;
 }
 
+#community-selector .Select-control {
+    width:150px;
+}
+
 #map-graph{
     height: 700px;
 }

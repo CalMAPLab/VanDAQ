@@ -15,11 +15,43 @@ measurement_delay_secs: 0
 stream:
   line_delimiter: "\r\n"
   item_delimiter: ","
-  items: "x,NOx,NO,x,NO2,x,x,x,x,x,x,x,x,x,x,x,x,x,x"
-  formats: "x,f,f,x,f,x,x,x,x,x,x,x,x,x,x,x,x,x,x" 
+  # b1,b2,a1,a2,c1,c2,c3,s1,s2,s3,s4,s5,s6,cdj,vvvv,hxf,eeee,wwww,iott(tt)(tt)
+  # b1 = NO of measuring channel B
+  # b2 = NOx of measuring channel B
+  # a1 = NO of measuring channel A
+  # a2 = NOx from measuring channel A
+  # c1 = NO2
+  # c2 = NH3    
+  items: "x,NOx,NO,x,NO2,x,x,x,x,x,x,x,x,cdj,vvvv,hxf,eeee,wwww,iott"
+  formats: "x,f,f,x,f,x,x,x,x,x,x,x,x,s,s,s,h,h,s" 
   units: "x,ppb,ppb,x,ppb,x,x,x,x,x,x,x,x,x,x,x,x,x,x"
-  acqTypes: "x,measurement_calibrated,measurement_calibrated,x,measurement_calibrated,x,x,x,x,x,x,x,x,x,x,x,x,x,x"
-  
+  acqTypes: "x,measurement_calibrated,measurement_calibrated,x,measurement_calibrated,x,x,x,x,x,x,x,x,engineering,engineering,engineering,engineering,engineering,engineering"
+  aggregate_seconds: 1
+  aggregate_items: "x,mean,mean,x,mean,x,x,x,x,x,x,x,x,last,last,last,last,last,last" 
+  cycle_time: 0.1  
+alarms:
+  NOx:
+    - value_<: 
+        value: -5
+        alarm_level: alarm
+        alarm_type: underrange
+        alarm_message: "NOx below -5 ppb"
+        impacts_data: true
+  NO2:
+    - value_<: 
+        value: -5
+        alarm_level: alarm
+        alarm_type: underrange
+        alarm_message: "NO2 below -5 ppb"
+        impacts_data: true
+  NO:
+    - value_<: 
+        value: -5
+        alarm_level: alarm
+        alarm_type: underrange
+        alarm_message: "NO2 below -5 ppb"
+        impacts_data: true
+        
 logs:
   log_dir: "/home/vandaq/vandaq/acquirer/log"
   log_file: "acquirer_EcoPhysics_NOX.log"

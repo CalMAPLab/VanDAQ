@@ -1,0 +1,34 @@
+---
+platform: van1
+instrument: MAGEE_AE33_Aethalometer
+type: simpleSerial
+queue:
+  name: "/dev-measurements"
+  max_msg_size: 8000
+  max_msgs: 50
+connection: serial
+serial:
+  device: "/dev/usb_serial_MAGEE_AE33_Aethalometer"
+  baud: 9600
+measurement_delay_secs: 0 
+stream:
+  line_delimiter: "\r\n"
+  item_delimiter: ","
+  items: "x,x,x,BC1,BC2,BC3,BC4,BC5,BC6,BC7,FlowC,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x"
+  formats: "x,x,x,f,f,f,f,f,f,f,f,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x" 
+  units: "x,x,x,ng/m3,ng/m3,ng/m3,ng/m3,ng/m3,ng/m3,ng/m3,LPng/m3,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x"
+  acqTypes: "x,x,x,measurement_calibrated,measurement_calibrated,measurement_calibrated,measurement_calibrated,measurement_calibrated,measurement_calibrated,measurement_calibrated,engineering,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x"
+alarms:
+  BC6 :
+    - value_<: 
+        value: -1000
+        alarm_level: alarm
+        alarm_type: underrange
+        alarm_message: "BC6 below -1000 ng/m3"
+        impacts_data: true
+  
+logs:
+  log_dir: "/home/vandaq/vandaq/acquirer/log"
+  log_file: "acquirer_MAGEE_AE33_Aethalometer.log"
+  log_level: "INFO"
+  logger_name: "MAGEE_AE33_Aethalometer"
