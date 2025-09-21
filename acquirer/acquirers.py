@@ -27,6 +27,10 @@ class RecordParser:
         self.buffer = defaultdict(lambda: defaultdict(list))
         self.last_aggregate_time = {}  # Tracks the last aggregation timestamp for each instrument
 
+    def strip_non_numeric(self, input_string):
+        """Return a string with all non-numeric characters removed (keeps digits, decimal point, minus sign)."""
+        return ''.join(c for c in input_string if c.isdigit() or c in ['.', '-'])
+
     def parse_simple_string_to_record(self, line, config_dict=None, item_delimiter=','):
         if not config_dict:
             config_dict = self.config['stream']
@@ -97,7 +101,7 @@ class RecordParser:
             if items[i] != 'x':
                 try:
                     if config_dict['formats'].split(',')[i] == 'f':
-                        value = float(part)
+                        value = float(self.strip_non_numeric(part))
                         if scalers and scalers[i] != '1':
                             value *= float(scalers[i])
                         self.buffer[instrument_key][items[i]].append(value)
@@ -140,7 +144,7 @@ class RecordParser:
                     value = None
                     string = None
                     if formats[i] == 'f':
-                        value = float(parts[i])
+                        value = float(self.strip_non_numeric(parts[i]))
                         if scalers and scalers[i] != '1':
                             value *= float(scalers[i])
                     elif formats[i] in ['s','h']:
@@ -321,6 +325,9 @@ class Acquirer:
                             if alarm_key == 'value_=':
                                 if message['value'] == alarm_rule[alarm_key]['value']:
                                     alarm_tripped = True
+                            if alarm_key == 'value_!=':
+                                if message['value'] != alarm_rule[alarm_key]['value']:
+                                    alarm_tripped = True
                             if alarm_key == 'substr_is':
                                 if 'string' in message and message['string']:
                                     substr = message['string'][alarm_rule[alarm_key]['substr_begin']:alarm_rule[alarm_key]['substr_end']]
@@ -396,6 +403,7 @@ class SerialStreamAcquirer(Acquirer):
         # Read available bytes from the serial buffer
         if self.serial_port.in_waiting > 0:
             data = self.serial_port.read(self.serial_port.in_waiting).decode(errors='replace')
+            self.logger.debug('Received partial data: ' + data)
             # Add new data to the existing partial line
             self.partial_line += data
             
@@ -417,6 +425,7 @@ class SerialStreamAcquirer(Acquirer):
                 try:
                     #line = self.serial_port.readline().decode()
                     line = self.getline()
+                    self.logger.debug('Simple serial received line: ' + str(line))
                 except Exception as e:
                     self.logger.error('Error reading serial port '+self.config['serial']['device']+' :'+ str(e))
                     sleep(cycle_time)
@@ -444,6 +453,7 @@ class SerialPolledAcquirer(SerialStreamAcquirer):
                 if self.check_serial_open():
                     if 'poll' in self.config:
                         for key in self.config['poll']:
+                            self.logger.debug('polling with : ' + self.config['poll'][key]['request_string'])
                             self.serial_port.reset_input_buffer()
                             self.serial_port.write(str.encode(self.config['poll'][key]['request_string']))
                             sleep(0.1)
@@ -455,6 +465,7 @@ class SerialPolledAcquirer(SerialStreamAcquirer):
                             while self.serial_port.inWaiting() < self.config['poll'][key]['response_len_min'] and timeout == False:  # wait for 26 bytes before reading in
                                 sleep(.05)
                                 if (datetime.now() - wait_time).total_seconds() >= 1:
+                                    self.logger.debug('Timed out- no response to: ' + self.config['poll'][key]['request_string'])
                                     timeout = True
                                     read = False
                             
@@ -462,6 +473,7 @@ class SerialPolledAcquirer(SerialStreamAcquirer):
                             if read:
                                 sleep(.01)
                                 original_resp_string = self.serial_port.read_all().decode()
+                                self.logger.debug('Received from poll: ' + original_resp_string)
                                 try:
                                     resp_string = original_resp_string
                                     if 'trim_response_begin' in self.config['poll'][key]:
@@ -844,6 +856,26 @@ class LabJackAcquirer(Acquirer):
                 self.config.get('identifier', 'ANY')
             )
             self.logger.info("LabJack device opened successfully.")
+            # Iterate through all parameter configs and set double_end and range if specified
+            for param_entry in self.config.get("Parameters", []):
+                for param_name, cfg in param_entry.items():
+                    channel = cfg.get("channel_name")
+                    if not channel:
+                        continue
+                    # Set double_end if specified
+                    if "negative_channel" in cfg:
+                        try:
+                            ljm.eWriteName(self.handle, f"{channel}_NEGATIVE_CH", int(cfg["negative_channel"]))
+                            self.logger.info(f"Set {channel}_NEGATIVE_CH to {cfg['negative_channel']}")
+                        except Exception as e:
+                            self.logger.warning(f"Could not set double_end for {channel}: {e}")
+                    # Set range if specified
+                    if "range" in cfg:
+                        try:
+                            ljm.eWriteName(self.handle, f"{channel}_RANGE", float(cfg["range"]))
+                            self.logger.info(f"Set {channel}_RANGE to {cfg['range']}")
+                        except Exception as e:
+                            self.logger.warning(f"Could not set range for {channel}: {e}")
         except Exception as e:
             self.logger.error(f"Failed to open LabJack: {str(e)}")
             raise
@@ -861,7 +893,10 @@ class LabJackAcquirer(Acquirer):
             gain = cfg.get('preamp_gain', 1.0)
             v_offset = cfg.get('v_offset', 0.0)
             v_per_unit = cfg.get('v_per_unit', 1.0)
-            value = (raw_voltage - v_offset) / (v_per_unit * gain)
+            read_voltage = raw_voltage - v_offset
+            degained_voltage = read_voltage / gain
+            value = degained_voltage / v_per_unit
+            self.logger.debug(f'Labjack Analog read from {name}, raw = {raw_voltage}V, V-offest = {read_voltage}, degained voltage = {degained_voltage}V, v_per_unit = {v_per_unit}V, value = {value}')
             return value
         except Exception as e:
             self.logger.error(f"Error reading analog channel {name}: {str(e)}")

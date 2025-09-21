@@ -2,9 +2,9 @@ dashboard_refresh_secs: 5
 alarm_shapes: True
 master_GPS: "ublox_M8Q_GPS"
 #master_GPS: "GPS_sim"
-db_connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-test"
-shape_file_dir: "/home/vandaq/vandaq/web/shapefiles"
+db_connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-dev"
 show_mute_instruments: True
+shape_file_dir: "/home/vandaq/vandaq/web/shapefiles"
 display_timezone: "US/Pacific"
 logs:
   log_dir: "/home/vandaq/vandaq/web/log"
@@ -14,11 +14,26 @@ logs:
 mapping:
   default_platform: "van1"
   default_gps: "ublox_M8Q_GPS"
+  #default_gps: "GPS_sim"
   map_check_secs: 3
-  # instruments:
-  #   - Aeris_CH4_C2H6
-  #   - Aeris_N2O_CO   
+  instruments:
+    - Aeris_CH4_C2H6
+    - Aeris_N2O_CO 
+    - Airmar_WX200  
+  # test_day: "08/12/2025"
+  # test_hour_offset: -3
+  wind_rose:
+    show: True
+    num_points: 8
+    instrument: "Airmar_WX200"
+    wind_dir_param: "Wind_Angle"
+    wind_speed_param: "Wind_Speed"
 display_params:
+  ADI_Spider_MAGIC:
+    graph:
+      - "Conc"
+    display:
+      - "Conc"
   LabJack_T7_1:
     separate_scales: True
     graph:
@@ -26,6 +41,11 @@ display_params:
     display:
       - "SolarRadiation"
   TSI_3788_CPC:
+    graph:
+      - "particle_conc"
+    display:
+      - "particle_conc"
+  TSI_3789_CPC:
     graph:
       - "particle_conc"
     display:
@@ -125,6 +145,13 @@ display_params:
       - "PM4"
       - "PM10"
       - "PMtot"
+  Airmar_WX200:
+    graph:
+      - "Wind_Speed"
+      - "Wind_Angle"
+    display:
+      - "Wind_Speed"
+      - "Wind_Angle"
   # PseudoTech_Bozometer:
   #   graph:
   #     - "Bozons"
