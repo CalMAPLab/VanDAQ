@@ -8,7 +8,6 @@ import datetime
 from  ipcqueue import posixmq
 from threading import Thread, Lock
 import time
-from web.Dash_Dashboard import regenerate_pages
 
 # Initialize the Dash app
 app = dash.Dash(__name__)
@@ -232,9 +231,10 @@ def check_queues(engine, config, lock):
             with lock:
                 if response_queue_name:
                     time.sleep(0.1)  # give time for the full message to arrive
-                    response_queue = posixmq.Queue(response_queue_name)
-                    if response_queue is None:
-                        logger.error(f"Failed to open response queue {response_queue_name}, check acquirer running?")
+                    try:
+                        response_queue = posixmq.Queue(response_queue_name)
+                    except Exception as e:
+                        logger.debug(f"Failed to open response queue {response_queue_name}, check acquirer running? Error: {e}")
                         continue
                     try:
                         if response_queue.qsize() == 0:
