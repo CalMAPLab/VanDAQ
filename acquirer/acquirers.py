@@ -1,4 +1,5 @@
 import sys
+import os
 from unicodedata import name
 import serial
 import socket
@@ -259,6 +260,12 @@ def open_queue(qname, maxmsgs, maxmsgsize, destroy_first=False):
             queue = posixmq.Queue(qname, maxsize=maxmsgs, maxmsgsize=maxmsgsize)
         except (OSError, posixmq.QueueError) as e:
             logger.error(f'Queue {qname} failure to create: {e}')
+        else:
+            # Change permissions to rw-rw-rw-
+            try:
+                os.chmod(f'/dev/mqueue{qname}', 0o666)
+            except Exception as e:
+                logger.error(f'Failed to change permissions for queue {qname}: {e}')
     return queue
 
 class Acquirer:
