@@ -1,4 +1,5 @@
 import sys
+from unicodedata import name
 import serial
 import socket
 import zmq
@@ -237,8 +238,8 @@ def open_queue(qname, maxmsgs, maxmsgsize, destroy_first=False):
     try:
         queue = posixmq.Queue(qname)
         qExists = True
-    except OSError as e:
-        logger.debug('Queue does not yet exist')
+    except (OSError, posixmq.QueueError) as e:
+        logger.debug(f'Queue {qname} does not yet exist: {e}')
     if qExists:
         if destroy_first:
             queue.close()
@@ -254,7 +255,10 @@ def open_queue(qname, maxmsgs, maxmsgsize, destroy_first=False):
                 qExists = False
     if not qExists:
         # create the queue if it doesn't exist or has been detroyed
-        queue = posixmq.Queue(qname, maxsize=maxmsgs, maxmsgsize=maxmsgsize)
+        try:
+            queue = posixmq.Queue(qname, maxsize=maxmsgs, maxmsgsize=maxmsgsize)
+        except (OSError, posixmq.QueueError) as e:
+            logger.error(f'Queue {qname} failure to create: {e}')
     return queue
 
 class Acquirer:
@@ -272,6 +276,7 @@ class Acquirer:
         self.config = config_dict
         self.command_queue = None
         self.response_queue = None
+        self.response_queue_max_msgs = None
         self.logger = logging.getLogger(self.config['logs']['logger_name'])
         logger = self.logger
         try:
@@ -305,6 +310,7 @@ class Acquirer:
                 response_queue_config['max_msg_size'],
                 destroy_first=True
             )
+            self.response_queue_max_msgs = response_queue_config['max_msgs']
     
     def get_command_from_queue(self):
         command = None
@@ -318,6 +324,11 @@ class Acquirer:
     
     def put_response_to_queue(self, response):
         if self.response_queue and response:
+            if self.response_queue.qsize() >= self.response_queue_max_msgs:
+                try:
+                    self.response_queue.get()  # remove oldest message
+                except (OSError, posixmq.QueueError) as e:
+                    self.logger.error(f"Failed to unload response queue {name}: {e}")
             try:
                 self.response_queue.put(response)
             except Exception as e:
@@ -500,31 +511,37 @@ class SerialPolledAcquirer(SerialStreamAcquirer):
         
     def run(self):
         while True:
+            # Check if enough time has passed since the last poll
             if (datetime.now() - self.lastPolled).total_seconds() >= self.config['data_freq_secs']:
-                self.lastPolled =datetime.now()
+                self.lastPolled = datetime.now()
                 if self.check_serial_open():
+                    # Iterate through poll commands in config
                     if 'poll' in self.config:
                         for key in self.config['poll']:
+                            # Clear serial input buffer before sending request
                             self.serial_port.reset_input_buffer()
+                            # Send poll request string to instrument
                             self.serial_port.write(str.encode(self.config['poll'][key]['request_string']))
                             sleep(0.1)
-                            #self.serial_port.flushInput()
-                            read = True #indicator of whether instrument is responding
-                            timeout = False #timeout for the reading
+                            read = True  # Indicator if instrument is responding
+                            timeout = False  # Timeout flag for reading
 
                             wait_time = datetime.now()
-                            while self.serial_port.inWaiting() < self.config['poll'][key]['response_len_min'] and timeout == False:  # wait for 26 bytes before reading in
+                            # Wait for minimum response length or timeout
+                            while self.serial_port.inWaiting() < self.config['poll'][key]['response_len_min'] and not timeout:
                                 sleep(.05)
                                 if (datetime.now() - wait_time).total_seconds() >= 1:
                                     timeout = True
                                     read = False
-                            
+
                             resp_string = ''
                             if read:
                                 sleep(.01)
+                                # Read all available bytes from serial and decode
                                 original_resp_string = self.serial_port.read_all().decode()
                                 try:
                                     resp_string = original_resp_string
+                                    # Optionally trim response string according to config
                                     if 'trim_response_begin' in self.config['poll'][key]:
                                         if 'trim_response_end' in self.config['poll'][key]:
                                             resp_string = resp_string[self.config['poll'][key]['trim_response_begin']:self.config['poll'][key]['trim_response_end']]
@@ -533,25 +550,28 @@ class SerialPolledAcquirer(SerialStreamAcquirer):
                                     else:
                                         if 'trim_response_end' in self.config['poll'][key]:
                                             resp_string = resp_string[:self.config['poll'][key]['trim_response_end']]
-                                    
-                                    responses = resp_string.split(self.config['poll'][key]['item_delimiter'])                              
-                                    
+
+                                    # Split response into items
+                                    responses = resp_string.split(self.config['poll'][key]['item_delimiter'])
+
                                     value_string = ''
+                                    # If key_delimiter is specified, parse key-value pairs
                                     if 'key_delimiter' in self.config['poll'][key]:
-                                        resp_values = {}                                  
+                                        resp_values = {}
                                         for response in responses:
                                             parts = response.split(self.config['poll'][key]['key_delimiter'])
                                             resp_values[parts[0]] = parts[1]
                                         value_string = self.config['poll'][key]['item_delimiter'].join(resp_values.values())
                                     else:
                                         value_string = self.config['poll'][key]['item_delimiter'].join(responses)
-                                           
-                                    if value_string:                                        
-                                        messages = self.parse_simple_string_to_record(value_string,config_dict=self.config['poll'][key])
+
+                                    # Parse the value string into messages and send to queue
+                                    if value_string:
+                                        messages = self.parse_simple_string_to_record(value_string, config_dict=self.config['poll'][key])
                                         messages = self.apply_alarms(messages)
                                         self.send_measurement_to_queue(messages)
                                 except Exception as e:
-                                    self.logger.error('cannot proccess response string: '+original_resp_string+' :' + str(e))
+                                    self.logger.error('cannot proccess response string: ' + original_resp_string + ' :' + str(e))
 
 class NetworkAcquirer(Acquirer):
     def __init__(self, configdict):
