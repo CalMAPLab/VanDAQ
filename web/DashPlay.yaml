@@ -1,5 +1,5 @@
 dashboard_refresh_secs: 5
-alarm_shapes: True
+alarm_shapes: False
 master_GPS: "ublox_M8Q_GPS"
 #master_GPS: "GPS_sim"
 db_connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-dev"
@@ -37,7 +37,7 @@ display_params:
   LabJack_T7_1:
     separate_scales: True
     graph:
-      - "SolarRadiation"
+      - "Bozons"
     display:
       - "SolarRadiation"
   TSI_3788_CPC:
@@ -55,103 +55,144 @@ display_params:
       - "NO2"
     display:
       - 'NO2'
-  Aeris_N2O_CO:
-    separate_scales: True
-    graph:
-      - "N2O"
-      - "CO"
-    display:
-      - "N2O"
-      - "CO"
-  Aeris_CH4_C2H6:
-    separate_scales: True
-    graph:
-      - "CH4"
-      - "C2H6"
-    display:
-      - "CH4"
-      - "C2H6"
-  Aeris_CH4_C2H6:
-    separate_scales: True
-    graph:
-      - "CH4"
-      - "C2H6"
-    display:
-      - "CH4"
-      - "C2H6"
-  Licor_7200_CO2:
-    separate_scales: True
-    graph:
-      - "CO2MF"
-      - "H2OMF"
-    display:
-      - "CO2MF"
-      - "H2OMF"
-  DMS_PAX_BlackCarbon:
-    graph:
-      - "BC_mass"
-    display:
-      - "BC_mass"
-  MAGEE_AE33_Aethalometer:
-    graph:
-      - "BC6"
-    display:
-      - "BC6"
-  2BTech_211_G:
-    graph:
-      - "O3"
-    display:
-      - "O3"
-  EcoPhysics_NOX:
-    graph:
-      - "NO"
-      - "NO2"
-      - "NOx"
-    display:
-      - "NO"
-      - "NO2"
-      - "NOx"
-  VOCUS:
-    graph:
-      - "m/z 47"
-      - "m/z 79"
-      - "m/z 117"
-      - "m/z 121"
-      - "m/z 371"
-    display:
-      - "m/z 47"
-      - "m/z 79"
-      - "m/z 117"
-      - "m/z 121"
-      - "m/z 371"
-  ublox_M8Q_GPS:
-    separate_scales: True
-    graph:
-      - "latitude"
-      - "longitude"
-    display:
-      - "latitude"
-      - "longitude"
-  Palas_Fidas_PM:
-    graph:
-      - "PM1"
-      - "PM2.5"
-      - "PM4"
-      - "PM10"
-      - "PMtot"
-    display:
-      - "PM1"
-      - "PM2.5"
-      - "PM4"
-      - "PM10"
-      - "PMtot"
-  Airmar_WX200:
-    graph:
-      - "Wind_Speed"
-      - "Wind_Angle"
-    display:
-      - "Wind_Speed"
-      - "Wind_Angle"
+
+controls:
+  - CAPS_NO2:
+    instrument_name: "CAPS_NO2"
+    queue_command: 
+      name: "/CAPS_NO2_command"
+      max_msg_size: 200
+      max_msgs: 10
+    queue_response: 
+      name: "/CAPS_NO2_response"
+      max_msg_size: 200
+      max_msgs: 10
+    widgets:
+      - button: "Baseline"
+        command: "Z\n"
+      - checkbox: "Auto baseline"
+        command_checked: "H\n"
+        command_unchecked: "h\n"
+        checked: True
+      - command_box:
+          label: "Send Command"
+      - response_box:
+        line-height: 3
+  - PseudoTech_Bozometer:
+    instrument_name: "PseudoTech_Bozometer"
+    queue_command: 
+      name: "/PseudoTech_Bozometer_command"
+      max_msg_size: 100
+      max_msgs: 10
+    queue_response: 
+      name: "/PseudoTech_Bozometer_response"
+      max_msg_size: 100
+      max_msgs: 10
+    widgets:
+      - checkbox: "Pump Control"
+        command_checked: "START_PUMP\r\n"
+        command_unchecked: "STOP_PUMP\r\n"
+
+
+  # LabJack_T7_1:
+  #   separate_scales: True
+  #   graph:
+  #     - "SomeVoltage"
+  #     - "SolarRadiation"
+  #   display:
+  #     - "SomeVoltage"
+  #     - "SolarRadiation"
+
+  # CAPS_NO2:
+  #   graph:
+  #     - "NO2"
+  #   display:
+  #     - 'NO2'
+  # Aeris_N2O_CO:
+  #   separate_scales: True
+  #   graph:
+  #     - "N2O"
+  #     - "CO"
+  #   display:
+  #     - "N2O"
+  #     - "CO"
+  # Aeris_CH4_C2H6:
+  #   separate_scales: True
+  #   graph:
+  #     - "CH4"
+  #     - "C2H6"
+  #   display:
+  #     - "CH4"
+  #     - "C2H6"
+  # Aeris_CH4_C2H6:
+  #   separate_scales: True
+  #   graph:
+  #     - "CH4"
+  #     - "C2H6"
+  #   display:
+  #     - "CH4"
+  #     - "C2H6"
+  # Licor_7200_CO2:
+  #   separate_scales: True
+  #   graph:
+  #     - "CO2MF"
+  #     - "H2OMF"
+  #   display:
+  #     - "CO2MF"
+  #     - "H2OMF"
+  # DMS_PAX_BlackCarbon:
+  #   graph:
+  #     - "BC_mass"
+  #   display:
+  #     - "BC_mass"
+  # MAGEE_AE33_Aethalometer:
+  #   graph:
+  #     - "BC6"
+  #   display:
+  #     - "BC6"
+  # 2BTech_211_G:
+  #   graph:
+  #     - "O3"
+  #   display:
+  #     - "O3"
+  # EcoPhysics_NOX:
+  #   graph:
+  #     - "NO"
+  #     - "NO2"
+  #     - "NOx"
+  #   display:
+  #     - "NO"
+  #     - "NO2"
+  #     - "NOx"
+  # VOCUS:
+  #   graph:
+  #     - "m/z 59"
+  #   display:
+  #     - "m/z 45"
+  #     - "m/z 33"
+  #     - "m/z 59"
+  #     - "m/z 69"
+  # ublox_M8Q_GPS:
+  #   separate_scales: True
+  #   graph:
+  #     - "latitude"
+  #     - "longitude"
+  #   display:
+  #     - "latitude"
+  #     - "longitude"
+  # Palas_Fidas_PM:
+  #   graph:
+  #     - "PM1"
+  #     - "PM2.5"
+  #     - "PM4"
+  #     - "PM10"
+  #     - "PMtot"
+  #   display:
+  #     - "PM1"
+  #     - "PM2.5"
+  #     - "PM4"
+  #     - "PM10"
+  #     - "PMtot"
   # PseudoTech_Bozometer:
   #   graph:
   #     - "Bozons"
