@@ -1,4 +1,6 @@
 import sys
+import os
+from unicodedata import name
 import serial
 import socket
 import zmq
@@ -232,8 +234,46 @@ class RecordParser:
 
         return resultList
 
+logger = None
+
+def open_queue(qname, maxmsgs, maxmsgsize, destroy_first=False):
+    qExists = False
+    queue = None
+    # check if queue already exists
+    try:
+        queue = posixmq.Queue(qname)
+        qExists = True
+    except (OSError, posixmq.QueueError) as e:
+        logger.debug(f'Queue {qname} does not yet exist: {e}')
+    if qExists:
+        if destroy_first:
+            queue.close()
+            queue.unlink()
+            qExists = False
+        else:
+            attribs = queue.qattr()
+            # if queue exists, check to make sure it is big enough
+            if attribs['max_size'] < maxmsgs or attribs['max_msgbytes'] < maxmsgsize:
+                # destroy the queue if it is too small
+                queue.close()
+                queue.unlink()
+                qExists = False
+    if not qExists:
+        # create the queue if it doesn't exist or has been detroyed
+        try:
+            queue = posixmq.Queue(qname, maxsize=maxmsgs, maxmsgsize=maxmsgsize)
+        except (OSError, posixmq.QueueError) as e:
+            logger.error(f'Queue {qname} failure to create: {e}')
+        else:
+            # Change permissions to rw-rw-rw-
+            try:
+                os.chmod(f'/dev/mqueue{qname}', 0o666)
+            except Exception as e:
+                logger.error(f'Failed to change permissions for queue {qname}: {e}')
+    return queue
 
 class Acquirer:
+    global logger
     def __init__(self, config_dict):  
         self.verbose = False  
         self.last_acquire_time = datetime.now()
@@ -245,7 +285,11 @@ class Acquirer:
         self.sim_previous_value = 0
         self.sim_direction = 1
         self.config = config_dict
+        self.command_queue = None
+        self.response_queue = None
+        self.response_queue_max_msgs = None
         self.logger = logging.getLogger(self.config['logs']['logger_name'])
+        logger = self.logger
         try:
             if self.config['verbose'] > 0:
                 self.verbose = True
@@ -257,33 +301,51 @@ class Acquirer:
         except Exception as e:
             pass
         if doqueue:
-            self.open_queue()
-
-    def open_queue(self):
-        myMaxMsgSize = self.config['queue']['max_msg_size']
-        myMaxMsgs = self.config['queue']['max_msgs']
-        myQname = self.config['queue']['name']
-        qExists = False
-        # check if queue already exists
-        try:
-            queue = posixmq.Queue(myQname)
-            qExists = True
-        except OSError as e:
-            self.logger.debug('Queue does not yet exist')
-        if qExists:
-            attribs = queue.qattr()
-            # if queue exists, check to make sure it is big enough
-            if attribs['max_size'] < myMaxMsgs or attribs['max_msgbytes'] < myMaxMsgSize:
-                # destroy the queue if it is too small
-                queue.close()
-                queue.unlink()
-                qExists = False
-        if not qExists:
-            # create the queue if it doesn't exist or has been detroyed
-            queue = posixmq.Queue(myQname, maxsize=myMaxMsgs, maxmsgsize=myMaxMsgSize)
-        self.queue = queue
-
-
+            myMaxMsgSize = self.config['queue']['max_msg_size']
+            myMaxMsgs = self.config['queue']['max_msgs']
+            myQname = self.config['queue']['name']
+            self.queue = open_queue(myQname, myMaxMsgs, myMaxMsgSize)
+        command_queue_config = self.config.get('command_queue')
+        if command_queue_config:
+            self.command_queue = open_queue(
+                command_queue_config['name'],
+                command_queue_config['max_msgs'],
+                command_queue_config['max_msg_size'],
+                destroy_first=True
+            )
+        response_queue_config = self.config.get('response_queue')
+        if response_queue_config:
+            self.response_queue = open_queue(
+                response_queue_config['name'],
+                response_queue_config['max_msgs'],
+                response_queue_config['max_msg_size'],
+                destroy_first=True
+            )
+            self.response_queue_max_msgs = response_queue_config['max_msgs']
+    
+    def get_command_from_queue(self):
+        command = None
+        if self.command_queue and self.command_queue.qsize() > 0:
+            try:
+                sleep(0.5)  # give time for the full message to arrive
+                command = self.command_queue.get()
+            except (OSError, posixmq.QueueError) as e:
+                self.logger.error(f"Failed to unload queue {name}: {e}")
+        return command
+    
+    def put_response_to_queue(self, response):
+        if self.response_queue and response:
+            if self.response_queue.qsize() >= self.response_queue_max_msgs:
+                try:
+                    self.response_queue.get()  # remove oldest message
+                except (OSError, posixmq.QueueError) as e:
+                    self.logger.error(f"Failed to unload response queue {name}: {e}")
+            try:
+                self.response_queue.put(response)
+            except Exception as e:
+                self.logger.error('Error putting response to queue: '+ str(e))
+        return
+    
     def get_next_instrument_record(self):
         # this is always overridden
         # gets a measurement record from the instrument
@@ -420,6 +482,7 @@ class SerialStreamAcquirer(Acquirer):
                 
     def run(self):
         cycle_time = self.config['stream'].get('cycle_time',1)
+        command = None
         while True:
             if self.check_serial_open():
                 try:
@@ -430,14 +493,30 @@ class SerialStreamAcquirer(Acquirer):
                     self.logger.error('Error reading serial port '+self.config['serial']['device']+' :'+ str(e))
                     sleep(cycle_time)
                 else:
-
+                    if self.config.get('response_header'):
+                        header = self.config['response_header']
+                        if line and line[0:len(header)] == header:
+                            self.logger.info('Received response from instrument: '+line.strip()) 
+                            response = {'response': line}
+                            self.put_response_to_queue(response)
+                            continue
                     if line and len(line.split(self.config['stream']['item_delimiter'])) == self.num_items_per_line:
                         #print(str(line))
+                        command = None
                         dataMessage = self.parse_simple_string_to_record(line,config_dict=self.config['stream'])
                         dataMessage = self.apply_alarms(dataMessage)
                         if dataMessage and len(dataMessage) > 0:
                             #print(str(dataMessage))
                             self.send_measurement_to_queue(dataMessage)
+                if self.command_queue:
+                    command = self.get_command_from_queue()
+                    if command:
+                        self.logger.info('Received command from queue: '+ str(command))
+                        if 'command' in command:
+                            try:
+                                self.serial_port.write(str.encode(command['command']))
+                            except Exception as e:
+                                self.logger.error('Error writing to serial port '+self.config['serial']['device']+' :'+ str(e))
             else:
                 sleep(cycle_time)
 
@@ -448,34 +527,40 @@ class SerialPolledAcquirer(SerialStreamAcquirer):
         
     def run(self):
         while True:
+            # Check if enough time has passed since the last poll
             if (datetime.now() - self.lastPolled).total_seconds() >= self.config['data_freq_secs']:
-                self.lastPolled =datetime.now()
+                self.lastPolled = datetime.now()
                 if self.check_serial_open():
+                    # Iterate through poll commands in config
                     if 'poll' in self.config:
                         for key in self.config['poll']:
+                            # Clear serial input buffer before sending request
                             self.logger.debug('polling with : ' + self.config['poll'][key]['request_string'])
                             self.serial_port.reset_input_buffer()
+                            # Send poll request string to instrument
                             self.serial_port.write(str.encode(self.config['poll'][key]['request_string']))
                             sleep(0.1)
-                            #self.serial_port.flushInput()
-                            read = True #indicator of whether instrument is responding
-                            timeout = False #timeout for the reading
+                            read = True  # Indicator if instrument is responding
+                            timeout = False  # Timeout flag for reading
 
                             wait_time = datetime.now()
-                            while self.serial_port.inWaiting() < self.config['poll'][key]['response_len_min'] and timeout == False:  # wait for 26 bytes before reading in
+                            # Wait for minimum response length or timeout
+                            while self.serial_port.inWaiting() < self.config['poll'][key]['response_len_min'] and not timeout:
                                 sleep(.05)
                                 if (datetime.now() - wait_time).total_seconds() >= 1:
                                     self.logger.debug('Timed out- no response to: ' + self.config['poll'][key]['request_string'])
                                     timeout = True
                                     read = False
-                            
+
                             resp_string = ''
                             if read:
                                 sleep(.01)
+                                # Read all available bytes from serial and decode
                                 original_resp_string = self.serial_port.read_all().decode()
                                 self.logger.debug('Received from poll: ' + original_resp_string)
                                 try:
                                     resp_string = original_resp_string
+                                    # Optionally trim response string according to config
                                     if 'trim_response_begin' in self.config['poll'][key]:
                                         if 'trim_response_end' in self.config['poll'][key]:
                                             resp_string = resp_string[self.config['poll'][key]['trim_response_begin']:self.config['poll'][key]['trim_response_end']]
@@ -484,25 +569,28 @@ class SerialPolledAcquirer(SerialStreamAcquirer):
                                     else:
                                         if 'trim_response_end' in self.config['poll'][key]:
                                             resp_string = resp_string[:self.config['poll'][key]['trim_response_end']]
-                                    
-                                    responses = resp_string.split(self.config['poll'][key]['item_delimiter'])                              
-                                    
+
+                                    # Split response into items
+                                    responses = resp_string.split(self.config['poll'][key]['item_delimiter'])
+
                                     value_string = ''
+                                    # If key_delimiter is specified, parse key-value pairs
                                     if 'key_delimiter' in self.config['poll'][key]:
-                                        resp_values = {}                                  
+                                        resp_values = {}
                                         for response in responses:
                                             parts = response.split(self.config['poll'][key]['key_delimiter'])
                                             resp_values[parts[0]] = parts[1]
                                         value_string = self.config['poll'][key]['item_delimiter'].join(resp_values.values())
                                     else:
                                         value_string = self.config['poll'][key]['item_delimiter'].join(responses)
-                                           
-                                    if value_string:                                        
-                                        messages = self.parse_simple_string_to_record(value_string,config_dict=self.config['poll'][key])
+
+                                    # Parse the value string into messages and send to queue
+                                    if value_string:
+                                        messages = self.parse_simple_string_to_record(value_string, config_dict=self.config['poll'][key])
                                         messages = self.apply_alarms(messages)
                                         self.send_measurement_to_queue(messages)
                                 except Exception as e:
-                                    self.logger.error('cannot proccess response string: '+original_resp_string+' :' + str(e))
+                                    self.logger.error('cannot proccess response string: ' + original_resp_string + ' :' + str(e))
 
 class NetworkAcquirer(Acquirer):
     def __init__(self, configdict):
@@ -518,7 +606,7 @@ class NetworkAcquirer(Acquirer):
 
         if not self.socket or not self.socket_open:
             context = zmq.Context()
-            self.socket = context.socket(zmq.PULL)  # Reply socket
+            self.socket = context.socket(zmq.PULL)  # response socket
             try:
                 self.socket.bind('tcp://*:'+str(port))
                 self.socket_open = True
@@ -806,6 +894,7 @@ class SimulatedAcquirer(Acquirer):
             line = self.make_data_line()
             record = self.parse_simple_string_to_record(line,config_dict=self.config['stream'])
             record = self.apply_alarms(record)
+            print(str(record))
             self.send_measurement_to_queue(record)
             time_since_last_cycle = datetime.now() - cycle_time
             to = (cycle_interval.seconds * 1000 - time_since_last_cycle.microseconds) / 1000
