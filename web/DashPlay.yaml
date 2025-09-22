@@ -1,4 +1,4 @@
-dashboard_refresh_secs: 5
+dashboard_refresh_secs: 3
 alarm_shapes: False
 master_GPS: "ublox_M8Q_GPS"
 #master_GPS: "GPS_sim"
@@ -29,11 +29,16 @@ mapping:
     wind_dir_param: "Wind_Angle"
     wind_speed_param: "Wind_Speed"
 display_params:
-  ADI_Spider_MAGIC:
+  # ADI_Spider_MAGIC:
+  #   graph:
+  #     - "Conc"
+  #   display:
+  #     - "Conc"
+  CAPS_NO2:
     graph:
-      - "Conc"
+      - "NO2"
     display:
-      - "Conc"
+      - 'NO2'
   LabJack_T7_1:
     separate_scales: True
     graph:
@@ -50,48 +55,139 @@ display_params:
       - "particle_conc"
     display:
       - "particle_conc"
-  CAPS_NO2:
+  Aeris_N2O_CO:
+    separate_scales: True
     graph:
-      - "NO2"
+      - "N2O"
+      - "CO"
     display:
-      - 'NO2'
+      - "N2O"
+      - "CO"
+  Aeris_CH4_C2H6:
+    separate_scales: True
+    graph:
+      - "CH4"
+      - "C2H6"
+    display:
+      - "CH4"
+      - "C2H6"
+  Licor_7200_CO2:
+    separate_scales: True
+    graph:
+      - "CO2MF"
+      - "H2OMF"
+    display:
+      - "CO2MF"
+      - "H2OMF"
+  DMS_PAX_BlackCarbon:
+    graph:
+      - "BC_mass"
+    display:
+      - "BC_mass"
+  MAGEE_AE33_Aethalometer:
+    graph:
+      - "BC6"
+    display:
+      - "BC6"
+  2BTech_211_G:
+    graph:
+      - "O3"
+    display:
+      - "O3"
+  EcoPhysics_NOX:
+    graph:
+      - "NO"
+      - "NO2"
+      - "NOx"
+    display:
+      - "NO"
+      - "NO2"
+      - "NOx"
+  ublox_M8Q_GPS:
+    separate_scales: True
+    graph:
+      - "latitude"
+      - "longitude"
+    display:
+      - "latitude"
+      - "longitude"
+  Palas_Fidas_PM:
+    graph:
+      - "PM1"
+      - "PM2.5"
+      - "PM4"
+      - "PM10"
+      - "PMtot"
+    display:
+      - "PM1"
+      - "PM2.5"
+      - "PM4"
+      - "PM10"
+      - "PMtot"
+  Airmar_WX200:
+    graph:
+      - "Wind_Speed"
+      - "Wind_Angle"
+    display:
+      - "Wind_Speed"
+      - "Wind_Angle"
 
 controls:
   - CAPS_NO2:
     instrument_name: "CAPS_NO2"
     queue_command: 
       name: "/CAPS_NO2_command"
-      max_msg_size: 200
-      max_msgs: 10
     queue_response: 
       name: "/CAPS_NO2_response"
-      max_msg_size: 200
-      max_msgs: 10
     widgets:
-      - button: "Baseline"
-        command: "Z\n"
-      - checkbox: "Auto baseline"
-        command_checked: "H\n"
-        command_unchecked: "h\n"
-        checked: True
+    - button: "Baseline"
+      command: "Z\n"
+    - checkbox: "Auto baseline"
+      command_checked: "H\n"
+      command_unchecked: "h\n"
+      checked: True
+    - command_box:
+        label: "Send Command"
+    - response_box:
+      line-height: 3
+  - Aeris_CH4_C2H6:
+    instrument_name: "Aeris_CH4_C2H6"
+    queue_command: 
+      name: "/AERIS_CH4_command"
+    queue_response: 
+      name: "/AERIS_CH4_response"
+    widgets:
+      - checkbox: "Cal Gas Port"
+        command_checked: "port1"
+        command_unchecked: "port0"
+        checked: False
+  - Aeris_N2O_CO:
+    instrument_name: "Aeris_N2O_CO"
+    queue_command: 
+      name: "/AERIS_N2O_CO_command"
+    queue_response: 
+      name: "/AERIS_N2O_CO_response"
+    widgets:
+      - checkbox: "Cal Gas Port"
+        command_checked: "port1"
+        command_unchecked: "port0"
+        checked: False
+  - Alicat_MFC_1:
+    instrument_name: "Alicat_MFC_1"
+    queue_command: 
+      name: "/MFC_1_command"
+    queue_response: 
+      name: "/MFC_1_response"
+    widgets:
+      - checkbox: "Flow Cal Gas"
+        command_checked: "as1.0\r"
+        command_unchecked: "as0.0\r"
+        checked: False
       - command_box:
           label: "Send Command"
+          command_terminator: "\r"
       - response_box:
         line-height: 3
-  - PseudoTech_Bozometer:
-    instrument_name: "PseudoTech_Bozometer"
-    queue_command: 
-      name: "/PseudoTech_Bozometer_command"
-      max_msg_size: 100
-      max_msgs: 10
-    queue_response: 
-      name: "/PseudoTech_Bozometer_response"
-      max_msg_size: 100
-      max_msgs: 10
-    widgets:
-      - checkbox: "Pump Control"
-        command_checked: "START_PUMP\r\n"
-        command_unchecked: "STOP_PUMP\r\n"
 
 
   # LabJack_T7_1:

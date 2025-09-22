@@ -191,6 +191,7 @@ def instrument_controls(app, sqlengine, config):
         else:
             return "Unknown trigger"
 
+
     @app.callback(
         Output({"type": "response_box", "instrument": dash.ALL, "name": "response_box"}, "value"),
         Input("poller", "n_intervals"),

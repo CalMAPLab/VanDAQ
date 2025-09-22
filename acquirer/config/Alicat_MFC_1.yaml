@@ -1,0 +1,45 @@
+---
+platform: van1
+instrument: Alicat_MFC_1
+type: serialPolled
+#verbose: 1
+queue:
+  name: "/dev-measurements"
+  max_msg_size: 8000
+  max_msgs: 50
+command_queue:
+  name: "/MFC_1_command"
+  max_msg_size: 200
+  max_msgs: 30
+response_queue:
+  name: "/MFC_1_response"
+  max_msg_size: 1000
+  max_msgs: 30
+response_header: "A"
+wait_for_response_secs: 0.5
+connection: serial
+serial:
+  device: "/dev/usb_serial_Alicat_MFC_1"
+  baud: 19200
+measurement_delay_secs: 0
+data_freq_secs: 1
+init:
+  init_send_1: ""
+poll:
+  # flow:
+  #   request_string: "a\r"
+  #   line_delimiter: "\r\n"
+  #   response_len_min: 40
+  #   response_len_max: 200
+  #   item_delimiter: " "
+  #   items: "unit_id,P_abs,T,flow_vol,flow_mass,setpoint,status"
+  #   formats: "s,f,f,f,f,f,s" 
+  #   scalers: "x,x,x,x,x,x,x"
+  #   units: "x, PSI, deg_C, slpm, slpm, slpm, x"
+  #   acqTypes: "engineering,engineering,engineering,engineering,measurement_calibrated,measurement_calibrated,engineering"
+  
+logs:
+  log_dir: "/home/vandaq/vandaq/acquirer/log"
+  log_file: "acquirer_Alicat_MFC_1.log"
+  log_level: "INFO"
+  logger_name: "Alicat_MFC_1"
