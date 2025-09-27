@@ -8,6 +8,7 @@ import datetime
 from  ipcqueue import posixmq
 from threading import Thread, Lock
 import time
+import os
 
 # Initialize the Dash app
 app = dash.Dash(__name__)
@@ -181,7 +182,12 @@ def instrument_controls(app, sqlengine, config):
             if command and queue_name:
                 # Find the corresponding command queue
                 with lock:
-                    queue = posixmq.Queue(queue_name)
+                    mq_path = f"/dev/mqueue{queue_name}"
+                    if os.path.exists(mq_path):
+                        queue = posixmq.Queue(queue_name)
+                    else:
+                        logger.error(f"Queue file '{mq_path}' does not exist for command queue '{queue_name}'")
+                        queue = None
                     if queue:
                         queue.put({"command":(command+trig["command_terminator"])})
                         logger.info(f"Sent command '{command}' to queue '{queue}'")
@@ -234,7 +240,12 @@ def check_queues(engine, config, lock):
                 if response_queue_name:
                     time.sleep(0.1)  # give time for the full message to arrive
                     try:
-                        response_queue = posixmq.Queue(response_queue_name)
+                        mq_path = f"/dev/mqueue{response_queue_name}"
+                        if os.path.exists(mq_path):
+                            response_queue = posixmq.Queue(response_queue_name)
+                        else:
+                            time.sleep(0.5)
+                            continue
                     except Exception as e:
                         logger.debug(f"Failed to open response queue {response_queue_name}, check acquirer running? Error: {e}")
                         continue
