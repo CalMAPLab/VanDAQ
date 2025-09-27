@@ -24,16 +24,18 @@ from statistics import mean
 from datetime import datetime, timedelta
 
 class RecordParser:
-    def __init__(self, config):
+    def __init__(self, config, logger):
         self.config = config
         self.buffer = defaultdict(lambda: defaultdict(list))
         self.last_aggregate_time = {}  # Tracks the last aggregation timestamp for each instrument
+        self.logger = logger
 
     def strip_non_numeric(self, input_string):
         """Return a string with all non-numeric characters removed (keeps digits, decimal point, plus/minus sign, exponent)."""
         return ''.join(c for c in input_string if c.isdigit() or c in ['.', '-','+','e','E' ])
 
     def parse_simple_string_to_record(self, line, config_dict=None, item_delimiter=','):
+        global logger
         if not config_dict:
             config_dict = self.config['stream']
 
@@ -127,6 +129,7 @@ class RecordParser:
         return None
 
     def _parse_direct(self, line, config_dict, item_delimiter, instrument_datetime):
+        global logger
         parts = line.strip().split(item_delimiter)
         items = config_dict['items'].split(',')
         formats = config_dict['formats'].split(',')
@@ -246,16 +249,16 @@ class Acquirer:
         self.secs_since_last_acquire = 0
         self.measurements = []
         self.queue = None
-        self.rp = RecordParser(config_dict)
+        self.config = config_dict
+        self.logger = logging.getLogger(self.config['logs']['logger_name'])
+        logger = self.logger
+        self.rp = RecordParser(config_dict, logger)
         # Initialize static variables for the 'random' signal
         self.sim_previous_value = 0
         self.sim_direction = 1
-        self.config = config_dict
         self.command_queue = None
         self.response_queue = None
         self.response_queue_max_msgs = None
-        self.logger = logging.getLogger(self.config['logs']['logger_name'])
-        logger = self.logger
         try:
             if self.config['verbose'] > 0:
                 self.verbose = True
