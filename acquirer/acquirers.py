@@ -30,8 +30,8 @@ class RecordParser:
         self.last_aggregate_time = {}  # Tracks the last aggregation timestamp for each instrument
 
     def strip_non_numeric(self, input_string):
-        """Return a string with all non-numeric characters removed (keeps digits, decimal point, minus sign)."""
-        return ''.join(c for c in input_string if c.isdigit() or c in ['.', '-'])
+        """Return a string with all non-numeric characters removed (keeps digits, decimal point, plus/minus sign, exponent)."""
+        return ''.join(c for c in input_string if c.isdigit() or c in ['.', '-','+','e','E' ])
 
     def parse_simple_string_to_record(self, line, config_dict=None, item_delimiter=','):
         if not config_dict:
@@ -168,7 +168,8 @@ class RecordParser:
                         resultDict['string'] = string
 
                     resultList.append(resultDict)
-                except ValueError:
+                except ValueError as e:
+                    self.logger.error(f'Error parsing instrument data item: line = {line}, item = {items[i]}, error = {str(e)}')
                     continue
 
         return resultList
@@ -236,41 +237,6 @@ class RecordParser:
 
 logger = None
 
-def open_queue(qname, maxmsgs, maxmsgsize, destroy_first=False):
-    qExists = False
-    queue = None
-    # check if queue already exists
-    try:
-        queue = posixmq.Queue(qname)
-        qExists = True
-    except (OSError, posixmq.QueueError) as e:
-        logger.debug(f'Queue {qname} does not yet exist: {e}')
-    if qExists:
-        if destroy_first:
-            queue.close()
-            queue.unlink()
-            qExists = False
-        else:
-            attribs = queue.qattr()
-            # if queue exists, check to make sure it is big enough
-            if attribs['max_size'] < maxmsgs or attribs['max_msgbytes'] < maxmsgsize:
-                # destroy the queue if it is too small
-                queue.close()
-                queue.unlink()
-                qExists = False
-    if not qExists:
-        # create the queue if it doesn't exist or has been detroyed
-        try:
-            queue = posixmq.Queue(qname, maxsize=maxmsgs, maxmsgsize=maxmsgsize)
-        except (OSError, posixmq.QueueError) as e:
-            logger.error(f'Queue {qname} failure to create: {e}')
-        else:
-            # Change permissions to rw-rw-rw-
-            try:
-                os.chmod(f'/dev/mqueue{qname}', 0o666)
-            except Exception as e:
-                logger.error(f'Failed to change permissions for queue {qname}: {e}')
-    return queue
 
 class Acquirer:
     global logger
@@ -304,10 +270,10 @@ class Acquirer:
             myMaxMsgSize = self.config['queue']['max_msg_size']
             myMaxMsgs = self.config['queue']['max_msgs']
             myQname = self.config['queue']['name']
-            self.queue = open_queue(myQname, myMaxMsgs, myMaxMsgSize)
+            self.queue = self.open_queue(myQname, myMaxMsgs, myMaxMsgSize)
         command_queue_config = self.config.get('command_queue')
         if command_queue_config:
-            self.command_queue = open_queue(
+            self.command_queue = self.open_queue(
                 command_queue_config['name'],
                 command_queue_config['max_msgs'],
                 command_queue_config['max_msg_size'],
@@ -315,14 +281,50 @@ class Acquirer:
             )
         response_queue_config = self.config.get('response_queue')
         if response_queue_config:
-            self.response_queue = open_queue(
+            self.response_queue = self.open_queue(
                 response_queue_config['name'],
                 response_queue_config['max_msgs'],
                 response_queue_config['max_msg_size'],
                 destroy_first=True
             )
             self.response_queue_max_msgs = response_queue_config['max_msgs']
-    
+
+    def open_queue(self, qname, maxmsgs, maxmsgsize, destroy_first=False):
+        qExists = False
+        queue = None
+        # check if queue already exists
+        try:
+            queue = posixmq.Queue(qname)
+            qExists = True
+        except (OSError, posixmq.QueueError) as e:
+            self.logger.debug(f'Queue {qname} does not yet exist: {e}')
+        if qExists:
+            if destroy_first:
+                queue.close()
+                queue.unlink()
+                qExists = False
+            else:
+                attribs = queue.qattr()
+                # if queue exists, check to make sure it is big enough
+                if attribs['max_size'] < maxmsgs or attribs['max_msgbytes'] < maxmsgsize:
+                    # destroy the queue if it is too small
+                    queue.close()
+                    queue.unlink()
+                    qExists = False
+        if not qExists:
+            # create the queue if it doesn't exist or has been detroyed
+            try:
+                queue = posixmq.Queue(qname, maxsize=maxmsgs, maxmsgsize=maxmsgsize)
+            except (OSError, posixmq.QueueError) as e:
+                self.logger.error(f'Queue {qname} failure to create: {e}')
+            else:
+                # Change permissions to rw-rw-rw-
+                try:
+                    os.chmod(f'/dev/mqueue{qname}', 0o666)
+                except Exception as e:
+                    self.logger.error(f'Failed to change permissions for queue {qname}: {e}')
+        return queue
+
     def get_command_from_queue(self):
         command = None
         if self.command_queue and self.command_queue.qsize() > 0:
@@ -332,7 +334,7 @@ class Acquirer:
             except (OSError, posixmq.QueueError) as e:
                 self.logger.error(f"Failed to unload queue {name}: {e}")
         return command
-    
+        
     def put_response_to_queue(self, response):
         if self.response_queue and response:
             if self.response_queue.qsize() >= self.response_queue_max_msgs:
@@ -488,7 +490,8 @@ class SerialStreamAcquirer(Acquirer):
                 try:
                     #line = self.serial_port.readline().decode()
                     line = self.getline()
-                    self.logger.debug('Simple serial received line: ' + str(line))
+                    if line:
+                        self.logger.debug('Simple serial received line: ' + str(line))
                 except Exception as e:
                     self.logger.error('Error reading serial port '+self.config['serial']['device']+' :'+ str(e))
                     sleep(cycle_time)
@@ -507,6 +510,7 @@ class SerialStreamAcquirer(Acquirer):
                         dataMessage = self.apply_alarms(dataMessage)
                         if dataMessage and len(dataMessage) > 0:
                             #print(str(dataMessage))
+                            self.logger.debug('Sending message to queue: ' + str(dataMessage))
                             self.send_measurement_to_queue(dataMessage)
                 if self.command_queue:
                     command = self.get_command_from_queue()
@@ -532,8 +536,8 @@ class SerialPolledAcquirer(SerialStreamAcquirer):
                 self.lastPolled = datetime.now()
                 if self.check_serial_open():
                     # Iterate through poll commands in config
-                    if 'poll' in self.config:
-                        for key in self.config['poll']:
+                    if 'poll' in self.config and self.config['poll'] is not None:
+                        for key in self.config.get('poll',{}):
                             # Clear serial input buffer before sending request
                             self.logger.debug('polling with : ' + self.config['poll'][key]['request_string'])
                             self.serial_port.reset_input_buffer()
@@ -591,6 +595,30 @@ class SerialPolledAcquirer(SerialStreamAcquirer):
                                         self.send_measurement_to_queue(messages)
                                 except Exception as e:
                                     self.logger.error('cannot proccess response string: ' + original_resp_string + ' :' + str(e))
+                    # Check for commands in the command queue
+                    if self.command_queue:
+                        command = self.get_command_from_queue()
+                        if command:
+                            self.logger.info('Received command from queue: '+ str(command))
+                            if 'command' in command:
+                                try:
+                                    self.serial_port.write(str.encode(command['command']))
+                                except Exception as e:
+                                    self.logger.error('Error writing to serial port '+self.config['serial']['device']+' :'+ str(e))
+                                    continue
+                                else:
+                                    sleep(self.config.get('wait_for_response_secs',0.5))
+                                    line = self.serial_port.read_all().decode()
+                                    if line:
+                                        self.logger.debug('Simple serial received line: ' + str(line))
+                                    if self.config.get('response_header'):
+                                        header = self.config['response_header']
+                                        if line and line[0:len(header)] == header:
+                                            self.logger.info('Received response from instrument: '+line.strip()) 
+                                            response = {'response': line}
+                                            self.put_response_to_queue(response)
+                                            continue
+
 
 class NetworkAcquirer(Acquirer):
     def __init__(self, configdict):
