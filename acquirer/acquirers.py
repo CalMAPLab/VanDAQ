@@ -955,9 +955,8 @@ class SimulatedGPSAcquirer(SerialNmeaGPSAcquirer):
             self.send_measurement_to_queue([lat_message,lon_message])
             sleep(cycle_interval)
 
-from labjack import ljm
 
-class LabJackAcquirer(Acquirer):
+class LabGadgetAcquirer(Acquirer):
     def __init__(self, config_dict):
         super().__init__(config_dict)
         self.handle = None
@@ -965,40 +964,13 @@ class LabJackAcquirer(Acquirer):
         self.data_freq = config_dict.get('data_freq_secs', 1)
         self.buffers = {}  # {param_name: [list of samples]}
         self.aggregate_info = {}  # {param_name: (agg_type, hz)}
-        self.open_labjack()
+        self.open_gadget()
         self.setup_buffers()
 
-    def open_labjack(self):
-        try:
-            self.handle = ljm.openS(
-                self.config.get('device_type', 'ANY'),
-                self.config.get('connection_type', 'ANY'),
-                self.config.get('identifier', 'ANY')
-            )
-            self.logger.info("LabJack device opened successfully.")
-            # Iterate through all parameter configs and set double_end and range if specified
-            for param_entry in self.config.get("Parameters", []):
-                for param_name, cfg in param_entry.items():
-                    channel = cfg.get("channel_name")
-                    if not channel:
-                        continue
-                    # Set double_end if specified
-                    if "negative_channel" in cfg:
-                        try:
-                            ljm.eWriteName(self.handle, f"{channel}_NEGATIVE_CH", int(cfg["negative_channel"]))
-                            self.logger.info(f"Set {channel}_NEGATIVE_CH to {cfg['negative_channel']}")
-                        except Exception as e:
-                            self.logger.warning(f"Could not set double_end for {channel}: {e}")
-                    # Set range if specified
-                    if "range" in cfg:
-                        try:
-                            ljm.eWriteName(self.handle, f"{channel}_RANGE", float(cfg["range"]))
-                            self.logger.info(f"Set {channel}_RANGE to {cfg['range']}")
-                        except Exception as e:
-                            self.logger.warning(f"Could not set range for {channel}: {e}")
-        except Exception as e:
-            self.logger.error(f"Failed to open LabJack: {str(e)}")
-            raise
+    def open_gadget(self):
+        # Initialize the signal interface device
+        # This method must be implemented by subclasses
+        return
 
     def setup_buffers(self):
         for param_entry in self.params:
@@ -1008,27 +980,12 @@ class LabJackAcquirer(Acquirer):
                     self.aggregate_info[param_name] = (cfg["aggregate"], cfg["aggregate_hz"])
 
     def read_analog(self, name, cfg):
-        try:
-            raw_voltage = ljm.eReadName(self.handle, name)
-            gain = cfg.get('preamp_gain', 1.0)
-            v_offset = cfg.get('v_offset', 0.0)
-            v_per_unit = cfg.get('v_per_unit', 1.0)
-            read_voltage = raw_voltage - v_offset
-            degained_voltage = read_voltage / gain
-            value = degained_voltage / v_per_unit
-            self.logger.debug(f'Labjack Analog read from {name}, raw = {raw_voltage}V, V-offest = {read_voltage}, degained voltage = {degained_voltage}V, v_per_unit = {v_per_unit}V, value = {value}')
-            return value
-        except Exception as e:
-            self.logger.error(f"Error reading analog channel {name}: {str(e)}")
-            return None
+        # this method must be implemented by subclasses
+        return None
 
     def read_digital(self, name):
-        try:
-            state = ljm.eReadName(self.handle, name)
-            return int(state)
-        except Exception as e:
-            self.logger.error(f"Error reading digital channel {name}: {str(e)}")
-            return None
+        # this method must be implemented by subclasses
+        return None
 
     def run(self):
         aggregate_cycle_secs = self.data_freq
@@ -1106,6 +1063,158 @@ class LabJackAcquirer(Acquirer):
             }
 
 
+from labjack import ljm
+
+
+class LabJackAcquirer(LabGadgetAcquirer):
+    def __init__(self, config_dict):
+        super().__init__(config_dict)
+
+    def open_gadget(self):
+        try:
+            self.handle = ljm.openS(
+                self.config.get('device_type', 'ANY'),
+                self.config.get('connection_type', 'ANY'),
+                self.config.get('identifier', 'ANY')
+            )
+            self.logger.info("LabJack device opened successfully.")
+            # Iterate through all parameter configs and set double_end and range if specified
+            for param_entry in self.config.get("Parameters", []):
+                for param_name, cfg in param_entry.items():
+                    channel = cfg.get("channel_name")
+                    if not channel:
+                        continue
+                    # Set double_end if specified
+                    if "negative_channel" in cfg:
+                        try:
+                            ljm.eWriteName(self.handle, f"{channel}_NEGATIVE_CH", int(cfg["negative_channel"]))
+                            self.logger.info(f"Set {channel}_NEGATIVE_CH to {cfg['negative_channel']}")
+                        except Exception as e:
+                            self.logger.warning(f"Could not set double_end for {channel}: {e}")
+                    # Set range if specified
+                    if "range" in cfg:
+                        try:
+                            ljm.eWriteName(self.handle, f"{channel}_RANGE", float(cfg["range"]))
+                            self.logger.info(f"Set {channel}_RANGE to {cfg['range']}")
+                        except Exception as e:
+                            self.logger.warning(f"Could not set range for {channel}: {e}")
+        except Exception as e:
+            self.logger.error(f"Failed to open LabJack: {str(e)}")
+            raise
+
+    def read_analog(self, name, cfg):
+        try:
+            raw_voltage = ljm.eReadName(self.handle, name)
+            gain = cfg.get('preamp_gain', 1.0)
+            v_offset = cfg.get('v_offset', 0.0)
+            v_per_unit = cfg.get('v_per_unit', 1.0)
+            read_voltage = raw_voltage + v_offset
+            degained_voltage = read_voltage / gain
+            value = degained_voltage / v_per_unit
+            self.logger.debug(f'Labjack Analog read from {name}, raw = {raw_voltage}V, V-offest = {read_voltage}, degained voltage = {degained_voltage}V, v_per_unit = {v_per_unit}V, value = {value}')
+            return value
+        except Exception as e:
+            self.logger.error(f"Error reading analog channel {name}: {str(e)}")
+            return None
+
+    def read_digital(self, name):
+        try:
+            state = ljm.eReadName(self.handle, name)
+            return int(state)
+        except Exception as e:
+            self.logger.error(f"Error reading digital channel {name}: {str(e)}")
+            return None
+
+    def run(self):
+        super().run()
+
+from Phidget22.Phidget import *
+from Phidget22.Devices.VoltageInput import *
+from Phidget22.Devices.DigitalInput import *
+
+voltage_reported = False
+
+def onVoltageChange(self, voltage):
+    global voltage_reported
+    print("Voltage is: " + str(voltage))
+    voltage_reported = True
+
+class PhidgetAcquirer(LabGadgetAcquirer):
+    def __init__(self, config_dict):
+        self.channels = {}
+        self.voltage_reported = False
+        super().__init__(config_dict)
+
+
+
+    def open_gadget(self):
+        # Implementation for opening Phidget device
+        global voltage_reported
+        serial_number = self.config.get('identifier', None)
+        for parameter_entry in self.config.get("Parameters", []):
+            for param_name, cfg in parameter_entry.items():
+                channel = cfg.get("channel_name")
+                if channel is not None:
+                    self.channels[str(channel)] = {}
+                    type = cfg.get('signal_type')
+                    if type == "Analog":
+                        voltageInput = VoltageInput()
+                        voltageInput.setHubPort(int(cfg.get('channel_name')))
+                        voltageInput.setDeviceSerialNumber(int(serial_number))
+
+                        #voltageInput.setOnVoltageChangeHandler(onVoltageChange)
+                        try:
+                            voltage_reported = False
+                            voltageInput.openWaitForAttachment(5000)
+                            while voltage_reported == False:
+                                sleep(0.5)
+                                try:
+                                    v = voltageInput.getVoltage()
+                                    voltage_reported = True
+                                except Exception as e:
+                                    self.logger.error(f"Error reading voltage: {e}")
+                            # voltageInput.setOnVoltageChangeHandler(None)
+                            self.channels[str(channel)]['channel'] = voltageInput
+                        except Exception as e:
+                            self.logger.error(f"Could not attach Phidget voltage input for {param_name}: {e}")
+                    elif type == "Digital":
+                        digitalInput = DigitalInput()
+                        digitalInput.setHubPort(int(cfg.get('channel_name')))
+                        digitalInput.setDeviceSerialNumber(int(serial_number))
+                        try:
+                            digitalInput.openWaitForAttachment(5000)
+                            self.channels[str(channel)]['channel'] = digitalInput
+                        except Exception as e:
+                            self.logger.error(f"Could not attach Phidget digital input for {param_name}: {e}")
+
+    def read_analog(self, name, cfg):
+        # Implementation for reading analog from Phidget
+        channel = self.channels[str(name)]['channel']
+        voltage = None
+        try:
+            voltage = channel.getVoltage()
+        except Exception as e:
+            self.logger.error(f"Error reading analog channel {name}: {str(e)}")
+            return None
+        v_offset = cfg.get('v_offset', 0.0)
+        v_per_unit = cfg.get('v_per_unit', 1.0)
+        value = (voltage + v_offset) / v_per_unit
+        return value
+
+    def read_digital(self, name):
+        # Implementation for reading digital from Phidget
+        channel = self.channels[str(name)]['channel']
+        state = None
+        try:
+            state = channel.getState()
+        except Exception as e:
+            self.logger.error(f"Error reading digital channel {name}: {str(e)}")
+            return None
+        return state
+
+    def run(self):
+        super().run()
+
 class AquirerFactory():
     
     def makeSerialAcquirer(self, config):
@@ -1138,9 +1247,13 @@ class AquirerFactory():
 
     def makeLabJackAcquirer(self, config):
         return LabJackAcquirer(config)
+    
+    def makePhidgetAcquirer(self, config):
+        acquirer = PhidgetAcquirer(config)
+        return acquirer
 
 
-    selector = {'simpleSerial':makeSerialAcquirer, 'simulated':makeSimulatorAcquirer, 'networkStreaming':makeNetworkStreamingAcquirer, 'serial_nmea_GPS':makeSerialNmeaGPSAcquirer, 'serial_nmea':makeSerialNmeaAcquirer, 'serialPolled':makeSerialPolledAcquirer, 'simulated_GPS': makeSimulatedGPSAcquirer, 'LabJack': makeLabJackAcquirer, }
+    selector = {'simpleSerial':makeSerialAcquirer, 'simulated':makeSimulatorAcquirer, 'networkStreaming':makeNetworkStreamingAcquirer, 'serial_nmea_GPS':makeSerialNmeaGPSAcquirer, 'serial_nmea':makeSerialNmeaAcquirer, 'serialPolled':makeSerialPolledAcquirer, 'simulated_GPS': makeSimulatedGPSAcquirer, 'LabJack': makeLabJackAcquirer, 'Phidget': makePhidgetAcquirer}
 
     def make(self,config):
         maker = self.selector[config['type']]
