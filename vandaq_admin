@@ -81,34 +81,37 @@ def getSubmitterProcesses():
     return ps
 
 
-def startup():
+def startup(arg=None):
     print('starting VanDAQ processes')
-    if len(args) > 2:
-        basedir = args[2]
-    else:
-        basedir = acqDir+'config/'
+    basedir = acqDir+'config/'
     
     if basedir[-1] != '/':
         basedir += '/'
 
     this_env = os.environ.copy()
     if config and config['components'] and config['components']['launch_collector']: 
-        collector_config = collDir+'vandaq_collector.yaml'
-        if config and ('components' in config) and ('collector_config_file' in config['components']):
-            collector_config = collDir+config['components']['collector_config_file']
-        cmd = ['python3',collDir+'vandaq_collector.py', collector_config]
-        logFileName = collLogDir + 'collector.log'
-        logFile = open(logFileName,'a')
-        proc = subprocess.Popen(cmd, env=this_env, stdout=logFile, stderr=logFile)
-        #proc.wait()
-        print('Started collector '+str(cmd)+'   pid='+str(proc.pid))
-        processes.append({'cmd':cmd, 'pid':proc.pid})
+        if arg == None or arg == 'collector':
+            collector_config = collDir+'vandaq_collector.yaml'
+            if config and ('components' in config) and ('collector_config_file' in config['components']):
+                collector_config = collDir+config['components']['collector_config_file']
+            cmd = ['python3',collDir+'vandaq_collector.py', collector_config]
+            logFileName = collLogDir + 'collector.log'
+            logFile = open(logFileName,'a')
+            proc = subprocess.Popen(cmd, env=this_env, stdout=logFile, stderr=logFile)
+            #proc.wait()
+            print('Started collector '+str(cmd)+'   pid='+str(proc.pid))
+            processes.append({'cmd':cmd, 'pid':proc.pid})
+            if arg == 'collector':
+                return
 
     if config and config['components'] and config['components']['launch_acquirers']:
         acq_configs = glob(basedir+'*.yaml')
 
         if len(acq_configs) > 0:
             for acq_config in acq_configs:
+                if arg != None:
+                    if not arg in acq_config.lower():
+                        continue
                 logFileName = acqLogDir + os.path.basename(acq_config.replace('.yaml',''))
                 logFile = open(logFileName,'a')
                 cmd = ['python3',acqDir+'vandaq_acquirer.py',acq_config]
@@ -119,37 +122,41 @@ def startup():
                 processes.append({'cmd':cmd, 'pid':proc.pid})
 
     if config and config['components'] and config['components']['launch_submitter']: 
-        submitter_config = submDir+'vandaq_submitter.yaml'
-        if config and ('components' in config) and ('submitter_config_file' in config['components']):
-            submitter_config = submDir+config['components']['submitter_config_file']
-        cmd = ['python3',submDir+'vandaq_submitter.py', submitter_config]
-        logFileName = submLogDir + 'submitter.log'
-        logFile = open(logFileName,'a')
-        proc = subprocess.Popen(cmd, env=this_env, stdout=logFile, stderr=logFile)
-        #proc.wait()
-        print('Started submitter '+str(cmd)+'   pid='+str(proc.pid))
-        processes.append({'cmd':cmd, 'pid':proc.pid})
+        if arg == None or arg == 'submitter':
+            submitter_config = submDir+'vandaq_submitter.yaml'
+            if config and ('components' in config) and ('submitter_config_file' in config['components']):
+                submitter_config = submDir+config['components']['submitter_config_file']
+            cmd = ['python3',submDir+'vandaq_submitter.py', submitter_config]
+            logFileName = submLogDir + 'submitter.log'
+            logFile = open(logFileName,'a')
+            proc = subprocess.Popen(cmd, env=this_env, stdout=logFile, stderr=logFile)
+            #proc.wait()
+            print('Started submitter '+str(cmd)+'   pid='+str(proc.pid))
+            processes.append({'cmd':cmd, 'pid':proc.pid})
 
 
-def stop():
+def stop(arg=None):
     print('Stopping VanDAQ processes')
     ps = getCollectorProcesses()
     for p in ps:
-        print('stopping '+' '.join(p.cmdline())+' pid '+str(p.pid)) 
-        p.kill()
-        p.wait()
+        if arg == None or arg == 'collector':
+            print('stopping '+' '.join(p.cmdline())+' pid '+str(p.pid)) 
+            p.kill()
+            p.wait()
     ps = getAcquirerProcesses()
     for p in ps:
-        print('stopping '+' '.join(p.cmdline())+' pid '+str(p.pid)) 
-        p.kill()
-        p.wait()
+        if arg == None or arg in ' '.join(p.cmdline()).lower():
+            print('stopping '+' '.join(p.cmdline())+' pid '+str(p.pid)) 
+            p.kill()
+            p.wait()
     ps = getSubmitterProcesses()
     for p in ps:
-        print('stopping '+' '.join(p.cmdline())+' pid '+str(p.pid)) 
-        p.kill()
-        p.wait()
+        if arg == None or arg == 'submitter':
+            print('stopping '+' '.join(p.cmdline())+' pid '+str(p.pid)) 
+            p.kill()
+            p.wait()
 
-def status():
+def status(arg=None):
     print('Looking for VanDAQ processes')
     ps = getCollectorProcesses() + getAcquirerProcesses() + getSubmitterProcesses()
     if not ps:
@@ -157,14 +164,15 @@ def status():
     else:
         print('command \t pid \t status')
         for p in ps:
-            line = ' '.join(p.cmdline())+'\t'
-            line += str(p.pid)+'\t'
-            line += p.status()
-            print(line)
+            if arg == None or arg in ' '.join(p.cmdline()).lower():
+                line = ' '.join(p.cmdline())+'\t'
+                line += str(p.pid)+'\t'
+                line += p.status()
+                print(line)
 
 queue_name = '/dev-measurements'    
 
-def clear_queue():
+def clear_queue(arg=None):
     try:
         queue = posixmq.Queue(queue_name,  maxsize=50, maxmsgsize=8000)
         num = queue.qsize()
@@ -180,12 +188,14 @@ def clear_queue():
     
         
     
-commands = {'startup':startup, 'stop':stop, 'status':status, 'clearqueue': clear_queue}
+commands = {'startup':startup, 'start':startup, 'stop':stop, 'status':status, 'clearqueue': clear_queue}
 
 if len(args) >= 2 and args[1] in commands.keys():
     command = commands[args[1]]
-    command()
+    arg = None
+    if len(args) > 2:
+        arg = args[2].lower()
+    command(arg)
 else:
-    print('no command found')
-
+    print('vandaq_admin: no command "' + ' '.join(args[1:]) + '" found')
 

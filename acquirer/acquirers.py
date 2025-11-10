@@ -1,4 +1,6 @@
 import sys
+import os
+from unicodedata import name
 import serial
 import socket
 import zmq
@@ -22,12 +24,18 @@ from statistics import mean
 from datetime import datetime, timedelta
 
 class RecordParser:
-    def __init__(self, config):
+    def __init__(self, config, logger):
         self.config = config
         self.buffer = defaultdict(lambda: defaultdict(list))
         self.last_aggregate_time = {}  # Tracks the last aggregation timestamp for each instrument
+        self.logger = logger
+
+    def strip_non_numeric(self, input_string):
+        """Return a string with all non-numeric characters removed (keeps digits, decimal point, plus/minus sign, exponent)."""
+        return ''.join(c for c in input_string if c.isdigit() or c in ['.', '-','+','e','E' ])
 
     def parse_simple_string_to_record(self, line, config_dict=None, item_delimiter=','):
+        global logger
         if not config_dict:
             config_dict = self.config['stream']
 
@@ -97,7 +105,7 @@ class RecordParser:
             if items[i] != 'x':
                 try:
                     if config_dict['formats'].split(',')[i] == 'f':
-                        value = float(part)
+                        value = float(self.strip_non_numeric(part))
                         if scalers and scalers[i] != '1':
                             value *= float(scalers[i])
                         self.buffer[instrument_key][items[i]].append(value)
@@ -121,6 +129,7 @@ class RecordParser:
         return None
 
     def _parse_direct(self, line, config_dict, item_delimiter, instrument_datetime):
+        global logger
         parts = line.strip().split(item_delimiter)
         items = config_dict['items'].split(',')
         formats = config_dict['formats'].split(',')
@@ -140,7 +149,7 @@ class RecordParser:
                     value = None
                     string = None
                     if formats[i] == 'f':
-                        value = float(parts[i])
+                        value = float(self.strip_non_numeric(parts[i]))
                         if scalers and scalers[i] != '1':
                             value *= float(scalers[i])
                     elif formats[i] in ['s','h']:
@@ -162,7 +171,8 @@ class RecordParser:
                         resultDict['string'] = string
 
                     resultList.append(resultDict)
-                except ValueError:
+                except ValueError as e:
+                    self.logger.error(f'Error parsing instrument data item: line = {line}, item = {items[i]}, error = {str(e)}')
                     continue
 
         return resultList
@@ -228,20 +238,27 @@ class RecordParser:
 
         return resultList
 
+logger = None
+
 
 class Acquirer:
+    global logger
     def __init__(self, config_dict):  
         self.verbose = False  
         self.last_acquire_time = datetime.now()
         self.secs_since_last_acquire = 0
         self.measurements = []
         self.queue = None
-        self.rp = RecordParser(config_dict)
+        self.config = config_dict
+        self.logger = logging.getLogger(self.config['logs']['logger_name'])
+        logger = self.logger
+        self.rp = RecordParser(config_dict, logger)
         # Initialize static variables for the 'random' signal
         self.sim_previous_value = 0
         self.sim_direction = 1
-        self.config = config_dict
-        self.logger = logging.getLogger(self.config['logs']['logger_name'])
+        self.command_queue = None
+        self.response_queue = None
+        self.response_queue_max_msgs = None
         try:
             if self.config['verbose'] > 0:
                 self.verbose = True
@@ -253,33 +270,87 @@ class Acquirer:
         except Exception as e:
             pass
         if doqueue:
-            self.open_queue()
+            myMaxMsgSize = self.config['queue']['max_msg_size']
+            myMaxMsgs = self.config['queue']['max_msgs']
+            myQname = self.config['queue']['name']
+            self.queue = self.open_queue(myQname, myMaxMsgs, myMaxMsgSize)
+        command_queue_config = self.config.get('command_queue')
+        if command_queue_config:
+            self.command_queue = self.open_queue(
+                command_queue_config['name'],
+                command_queue_config['max_msgs'],
+                command_queue_config['max_msg_size'],
+                destroy_first=True
+            )
+        response_queue_config = self.config.get('response_queue')
+        if response_queue_config:
+            self.response_queue = self.open_queue(
+                response_queue_config['name'],
+                response_queue_config['max_msgs'],
+                response_queue_config['max_msg_size'],
+                destroy_first=True
+            )
+            self.response_queue_max_msgs = response_queue_config['max_msgs']
 
-    def open_queue(self):
-        myMaxMsgSize = self.config['queue']['max_msg_size']
-        myMaxMsgs = self.config['queue']['max_msgs']
-        myQname = self.config['queue']['name']
+    def open_queue(self, qname, maxmsgs, maxmsgsize, destroy_first=False):
         qExists = False
+        queue = None
         # check if queue already exists
         try:
-            queue = posixmq.Queue(myQname)
+            queue = posixmq.Queue(qname)
             qExists = True
-        except OSError as e:
-            self.logger.debug('Queue does not yet exist')
+        except (OSError, posixmq.QueueError) as e:
+            self.logger.debug(f'Queue {qname} does not yet exist: {e}')
         if qExists:
-            attribs = queue.qattr()
-            # if queue exists, check to make sure it is big enough
-            if attribs['max_size'] < myMaxMsgs or attribs['max_msgbytes'] < myMaxMsgSize:
-                # destroy the queue if it is too small
+            if destroy_first:
                 queue.close()
                 queue.unlink()
                 qExists = False
+            else:
+                attribs = queue.qattr()
+                # if queue exists, check to make sure it is big enough
+                if attribs['max_size'] < maxmsgs or attribs['max_msgbytes'] < maxmsgsize:
+                    # destroy the queue if it is too small
+                    queue.close()
+                    queue.unlink()
+                    qExists = False
         if not qExists:
             # create the queue if it doesn't exist or has been detroyed
-            queue = posixmq.Queue(myQname, maxsize=myMaxMsgs, maxmsgsize=myMaxMsgSize)
-        self.queue = queue
+            try:
+                queue = posixmq.Queue(qname, maxsize=maxmsgs, maxmsgsize=maxmsgsize)
+            except (OSError, posixmq.QueueError) as e:
+                self.logger.error(f'Queue {qname} failure to create: {e}')
+            else:
+                # Change permissions to rw-rw-rw-
+                try:
+                    os.chmod(f'/dev/mqueue{qname}', 0o666)
+                except Exception as e:
+                    self.logger.error(f'Failed to change permissions for queue {qname}: {e}')
+        return queue
 
-
+    def get_command_from_queue(self):
+        command = None
+        if self.command_queue and self.command_queue.qsize() > 0:
+            try:
+                sleep(0.5)  # give time for the full message to arrive
+                command = self.command_queue.get()
+            except (OSError, posixmq.QueueError) as e:
+                self.logger.error(f"Failed to unload queue {name}: {e}")
+        return command
+        
+    def put_response_to_queue(self, response):
+        if self.response_queue and response:
+            if self.response_queue.qsize() >= self.response_queue_max_msgs:
+                try:
+                    self.response_queue.get()  # remove oldest message
+                except (OSError, posixmq.QueueError) as e:
+                    self.logger.error(f"Failed to unload response queue {name}: {e}")
+            try:
+                self.response_queue.put(response)
+            except Exception as e:
+                self.logger.error('Error putting response to queue: '+ str(e))
+        return
+    
     def get_next_instrument_record(self):
         # this is always overridden
         # gets a measurement record from the instrument
@@ -320,6 +391,9 @@ class Acquirer:
                                     alarm_tripped = True
                             if alarm_key == 'value_=':
                                 if message['value'] == alarm_rule[alarm_key]['value']:
+                                    alarm_tripped = True
+                            if alarm_key == 'value_!=':
+                                if message['value'] != alarm_rule[alarm_key]['value']:
                                     alarm_tripped = True
                             if alarm_key == 'substr_is':
                                 if 'string' in message and message['string']:
@@ -396,6 +470,7 @@ class SerialStreamAcquirer(Acquirer):
         # Read available bytes from the serial buffer
         if self.serial_port.in_waiting > 0:
             data = self.serial_port.read(self.serial_port.in_waiting).decode(errors='replace')
+            self.logger.debug('Received partial data: ' + data)
             # Add new data to the existing partial line
             self.partial_line += data
             
@@ -412,23 +487,43 @@ class SerialStreamAcquirer(Acquirer):
                 
     def run(self):
         cycle_time = self.config['stream'].get('cycle_time',1)
+        command = None
         while True:
             if self.check_serial_open():
                 try:
                     #line = self.serial_port.readline().decode()
                     line = self.getline()
+                    if line:
+                        self.logger.debug('Simple serial received line: ' + str(line))
                 except Exception as e:
                     self.logger.error('Error reading serial port '+self.config['serial']['device']+' :'+ str(e))
                     sleep(cycle_time)
                 else:
-
+                    if self.config.get('response_header'):
+                        header = self.config['response_header']
+                        if line and line[0:len(header)] == header:
+                            self.logger.info('Received response from instrument: '+line.strip()) 
+                            response = {'response': line}
+                            self.put_response_to_queue(response)
+                            continue
                     if line and len(line.split(self.config['stream']['item_delimiter'])) == self.num_items_per_line:
                         #print(str(line))
+                        command = None
                         dataMessage = self.parse_simple_string_to_record(line,config_dict=self.config['stream'])
                         dataMessage = self.apply_alarms(dataMessage)
                         if dataMessage and len(dataMessage) > 0:
                             #print(str(dataMessage))
+                            self.logger.debug('Sending message to queue: ' + str(dataMessage))
                             self.send_measurement_to_queue(dataMessage)
+                if self.command_queue:
+                    command = self.get_command_from_queue()
+                    if command:
+                        self.logger.info('Received command from queue: '+ str(command))
+                        if 'command' in command:
+                            try:
+                                self.serial_port.write(str.encode(command['command']))
+                            except Exception as e:
+                                self.logger.error('Error writing to serial port '+self.config['serial']['device']+' :'+ str(e))
             else:
                 sleep(cycle_time)
 
@@ -439,31 +534,40 @@ class SerialPolledAcquirer(SerialStreamAcquirer):
         
     def run(self):
         while True:
+            # Check if enough time has passed since the last poll
             if (datetime.now() - self.lastPolled).total_seconds() >= self.config['data_freq_secs']:
-                self.lastPolled =datetime.now()
+                self.lastPolled = datetime.now()
                 if self.check_serial_open():
-                    if 'poll' in self.config:
-                        for key in self.config['poll']:
+                    # Iterate through poll commands in config
+                    if 'poll' in self.config and self.config['poll'] is not None:
+                        for key in self.config.get('poll',{}):
+                            # Clear serial input buffer before sending request
+                            self.logger.debug('polling with : ' + self.config['poll'][key]['request_string'])
                             self.serial_port.reset_input_buffer()
+                            # Send poll request string to instrument
                             self.serial_port.write(str.encode(self.config['poll'][key]['request_string']))
                             sleep(0.1)
-                            #self.serial_port.flushInput()
-                            read = True #indicator of whether instrument is responding
-                            timeout = False #timeout for the reading
+                            read = True  # Indicator if instrument is responding
+                            timeout = False  # Timeout flag for reading
 
                             wait_time = datetime.now()
-                            while self.serial_port.inWaiting() < self.config['poll'][key]['response_len_min'] and timeout == False:  # wait for 26 bytes before reading in
+                            # Wait for minimum response length or timeout
+                            while self.serial_port.inWaiting() < self.config['poll'][key]['response_len_min'] and not timeout:
                                 sleep(.05)
                                 if (datetime.now() - wait_time).total_seconds() >= 1:
+                                    self.logger.debug('Timed out- no response to: ' + self.config['poll'][key]['request_string'])
                                     timeout = True
                                     read = False
-                            
+
                             resp_string = ''
                             if read:
                                 sleep(.01)
+                                # Read all available bytes from serial and decode
                                 original_resp_string = self.serial_port.read_all().decode()
+                                self.logger.debug('Received from poll: ' + original_resp_string)
                                 try:
                                     resp_string = original_resp_string
+                                    # Optionally trim response string according to config
                                     if 'trim_response_begin' in self.config['poll'][key]:
                                         if 'trim_response_end' in self.config['poll'][key]:
                                             resp_string = resp_string[self.config['poll'][key]['trim_response_begin']:self.config['poll'][key]['trim_response_end']]
@@ -472,25 +576,52 @@ class SerialPolledAcquirer(SerialStreamAcquirer):
                                     else:
                                         if 'trim_response_end' in self.config['poll'][key]:
                                             resp_string = resp_string[:self.config['poll'][key]['trim_response_end']]
-                                    
-                                    responses = resp_string.split(self.config['poll'][key]['item_delimiter'])                              
-                                    
+
+                                    # Split response into items
+                                    responses = resp_string.split(self.config['poll'][key]['item_delimiter'])
+
                                     value_string = ''
+                                    # If key_delimiter is specified, parse key-value pairs
                                     if 'key_delimiter' in self.config['poll'][key]:
-                                        resp_values = {}                                  
+                                        resp_values = {}
                                         for response in responses:
                                             parts = response.split(self.config['poll'][key]['key_delimiter'])
                                             resp_values[parts[0]] = parts[1]
                                         value_string = self.config['poll'][key]['item_delimiter'].join(resp_values.values())
                                     else:
                                         value_string = self.config['poll'][key]['item_delimiter'].join(responses)
-                                           
-                                    if value_string:                                        
-                                        messages = self.parse_simple_string_to_record(value_string,config_dict=self.config['poll'][key])
+
+                                    # Parse the value string into messages and send to queue
+                                    if value_string:
+                                        messages = self.parse_simple_string_to_record(value_string, config_dict=self.config['poll'][key])
                                         messages = self.apply_alarms(messages)
                                         self.send_measurement_to_queue(messages)
                                 except Exception as e:
-                                    self.logger.error('cannot proccess response string: '+original_resp_string+' :' + str(e))
+                                    self.logger.error('cannot proccess response string: ' + original_resp_string + ' :' + str(e))
+                    # Check for commands in the command queue
+                    if self.command_queue:
+                        command = self.get_command_from_queue()
+                        if command:
+                            self.logger.info('Received command from queue: '+ str(command))
+                            if 'command' in command:
+                                try:
+                                    self.serial_port.write(str.encode(command['command']))
+                                except Exception as e:
+                                    self.logger.error('Error writing to serial port '+self.config['serial']['device']+' :'+ str(e))
+                                    continue
+                                else:
+                                    sleep(self.config.get('wait_for_response_secs',0.5))
+                                    line = self.serial_port.read_all().decode()
+                                    if line:
+                                        self.logger.debug('Simple serial received line: ' + str(line))
+                                    if self.config.get('response_header'):
+                                        header = self.config['response_header']
+                                        if line and line[0:len(header)] == header:
+                                            self.logger.info('Received response from instrument: '+line.strip()) 
+                                            response = {'response': line}
+                                            self.put_response_to_queue(response)
+                                            continue
+
 
 class NetworkAcquirer(Acquirer):
     def __init__(self, configdict):
@@ -506,7 +637,7 @@ class NetworkAcquirer(Acquirer):
 
         if not self.socket or not self.socket_open:
             context = zmq.Context()
-            self.socket = context.socket(zmq.PULL)  # Reply socket
+            self.socket = context.socket(zmq.PULL)  # response socket
             try:
                 self.socket.bind('tcp://*:'+str(port))
                 self.socket_open = True
@@ -794,6 +925,7 @@ class SimulatedAcquirer(Acquirer):
             line = self.make_data_line()
             record = self.parse_simple_string_to_record(line,config_dict=self.config['stream'])
             record = self.apply_alarms(record)
+            print(str(record))
             self.send_measurement_to_queue(record)
             time_since_last_cycle = datetime.now() - cycle_time
             to = (cycle_interval.seconds * 1000 - time_since_last_cycle.microseconds) / 1000
@@ -823,9 +955,8 @@ class SimulatedGPSAcquirer(SerialNmeaGPSAcquirer):
             self.send_measurement_to_queue([lat_message,lon_message])
             sleep(cycle_interval)
 
-from labjack import ljm
 
-class LabJackAcquirer(Acquirer):
+class LabGadgetAcquirer(Acquirer):
     def __init__(self, config_dict):
         super().__init__(config_dict)
         self.handle = None
@@ -833,20 +964,13 @@ class LabJackAcquirer(Acquirer):
         self.data_freq = config_dict.get('data_freq_secs', 1)
         self.buffers = {}  # {param_name: [list of samples]}
         self.aggregate_info = {}  # {param_name: (agg_type, hz)}
-        self.open_labjack()
+        self.open_gadget()
         self.setup_buffers()
 
-    def open_labjack(self):
-        try:
-            self.handle = ljm.openS(
-                self.config.get('device_type', 'ANY'),
-                self.config.get('connection_type', 'ANY'),
-                self.config.get('identifier', 'ANY')
-            )
-            self.logger.info("LabJack device opened successfully.")
-        except Exception as e:
-            self.logger.error(f"Failed to open LabJack: {str(e)}")
-            raise
+    def open_gadget(self):
+        # Initialize the signal interface device
+        # This method must be implemented by subclasses
+        return
 
     def setup_buffers(self):
         for param_entry in self.params:
@@ -856,24 +980,12 @@ class LabJackAcquirer(Acquirer):
                     self.aggregate_info[param_name] = (cfg["aggregate"], cfg["aggregate_hz"])
 
     def read_analog(self, name, cfg):
-        try:
-            raw_voltage = ljm.eReadName(self.handle, name)
-            gain = cfg.get('preamp_gain', 1.0)
-            v_offset = cfg.get('v_offset', 0.0)
-            v_per_unit = cfg.get('v_per_unit', 1.0)
-            value = (raw_voltage - v_offset) / (v_per_unit * gain)
-            return value
-        except Exception as e:
-            self.logger.error(f"Error reading analog channel {name}: {str(e)}")
-            return None
+        # this method must be implemented by subclasses
+        return None
 
     def read_digital(self, name):
-        try:
-            state = ljm.eReadName(self.handle, name)
-            return int(state)
-        except Exception as e:
-            self.logger.error(f"Error reading digital channel {name}: {str(e)}")
-            return None
+        # this method must be implemented by subclasses
+        return None
 
     def run(self):
         aggregate_cycle_secs = self.data_freq
@@ -951,6 +1063,158 @@ class LabJackAcquirer(Acquirer):
             }
 
 
+from labjack import ljm
+
+
+class LabJackAcquirer(LabGadgetAcquirer):
+    def __init__(self, config_dict):
+        super().__init__(config_dict)
+
+    def open_gadget(self):
+        try:
+            self.handle = ljm.openS(
+                self.config.get('device_type', 'ANY'),
+                self.config.get('connection_type', 'ANY'),
+                self.config.get('identifier', 'ANY')
+            )
+            self.logger.info("LabJack device opened successfully.")
+            # Iterate through all parameter configs and set double_end and range if specified
+            for param_entry in self.config.get("Parameters", []):
+                for param_name, cfg in param_entry.items():
+                    channel = cfg.get("channel_name")
+                    if not channel:
+                        continue
+                    # Set double_end if specified
+                    if "negative_channel" in cfg:
+                        try:
+                            ljm.eWriteName(self.handle, f"{channel}_NEGATIVE_CH", int(cfg["negative_channel"]))
+                            self.logger.info(f"Set {channel}_NEGATIVE_CH to {cfg['negative_channel']}")
+                        except Exception as e:
+                            self.logger.warning(f"Could not set double_end for {channel}: {e}")
+                    # Set range if specified
+                    if "range" in cfg:
+                        try:
+                            ljm.eWriteName(self.handle, f"{channel}_RANGE", float(cfg["range"]))
+                            self.logger.info(f"Set {channel}_RANGE to {cfg['range']}")
+                        except Exception as e:
+                            self.logger.warning(f"Could not set range for {channel}: {e}")
+        except Exception as e:
+            self.logger.error(f"Failed to open LabJack: {str(e)}")
+            raise
+
+    def read_analog(self, name, cfg):
+        try:
+            raw_voltage = ljm.eReadName(self.handle, name)
+            gain = cfg.get('preamp_gain', 1.0)
+            v_offset = cfg.get('v_offset', 0.0)
+            v_per_unit = cfg.get('v_per_unit', 1.0)
+            read_voltage = raw_voltage + v_offset
+            degained_voltage = read_voltage / gain
+            value = degained_voltage / v_per_unit
+            self.logger.debug(f'Labjack Analog read from {name}, raw = {raw_voltage}V, V-offest = {read_voltage}, degained voltage = {degained_voltage}V, v_per_unit = {v_per_unit}V, value = {value}')
+            return value
+        except Exception as e:
+            self.logger.error(f"Error reading analog channel {name}: {str(e)}")
+            return None
+
+    def read_digital(self, name):
+        try:
+            state = ljm.eReadName(self.handle, name)
+            return int(state)
+        except Exception as e:
+            self.logger.error(f"Error reading digital channel {name}: {str(e)}")
+            return None
+
+    def run(self):
+        super().run()
+
+from Phidget22.Phidget import *
+from Phidget22.Devices.VoltageInput import *
+from Phidget22.Devices.DigitalInput import *
+
+voltage_reported = False
+
+def onVoltageChange(self, voltage):
+    global voltage_reported
+    print("Voltage is: " + str(voltage))
+    voltage_reported = True
+
+class PhidgetAcquirer(LabGadgetAcquirer):
+    def __init__(self, config_dict):
+        self.channels = {}
+        self.voltage_reported = False
+        super().__init__(config_dict)
+
+
+
+    def open_gadget(self):
+        # Implementation for opening Phidget device
+        global voltage_reported
+        serial_number = self.config.get('identifier', None)
+        for parameter_entry in self.config.get("Parameters", []):
+            for param_name, cfg in parameter_entry.items():
+                channel = cfg.get("channel_name")
+                if channel is not None:
+                    self.channels[str(channel)] = {}
+                    type = cfg.get('signal_type')
+                    if type == "Analog":
+                        voltageInput = VoltageInput()
+                        voltageInput.setHubPort(int(cfg.get('channel_name')))
+                        voltageInput.setDeviceSerialNumber(int(serial_number))
+
+                        #voltageInput.setOnVoltageChangeHandler(onVoltageChange)
+                        try:
+                            voltage_reported = False
+                            voltageInput.openWaitForAttachment(5000)
+                            while voltage_reported == False:
+                                sleep(0.5)
+                                try:
+                                    v = voltageInput.getVoltage()
+                                    voltage_reported = True
+                                except Exception as e:
+                                    self.logger.error(f"Error reading voltage: {e}")
+                            # voltageInput.setOnVoltageChangeHandler(None)
+                            self.channels[str(channel)]['channel'] = voltageInput
+                        except Exception as e:
+                            self.logger.error(f"Could not attach Phidget voltage input for {param_name}: {e}")
+                    elif type == "Digital":
+                        digitalInput = DigitalInput()
+                        digitalInput.setHubPort(int(cfg.get('channel_name')))
+                        digitalInput.setDeviceSerialNumber(int(serial_number))
+                        try:
+                            digitalInput.openWaitForAttachment(5000)
+                            self.channels[str(channel)]['channel'] = digitalInput
+                        except Exception as e:
+                            self.logger.error(f"Could not attach Phidget digital input for {param_name}: {e}")
+
+    def read_analog(self, name, cfg):
+        # Implementation for reading analog from Phidget
+        channel = self.channels[str(name)]['channel']
+        voltage = None
+        try:
+            voltage = channel.getVoltage()
+        except Exception as e:
+            self.logger.error(f"Error reading analog channel {name}: {str(e)}")
+            return None
+        v_offset = cfg.get('v_offset', 0.0)
+        v_per_unit = cfg.get('v_per_unit', 1.0)
+        value = (voltage + v_offset) / v_per_unit
+        return value
+
+    def read_digital(self, name):
+        # Implementation for reading digital from Phidget
+        channel = self.channels[str(name)]['channel']
+        state = None
+        try:
+            state = channel.getState()
+        except Exception as e:
+            self.logger.error(f"Error reading digital channel {name}: {str(e)}")
+            return None
+        return state
+
+    def run(self):
+        super().run()
+
 class AquirerFactory():
     
     def makeSerialAcquirer(self, config):
@@ -983,9 +1247,13 @@ class AquirerFactory():
 
     def makeLabJackAcquirer(self, config):
         return LabJackAcquirer(config)
+    
+    def makePhidgetAcquirer(self, config):
+        acquirer = PhidgetAcquirer(config)
+        return acquirer
 
 
-    selector = {'simpleSerial':makeSerialAcquirer, 'simulated':makeSimulatorAcquirer, 'networkStreaming':makeNetworkStreamingAcquirer, 'serial_nmea_GPS':makeSerialNmeaGPSAcquirer, 'serial_nmea':makeSerialNmeaAcquirer, 'serialPolled':makeSerialPolledAcquirer, 'simulated_GPS': makeSimulatedGPSAcquirer, 'LabJack': makeLabJackAcquirer, }
+    selector = {'simpleSerial':makeSerialAcquirer, 'simulated':makeSimulatorAcquirer, 'networkStreaming':makeNetworkStreamingAcquirer, 'serial_nmea_GPS':makeSerialNmeaGPSAcquirer, 'serial_nmea':makeSerialNmeaAcquirer, 'serialPolled':makeSerialPolledAcquirer, 'simulated_GPS': makeSimulatedGPSAcquirer, 'LabJack': makeLabJackAcquirer, 'Phidget': makePhidgetAcquirer}
 
     def make(self,config):
         maker = self.selector[config['type']]
