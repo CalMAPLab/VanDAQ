@@ -163,7 +163,7 @@ def layout_map_display(config):
             shape = sf.replace('.geojson','')
             shapes.append(shape)
     i = 0
-    max_retries = 100
+    max_retries = 200
     
     while query_results.get('gps_dates') == None and i < max_retries:
         time.sleep(0.1)
@@ -737,10 +737,13 @@ def update_map_page(app, engine, config):
                                     "right": "100px",
                                     "width": "200px",
                                     "height": "200px",
-                                    "background": "rgba(255,255,255,0.7)",
+                                    "background": "rgba(255,255,255,0.0)",
                                     "border": "1px solid black",
                                     "border-radius": "5px",
-                                }
+                                    "pointerEvents": "none",  # don't block map interactions
+                                    "zIndex": 10,             # ensure it's visible above the map
+                                },
+                                config={"displayModeBar": False}
                             )
                         ], style={"position": "relative"})
                     map_state['map_displayed'] = True
@@ -940,9 +943,9 @@ def requery_geo(engine, config, lock):
                     engine, start_time=first_time, end_time=last_time, instruments=instruments,
                     platform=None, gps_instrument=None, acquisition_type='measurement_calibrated,measurement_raw'
                 )
-                logger.debug(f'requery_geo got new data for day {day}: {len(df)} records')
     
                 if not df.empty:
+                    logger.debug(f'requery_geo got new data for day {day}: {len(df)} records, execution_time={(datetime.now()-start_time).total_seconds()} seconds')
                     df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config.get('display_timezone', 'UTC'))
                     df.set_index('sample_time', inplace=True, drop=False)
                     with lock:
