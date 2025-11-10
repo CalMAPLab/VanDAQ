@@ -7,6 +7,15 @@ queue:
   name: "/dev-measurements"
   max_msg_size: 8000
   max_msgs: 50
+command_queue:
+  name: "/CAPS_NO2_command"
+  max_msg_size: 200
+  max_msgs: 30
+response_queue:
+  name: "/CAPS_NO2_response"
+  max_msg_size: 200
+  max_msgs: 30
+response_header: "% "
 connection: serial
 serial:
   device: "/dev/usb_serial_CAPS_NO2"

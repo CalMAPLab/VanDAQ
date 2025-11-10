@@ -7,6 +7,15 @@ queue:
   max_msg_size: 8000
   max_msgs: 50
 connection: serial
+command_queue:
+  name: "/AERIS_N2O_CO_command"
+  max_msg_size: 200
+  max_msgs: 30
+response_queue:
+  name: "/AERIS_N2O_CO_response"
+  max_msg_size: 200
+  max_msgs: 30
+response_header: " "
 serial:
   device: "/dev/usb_serial_AERIS_N2O_CO"
   baud: 9600

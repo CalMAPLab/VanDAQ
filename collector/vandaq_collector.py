@@ -532,6 +532,7 @@ while True:
     if collector_input == 'queue':
         while len(message) < queued_recs_to_batch:
             try:
+                logger.debug(f'Collector queue size = {queue.qsize()}')
                 record = queue.get()
                 # GPS acquireres package their coordinates as lists
                 # to keep coords from being separated in batching

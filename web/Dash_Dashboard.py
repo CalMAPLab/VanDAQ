@@ -23,9 +23,14 @@ engine = None
 
 
 def get_last_valid_value(df, column):
-    last_valid_index = df[column].last_valid_index()
-    if last_valid_index:
-        return df[column][last_valid_index]
+    # Get the last valid (non-NaN) value in the specified column
+    # Ensure the column exists and is not empty
+    if column not in df or df[column].empty:
+        return None
+    # Drop NaNs and get the last value if possible
+    valid_values = df[column].dropna()
+    if not valid_values.empty:
+        return valid_values.iloc[-1]
     return None
 
 def get_instrument_measurements(engine,config):
@@ -33,7 +38,8 @@ def get_instrument_measurements(engine,config):
     #df = get_measurements(engine, start_time=datetime.datetime.now()-datetime.timedelta(minutes=5))
     st_time = datetime.datetime.now()
     logger.debug(f'get_instrument_measurements: Starting query at {st_time}')
-    df = get_2step_query_with_alarms(engine, datetime.datetime.now()-datetime.timedelta(minutes=5),wide=False)
+    include_engineering = config.get('include_engineering', True)
+    df = get_2step_query_with_alarms(engine, datetime.datetime.now()-datetime.timedelta(minutes=5),wide=False, include_engineering=include_engineering)
     if len(df) > 0:
         if 'display_timezone' in config:
             df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config['display_timezone'])

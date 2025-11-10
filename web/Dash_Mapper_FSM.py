@@ -75,6 +75,8 @@ class MapMachine(object):
     def data_ready(self):
         global query_results
         global lock
+        if query_results.get('data', None) is None:
+            return False
         dataReady = (query_results['data'].get(self.date,None) is not None)
         logger.debug(f'{self.date} data_ready -> {dataReady}')
         with lock:

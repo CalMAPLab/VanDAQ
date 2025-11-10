@@ -107,7 +107,7 @@ def get_2step_query(engine, start_time, end_time=None, platform=None):
 
     return df_pivot
 
-def get_2step_query_with_alarms(engine, start_time, end_time=None, platform=None, wide=True):
+def get_2step_query_with_alarms(engine, start_time, end_time=None, platform=None, wide=True, include_engineering=True):
     session = sessionmaker(bind=engine)()
 
     if not end_time:
@@ -143,6 +143,22 @@ def get_2step_query_with_alarms(engine, start_time, end_time=None, platform=None
             .order_by(FactMeasurement.sample_time)
             .subquery()
         )
+
+    if not include_engineering:
+        # Get the id of the "engineering" acquisition type from the DimAcquisitionType table
+        engineering_query = (
+            select(DimAcquisitionType.id)
+            .where(DimAcquisitionType.acquisition_type == "engineering")
+        )
+        compiled_query = engineering_query.compile(session.bind, compile_kwargs={"literal_binds": True})
+        pdf = pd.read_sql(str(compiled_query), session.bind)
+        engineering_id = int(pdf['id'][0]) if not pdf.empty else None
+        if engineering_id:
+            measurement_subquery = (
+                select(measurement_subquery)
+                .where(measurement_subquery.c.acquisition_type_id != engineering_id)
+                .subquery()
+            )
 
     # Step 2: Scoped alarm aggregation
     alarm_aggregation = (
