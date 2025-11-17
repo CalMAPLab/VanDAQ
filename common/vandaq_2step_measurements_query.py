@@ -1,5 +1,5 @@
-from sqlalchemy.orm import aliased
-from sqlalchemy import create_engine, select, func, and_, case
+from sqlalchemy.orm import aliased, sessionmaker
+from sqlalchemy import create_engine, select, exists, func, and_, case
 from datetime import datetime, timedelta, date
 import pandas as pd
 from vandaq_schema import *
@@ -645,6 +645,142 @@ def get_measurements_with_alarms_and_locations(engine, start_time=None, acquisit
     df.set_index('sample_time', inplace=True, drop=False)
 
     return df
+
+def get_measurements_with_locations_opt(
+    engine,
+    start_time=None,
+    acquisition_type=None,
+    instruments=None,
+    gps_instrument=None,
+    end_time=None,
+    platform=None,
+    after_id=None
+):
+    Session = sessionmaker(bind=engine)
+    with Session() as session:
+
+        # --- Resolve IDs ---------------------------------------------------------
+        instrument_ids = None
+        if instruments:
+            if isinstance(instruments, str):
+                instruments = [instruments]
+            instrument_ids = [i[0] for i in session.query(DimInstrument.id)
+                            .filter(DimInstrument.instrument.in_(instruments)).all()]
+
+        platform_id = None
+        if platform:
+            res = session.query(DimPlatform.id).filter(DimPlatform.platform == platform).first()
+            platform_id = res[0] if res else None
+
+        gps_instrument_id = None
+        if gps_instrument:
+            res = session.query(DimInstrument.id).filter(DimInstrument.instrument == gps_instrument).first()
+            gps_instrument_id = res[0] if res else None
+
+        acquisition_type_ids = None
+        if acquisition_type:
+            acquisition_types = [a.strip() for a in acquisition_type.split(",")]
+            acquisition_type_ids = [i[0] for i in session.query(DimAcquisitionType.id)
+                                    .filter(DimAcquisitionType.acquisition_type.in_(acquisition_types)).all()]
+
+        # --- Quick existence check in DimGeolocation using DimTime ---------------
+        g = DimGeolocation
+        t = DimTime
+
+        geo_filter = [g.sample_time_id == t.id]  # join to time table
+
+        if start_time:
+            geo_filter.append(t.time >= start_time)
+        if end_time:
+            geo_filter.append(t.time <= end_time)
+        if platform_id:
+            geo_filter.append(g.platform_id == platform_id)
+        if gps_instrument_id:
+            geo_filter.append(g.instrument_id == gps_instrument_id)
+
+        exists_query = select(exists().where(and_(*geo_filter)))
+        has_geos = session.execute(exists_query).scalar()
+        if not has_geos:
+            columns = [
+                "id", "sample_time", "value", "string",
+                "instrument", "parameter", "unit", "acquisition_type", "platform",
+                "latitude", "longitude", "gps"
+            ]
+            return pd.DataFrame(columns=columns).set_index("sample_time", drop=False)
+
+        # --- Base measurement slice (partition-friendly) ------------------------
+        m = FactMeasurement
+        measurement_query = select(
+            m.id,
+            m.sample_time,
+            m.sample_time_id,
+            m.value,
+            m.string,
+            m.instrument_id,
+            m.parameter_id,
+            m.unit_id,
+            m.acquisition_type_id,
+            m.platform_id,
+        )
+        if start_time:
+            measurement_query = measurement_query.where(m.sample_time >= start_time)
+        if end_time:
+            measurement_query = measurement_query.where(m.sample_time <= end_time)
+        if instrument_ids:
+            measurement_query = measurement_query.where(m.instrument_id.in_(instrument_ids))
+        if acquisition_type_ids:
+            measurement_query = measurement_query.where(m.acquisition_type_id.in_(acquisition_type_ids))
+        if platform_id:
+            measurement_query = measurement_query.where(m.platform_id == platform_id)
+        if after_id:
+            measurement_query = measurement_query.where(m.id > after_id)
+
+        measurement_sub = measurement_query.subquery()
+
+        # --- Geolocation join ----------------------------------------------------
+        geo_join = (g.sample_time_id == measurement_sub.c.sample_time_id)
+        if gps_instrument_id:
+            geo_join = and_(geo_join, g.instrument_id == gps_instrument_id)
+        if platform_id:
+            geo_join = and_(geo_join, g.platform_id == platform_id)
+
+        # --- Join lookup tables --------------------------------------------------
+        inst = DimInstrument
+        p = DimParameter
+        u = DimUnit
+        acq = DimAcquisitionType
+        plat = DimPlatform
+        gps_inst = aliased(DimInstrument)  # alias for GPS instrument
+
+        final_query = (
+            select(
+                measurement_sub.c.id,
+                measurement_sub.c.sample_time,
+                measurement_sub.c.value,
+                measurement_sub.c.string,
+                inst.instrument,
+                p.parameter,
+                u.unit,
+                acq.acquisition_type,
+                plat.platform,
+                g.latitude,
+                g.longitude,
+                gps_inst.instrument.label("gps"),
+            )
+            .join(inst, measurement_sub.c.instrument_id == inst.id)
+            .join(p, measurement_sub.c.parameter_id == p.id)
+            .join(u, measurement_sub.c.unit_id == u.id)
+            .join(acq, measurement_sub.c.acquisition_type_id == acq.id)
+            .join(plat, measurement_sub.c.platform_id == plat.id)
+            .join(g, geo_join)
+            .join(gps_inst, g.instrument_id == gps_inst.id)
+            .order_by(measurement_sub.c.sample_time)
+        )
+
+        compiled_query = final_query.compile(session.bind, compile_kwargs={"literal_binds": True})
+        df = pd.read_sql(str(compiled_query), session.bind)
+        df.set_index("sample_time", inplace=True, drop=False)
+        return df
 
 def is_consistently_increasing(column):
     """

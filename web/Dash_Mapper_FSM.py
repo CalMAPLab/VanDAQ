@@ -19,7 +19,7 @@ from threading import Thread, Lock
 from sqlalchemy import create_engine
 from transitions import Machine
 
-from vandaq_2step_measurements_query import get_measurements_with_alarms_and_locations
+from vandaq_2step_measurements_query import get_measurements_with_locations_opt
 from vandaq_2step_measurements_query import get_all_geolocations
 import os
 
@@ -905,7 +905,7 @@ def requery_geo(engine, config, lock):
                     first_time = query_results['data'][today]['sample_time'].max().astimezone(pytz.utc)+timedelta(0,1) if isinstance(query_results['data'][today], pd.DataFrame) and not query_results['data'][today].empty else first_time
                 # Fetch new measurements
                 before_time = datetime.now()
-                df = get_measurements_with_alarms_and_locations(
+                df = get_measurements_with_locations_opt(
                     engine, start_time=first_time, end_time=last_time, instruments=instruments,
                     platform=None, gps_instrument=None, acquisition_type='measurement_calibrated,measurement_raw'
                 )
@@ -941,7 +941,7 @@ def requery_geo(engine, config, lock):
 
                 logger.debug(f'requery_geo about to query start_time={first_time}, end_time={last_time}')
                 # Fetch new measurements
-                df = get_measurements_with_alarms_and_locations(
+                df = get_measurements_with_locations_opt(
                     engine, start_time=first_time, end_time=last_time, instruments=instruments,
                     platform=None, gps_instrument=None, acquisition_type='measurement_calibrated,measurement_raw'
                 )
@@ -953,7 +953,7 @@ def requery_geo(engine, config, lock):
                     with lock:
                         query_results['data'][day] = df           
 
-    time.sleep(1)  # Prevent excessive CPU usage
+            time.sleep(1)  # Prevent excessive CPU usage
 
 if __name__ == "__main__":
     app = dash.Dash(__name__)
