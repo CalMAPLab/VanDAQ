@@ -19,9 +19,6 @@ import numpy as np
 import copy
 from datetime import datetime, timedelta, date
 import plotly.graph_objects as go
-import plotly.io as pio
-import base64
-
 import time
 import pytz
 import random
@@ -31,7 +28,7 @@ from threading import Thread, Lock
 from sqlalchemy import create_engine
 from transitions import Machine
 
-from vandaq_2step_measurements_query import get_measurements_with_locations_opt
+from vandaq_2step_measurements_query import get_measurements_with_alarms_and_locations
 from vandaq_2step_measurements_query import get_all_geolocations
 import os
 
@@ -87,8 +84,6 @@ class MapMachine(object):
     def data_ready(self):
         global query_results
         global lock
-        if query_results.get('data', None) is None:
-            return False
         dataReady = (query_results['data'].get(self.date,None) is not None)
         logger.debug(f'{self.date} data_ready -> {dataReady}')
         with lock:
@@ -177,7 +172,7 @@ def layout_map_display(config):
             shape = sf.replace('.geojson','')
             shapes.append(shape)
     i = 0
-    max_retries = 200
+    max_retries = 100
     
     while query_results.get('gps_dates') == None and i < max_retries:
         time.sleep(0.1)
@@ -349,7 +344,7 @@ def today_end_time(config):
             end_datetime = datetime.combine(date.today(), end_time) + timedelta(hours=hour_offset)
             end_time = end_datetime.time()
     else:
-        end_time = datetime.now().time().replace(hour=23, minute=59, second=59, microsecond=0)
+        end_time = datetime.time(23, 59, 59)
 
     return end_time
 
@@ -638,64 +633,61 @@ def update_map_page(app, engine, config):
                             showlegend=False,
                             name="Current Location"
                         )
-                    wind_fig = None
-                    if config['mapping'].get('wind_rose', None) and config['mapping']['wind_rose'].get('show', False):
-                        wr_instrument = config['mapping']['wind_rose'].get('instrument',None)
-                        wr_speed_param = config['mapping']['wind_rose'].get('wind_speed_param',None)
-                        wr_dir_param = config['mapping']['wind_rose'].get('wind_dir_param',None)
-                        if wr_instrument and wr_speed_param and wr_dir_param:
-                            ws_recs = df[(df["instrument"] == wr_instrument)
-                                        & (df["parameter"]  == wr_speed_param)
-                                        ].sort_index()
-                            wd_recs = df[(df["instrument"] == wr_instrument)
-                                        & (df["parameter"]  == wr_dir_param)
-                                        ].sort_index()
-                            num_wr_points = config['mapping']['wind_rose'].get('num_points',1)
-                            if not ws_recs.empty and not wd_recs.empty:
-                                # Collect the last num_wr_points wind speed values into a list
-                                wind_speeds = ws_recs["value"].tail(num_wr_points).tolist()
-                                wind_dirs = wd_recs["value"].tail(num_wr_points).tolist()
-                                wind_fig = go.Figure()
+                    # if config.get('wind_rose', None) and config['wind_rose'].get('show', False):
+                    #     wr_instrument = config['wind_rose'].get('instrument',None)
+                    #     wr_speed_param = config['wind_rose'].get('wind_speed_param',None)
+                    #     wr_dir_param = config['wind_rose'].get('wind_dir_param',None)
+                    #     if wr_instrument and wr_speed_param and wr_dir_param:
+                    #         ws_recs = df[(df["instrument"] == wr_instrument)
+                    #                     & (df["parameter"]  == wr_speed_param)
+                    #                     ].sort_index()
+                    #         wd_recs = df[(df["instrument"] == wr_instrument)
+                    #                     & (df["parameter"]  == wr_dir_param)
+                    #                     ].sort_index()
+                    #         num_wr_points = config['wind_rose'].get('num_points',1)
+                    #         if not ws_recs.empty and not wd_recs.empty:
+                    #             # Collect the last num_wr_points wind speed values into a list
+                    #             wind_speeds = ws_recs["value"].tail(num_wr_points).tolist()
+                    #             wind_dirs = wd_recs["value"].tail(num_wr_points).tolist()
+                    #             wind_fig = go.Figure()
 
-                                # Add wind rose as an inset in the upper right corner
-                                if len(wind_speeds) > 0 and len(wind_dirs) > 0:
-                                    speeds = wind_speeds
-                                    angles = wind_dirs
-                                    # Create wind rose figure
-                                    wind_fig = go.Figure()
-
-                                    wind_fig.add_trace(go.Barpolar(
-                                        r=speeds,
-                                        theta=angles,
-                                        width=45,
-                                        marker_color=speeds,
-                                        marker_colorscale="Viridis",
-                                        opacity=0.7,
-                                        hovertemplate="dir [deg]: %{theta}<br>speed [m/s]: %{r}<extra></extra>"
-                                    ))
-
-                                    wind_fig.update_layout(
-                                        title=dict(text="Wind", x=0.5, xanchor="center"),
-                                        margin=dict(l=0, r=0, t=30, b=20),  # give room for title
-                                        polar=dict(
-                                            radialaxis=dict(
-                                                showticklabels=False,
-                                                ticks=''
-                                            ),
-                                            angularaxis=dict(
-                                                rotation=90,           # 0° at top
-                                                direction="clockwise", # degrees increase clockwise
-                                                tickmode="array",
-                                                tickvals=[0, 90, 180, 270],
-                                                ticktext=["N", "E", "S", "W"]
-                                            )
-                                        ),
-                                        showlegend=False,
-                                        paper_bgcolor='rgba(0,0,0,0)',
-                                        plot_bgcolor='rgba(0,0,0,0)',
-                                        width=200,
-                                        height=200
-                                    )                                    
+                    #             # Add wind rose as an inset in the upper right corner
+                    #             if len(wind_speeds) > 0 and len(wind_dirs) > 0:
+                    #                 speeds = wind_speeds
+                    #                 angles = wind_dirs
+                    #                 # Create wind rose figure
+                    #                 wind_fig = go.Figure()
+                    #                 wind_fig.add_trace(go.Barpolar(
+                    #                     r=speeds,
+                    #                     theta=angles,
+                    #                     width=45,
+                    #                     marker_color=speeds,
+                    #                     marker_colorscale="Viridis",
+                    #                     opacity=0.7
+                    #                 ))
+                    #                 wind_fig.update_layout(
+                    #                     margin=dict(l=0, r=0, t=0, b=0),
+                    #                     polar=dict(
+                    #                         radialaxis=dict(showticklabels=False, ticks=''),
+                    #                         angularaxis=dict(showticklabels=False, ticks='')
+                    #                     ),
+                    #                     showlegend=False,
+                    #                     paper_bgcolor='rgba(0,0,0,0)',
+                    #                     plot_bgcolor='rgba(0,0,0,0)',
+                    #                     width=200,
+                    #                     height=200
+                    #                 )
+                    #                 # Add as image inset in mapbox figure
+                    #                 fig.add_layout_image(
+                    #                     dict(
+                    #                         source=wind_fig.to_image(format="png"),
+                    #                         xref="paper", yref="paper",
+                    #                         x=1, y=1,
+                    #                         sizex=0.3, sizey=0.3,
+                    #                         xanchor="right", yanchor="top",
+                    #                         layer="above"
+                    #                     )
+                    #                 )
 
                     # Add community polygons if selected
                     layers = []
@@ -737,29 +729,8 @@ def update_map_page(app, engine, config):
                             marker=dict(size=20, color="blue", symbol="circle"),
                             name="Community Points"
                         ))
-
-                    if wind_fig is None:
-                        map = html.Div([dcc.Graph(figure=fig, id="map-graph", responsive=True, config={"scrollZoom": True, 'responsive':True})])
-                    else:
-                        map = html.Div([dcc.Graph(figure=fig, id="map-graph", responsive=True, config={"scrollZoom": True, 'responsive':True}),
-                            dcc.Graph(
-                                id="wind-rose",
-                                figure=wind_fig,   # or update via a callback
-                                style={
-                                    "position": "absolute",
-                                    "top": "100px",
-                                    "right": "100px",
-                                    "width": "200px",
-                                    "height": "200px",
-                                    "background": "rgba(255,255,255,0.0)",
-                                    "border": "1px solid black",
-                                    "border-radius": "5px",
-                                    "pointerEvents": "none",  # don't block map interactions
-                                    "zIndex": 10,             # ensure it's visible above the map
-                                },
-                                config={"displayModeBar": False}
-                            )
-                        ], style={"position": "relative"})
+                            
+                    map = dcc.Graph(figure=fig, id="map-graph", responsive=True, config={"scrollZoom": True, 'responsive':True})
                     map_state['map_displayed'] = True
                     logger.debug(f'update-map: map created {(datetime.now()-spy_time).total_seconds()} sec')
                 except Exception as e:
@@ -917,7 +888,7 @@ def requery_geo(engine, config, lock):
                     first_time = query_results['data'][today]['sample_time'].max().astimezone(pytz.utc)+timedelta(0,1) if isinstance(query_results['data'][today], pd.DataFrame) and not query_results['data'][today].empty else first_time
                 # Fetch new measurements
                 before_time = datetime.now()
-                df = get_measurements_with_locations_opt(
+                df = get_measurements_with_alarms_and_locations(
                     engine, start_time=first_time, end_time=last_time, instruments=instruments,
                     platform=None, gps_instrument=None, acquisition_type='measurement_calibrated,measurement_raw'
                 )
@@ -953,19 +924,19 @@ def requery_geo(engine, config, lock):
 
                 logger.debug(f'requery_geo about to query start_time={first_time}, end_time={last_time}')
                 # Fetch new measurements
-                df = get_measurements_with_locations_opt(
+                df = get_measurements_with_alarms_and_locations(
                     engine, start_time=first_time, end_time=last_time, instruments=instruments,
                     platform=None, gps_instrument=None, acquisition_type='measurement_calibrated,measurement_raw'
                 )
+                logger.debug(f'requery_geo got new data for day {day}: {len(df)} records')
     
                 if not df.empty:
-                    logger.debug(f'requery_geo got new data for day {day}: {len(df)} records, execution_time={(datetime.now()-start_time).total_seconds()} seconds')
                     df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config.get('display_timezone', 'UTC'))
                     df.set_index('sample_time', inplace=True, drop=False)
                     with lock:
                         query_results['data'][day] = df           
 
-            time.sleep(1)  # Prevent excessive CPU usage
+    time.sleep(1)  # Prevent excessive CPU usage
 
 if __name__ == "__main__":
     app = dash.Dash(__name__)
