@@ -1,4 +1,16 @@
 #!/usr/bin python3
+"""
+
+VanDAQ
+Mobile Atmospheric Data Acquisition System
+
+Author: Robert Jay (Robin) Weber
+Affiliation: University of California, Berkeley
+
+Copyright (c) 2025 The Regents of the University of California
+Released under the BSD 3-Clause License.
+"""
+
 from acquirers import *
 import yaml
 import logging

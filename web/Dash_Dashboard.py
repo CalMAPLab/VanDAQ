@@ -1,3 +1,15 @@
+"""
+
+VanDAQ
+Mobile Atmospheric Data Acquisition System
+
+Author: Robert Jay (Robin) Weber
+Affiliation: University of California, Berkeley
+
+Copyright (c) 2025 The Regents of the University of California
+Released under the BSD 3-Clause License.
+"""
+
 from dash import dcc, html, Input, Output, ALL, MATCH, ctx, State, dash_table, no_update
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
