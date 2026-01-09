@@ -1,13 +1,27 @@
-# Acquirer Configuration Manual
+# VanDAQ Data Chain Process Configuration Manual
 
-This guide explains how to author YAML configs for acquirers in `acquirer/config/`. Each config selects an acquirer type via `type` and supplies connection, parsing, queue, and logging details. Keys marked **required** must be present for that acquirer type; others are optional.
+Each process in the VanDAQ data chain is configured via a YAML formatted text file containing key/value pairs defining environmental and operational parameters necessary for the processes' function. Installing and making adjustments to VanDAQ installations is largely a matter of working with these files.  The processes to be configured are:
 
-## Common keys (all acquirers)
+* aquirer
+* collector
+* submitter
+* dashboard
+* vandaq_admin (CLI admin utility)
 
-- `platform`**required**: platform name (e.g., vehicle ID).
-- `instrument`**required**: instrument identifier.
-- `type`**required**: picks the acquirer class:`simpleSerial`,`serialPolled`,`serial_nmea_GPS`,`serial_nmea`,`networkStreaming`,`simulated`,`simulated_GPS`,`LabJack`,`Phidget`.
-- `queue`**required**: POSIX MQ used to emit measurements.
+This manual describes the key/value pairs required for each configuration parameter for each process.
+
+## Acquirer Configuration
+
+VanDAQ runs a separate acquirer process for each instrument that produces data to be acquired. The acquirer for each instrument is configured via a YAML formatted text file contained in the directory /home/vandaq/vandaq/acquirer/config.  On DAQ startup, vandaq_admin looks at all .yaml files in the directory and starts a python process for each file, including the configuration file name in the .  The code reads the YAML keys in the file to establish the names of the instrument and the platform carrying the instrument, the communications connection and protocol parameters required for the connection, the queues for passing data up the chain and commands to be sent to the instrument, the formatting of the data coming from the instrument, and the acquirer log files.
+
+This guide explains how to author YAML configs for acquirers in `/home/vandaq/vandaq/acquirer/config/`. Each config selects an acquirer type via `type` and supplies connection, parsing, queue, and logging details. Keys marked **required** must be present for that acquirer type; others are optional.
+
+### Common keys (all acquirer types)
+
+- `platform `**required**: platform name (e.g., vehicle ID).
+- `instrument `**required**: instrument identifier.
+- `type `**required**: picks the acquirer class:`simpleSerial`,`serialPolled`,`serial_nmea_GPS`,`serial_nmea`,`networkStreaming`,`simulated`,`simulated_GPS`,`LabJack`,`Phidget`.
+- `queue `**required**: POSIX MQ used to emit measurements.
   - `name` (e.g.,`/dev-measurements`)
   - `max_msg_size`,`max_msgs`
 - `command_queue` /`response_queue`: optional POSIX MQs for instrument commands/responses.
@@ -15,10 +29,10 @@ This guide explains how to author YAML configs for acquirers in `acquirer/config
 - `measurement_delay_secs`: optional latency offset applied to`sample_time`.
 - `verbose`: optional (>0 to print queued messages).
 - `alarms`: optional per-parameter alarm rules (`value_<`,`value_>`,`value_=`,`value_!=`,`substr_is`) that attach alarm metadata to measurements.
-- `logs`**required**: file-based logger configuration.
+- `logs `**required**: file-based logger configuration.
   - `log_dir`,`log_file`,`log_level`,`logger_name`
 
-## Alarm rules
+### Alarm rules
 
 Define alarms under an `alarms` block keyed by parameter name. Each rule is a one-key map using these operators (supported in `acquirers.py`):
 
@@ -35,10 +49,10 @@ alarms:
   CO:
     - value_<:
         value: 0
-        alarm_level: alarm          # string; matches dim table values
-        alarm_type: underrange      # string; matches dim table values
+        alarm_level: alarm          ## string; matches dim table values
+        alarm_type: underrange      ## string; matches dim table values
         alarm_message: "CO below zero"
-        impacts_data: true          # optional; defaults true
+        impacts_data: true          ## optional; defaults true
   Status:
     - substr_is:
         substr_begin: 0
@@ -52,7 +66,7 @@ alarms:
 
 Example configs like `acquirer/config/Aeris_CH4_C2H6.yaml` show multiple rules per parameter; the collector records triggered alarms in the `alarm` fact table with links to the measurement.
 
-## SerialStreamAcquirer (`type: simpleSerial`)
+### SerialStreamAcquirer (`type: simpleSerial`)
 
 Continuous serial stream parsed into delimited items.
 
@@ -71,7 +85,7 @@ Continuous serial stream parsed into delimited items.
 - `init`: optional map of strings sent once after opening the port.
 - `response_header`: optional prefix used to route instrument responses to`response_queue`.
 
-## SerialPolledAcquirer (`type: serialPolled`)
+### SerialPolledAcquirer (`type: serialPolled`)
 
 Poll/response over serial at `data_freq_secs`.
 
@@ -86,7 +100,7 @@ Poll/response over serial at `data_freq_secs`.
   - `trim_response_begin` /`trim_response_end`: slice response before parsing.
 - `wait_for_response_secs`: optional delay after sending a command before reading a response.
 
-## SerialNmeaGPSAcquirer (`type: serial_nmea_GPS`)
+### SerialNmeaGPSAcquirer (`type: serial_nmea_GPS`)
 
 Lightweight NMEA GPS reader for latitude/longitude/speed/direction.
 
@@ -95,7 +109,7 @@ Lightweight NMEA GPS reader for latitude/longitude/speed/direction.
 - `measurement_delay_secs`: optional
   No`stream` parsing rules are needed; the acquirer decodes NMEA RMC sentences directly.
 
-## SerialNmeaAcquirer (`type: serial_nmea`)
+### SerialNmeaAcquirer (`type: serial_nmea`)
 
 General NMEA sentence decoder configured per sentence type.
 
@@ -109,7 +123,7 @@ General NMEA sentence decoder configured per sentence type.
       - `scaler` optional for numeric scaling
 - `measurement_delay_secs`: optional
 
-## NetworkStreamingAcquirer (`type: networkStreaming`)
+### NetworkStreamingAcquirer (`type: networkStreaming`)
 
 Receives pickled dictionaries over ZeroMQ PULL.
 
@@ -122,7 +136,7 @@ Receives pickled dictionaries over ZeroMQ PULL.
   - Optional`wholeDict` block:`parameter`,`unit`,`acqType` to store the entire dict as a string.
 - `measurement_delay_secs`: optional
 
-## SimulatedAcquirer (`type: simulated`)
+### SimulatedAcquirer (`type: simulated`)
 
 Generates synthetic signals for testing.
 
@@ -133,7 +147,7 @@ Generates synthetic signals for testing.
   - `cycle_secs`: emission interval
   - For each parameter named in`stream.items`:`signal` (`sine`,`triangle`,`sawtooth`,`square`,`random`),`period`,`min`,`max`
 
-## SimulatedGPSAcquirer (`type: simulated_GPS`)
+### SimulatedGPSAcquirer (`type: simulated_GPS`)
 
 Replays lat/lon pairs from a CSV file.
 
@@ -141,7 +155,7 @@ Replays lat/lon pairs from a CSV file.
 - `cycletime`: seconds between samples
 - `measurement_delay_secs`: optional
 
-## LabJackAcquirer (`type: LabJack`)
+### LabJackAcquirer (`type: LabJack`)
 
 Reads analog/digital channels via LabJack LJM.
 
@@ -156,7 +170,7 @@ Reads analog/digital channels via LabJack LJM.
     - Aggregation (optional for analog):`aggregate` (`mean`/`max`/`min`) and`aggregate_hz`
 - `measurement_delay_secs`: optional
 
-## PhidgetAcquirer (`type: Phidget`)
+### PhidgetAcquirer (`type: Phidget`)
 
 Reads analog/digital channels from a Phidget hub.
 
@@ -170,7 +184,7 @@ Reads analog/digital channels from a Phidget hub.
     - `unit`,`aquisition_type`
 - `measurement_delay_secs`: optional
 
-## Example: serial stream skeleton
+### Example: serial stream skeleton
 
 Incoming serial lines matching this config could look like:
 
@@ -180,6 +194,7 @@ Incoming serial lines matching this config could look like:
 ```
 
 ```yaml
+
 platform: van1
 instrument: ExampleSensor
 type: simpleSerial
@@ -204,3 +219,70 @@ logs:
   log_level: "INFO"
   logger_name: "ExampleSensor"
 ```
+
+## Collector Configuration
+
+The collector inserts measurements into the database and optionally rolls them into submission bundles for the submitter. Presence of a `queue` block means the collector reads live messages from a POSIX MQ; otherwise it watches a submission directory for `.sbm` files produced elsewhere. Example configs live in `collector/vandaq_collector.yaml` (queue mode) and `collector/vandaq_collector_submission.yaml` (file mode).
+
+### Common keys
+
+- `connect_string` **required**: SQLAlchemy/PostgreSQL URL used by the collector to write to the database.
+- `insert_batch_seconds`: optional; defaults to `1`. Groups records that share a `sample_time` second into the same insert batch.
+- `cache_time_seconds`: optional; defaults to `3600`. Size (in seconds) of the time-dimension cache window around incoming `sample_time` values.
+- `logs` **required**: logger config with `log_dir`, `log_file`, `log_level`, `logger_name`.
+
+### Queue-driven collection (`queue` present)
+
+- `queue` **required**: POSIX MQ to read from; `name`, `max_msg_size`, and `max_msgs` must match (or exceed) the acquirer’s queue settings.
+- `queued_recs_to_batch`: optional; defaults to `1000`. Number of queue messages pulled before inserting a batch into the database and rotating submission files.
+- `submissions`: controls on-disk bundles for the submitter (even while reading from a queue).
+  - `submit_file_dir` **required**: output directory for submission files.
+  - `submit_file_basename` **required**: prefix for each submission filename; the collector appends the roll time.
+  - `submit_file_minutes` **required**: minutes between file rotations.
+  - `submit_file_timezone`: optional; timezone used when stamping filenames.
+  - `submit_file_tz_abbr`: optional; abbreviation appended to filenames (e.g., `PST`).
+
+Example (queue mode):
+
+```yaml
+queue:
+  name: "/dev-measurements"
+  max_msg_size: 8000
+  max_msgs: 50
+connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-test"
+insert_batch_seconds: 1
+cache_time_seconds: 3600
+queued_recs_to_batch: 1000
+logs:
+  log_dir: "/home/vandaq/vandaq/collector/log"
+  log_file: "collector.log"
+  log_level: "INFO"
+  logger_name: "collector"
+submissions:
+  submit_file_dir: "/home/vandaq/vandaq/collector/submission"
+  submit_file_basename: "submit_HaleyCar_"
+  submit_file_minutes: 1
+  submit_file_timezone: "America/Los_Angeles"
+  submit_file_tz_abbr: "PST"
+```
+
+### Submission-file collection (no `queue` block)
+
+Uses prewritten submission files instead of a live queue.
+
+- `submissions` **required**:
+  - `submit_file_dir`: directory to scan for `.sbm` files.
+  - `submitted_file_dir`: where processed files are moved; failures go to a `rejected/` subfolder.
+  - `submit_file_pattern`: glob used to find pending submission files (e.g., `submit_*.sbm`).
+  - `submit_file_timezone`: optional; timezone used when parsing timestamps embedded in submission filenames.
+
+## Submitter Configuration
+
+
+
+## Dashboard Configuration
+
+
+
+## vandaq_admin Configuration
+
