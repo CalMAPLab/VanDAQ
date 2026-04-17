@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/home/vandaq/vandaq/env/bin/python3
 import sys
 import os
 import yaml
