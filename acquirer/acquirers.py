@@ -35,6 +35,13 @@ from collections import defaultdict
 from statistics import mean
 from datetime import datetime, timedelta
 
+
+from labjack import ljm
+
+from Phidget22.Phidget import *
+from Phidget22.Devices.VoltageInput import *
+from Phidget22.Devices.DigitalInput import *
+
 class RecordParser:
     def __init__(self, config, logger):
         self.config = config
@@ -1075,7 +1082,6 @@ class LabGadgetAcquirer(Acquirer):
             }
 
 
-from labjack import ljm
 
 
 class LabJackAcquirer(LabGadgetAcquirer):
@@ -1140,9 +1146,6 @@ class LabJackAcquirer(LabGadgetAcquirer):
     def run(self):
         super().run()
 
-from Phidget22.Phidget import *
-from Phidget22.Devices.VoltageInput import *
-from Phidget22.Devices.DigitalInput import *
 
 voltage_reported = False
 
@@ -1150,6 +1153,8 @@ def onVoltageChange(self, voltage):
     global voltage_reported
     print("Voltage is: " + str(voltage))
     voltage_reported = True
+
+
 
 class PhidgetAcquirer(LabGadgetAcquirer):
     def __init__(self, config_dict):

@@ -8,6 +8,6 @@ directories:
 components:
   launch_acquirers: true
   launch_collector: true
-  launch_submitter: true
+  launch_submitter: false
   collector_config_file: "vandaq_collector.yaml" 
   submitter_config_file: "vandaq_submitter.yaml" 
