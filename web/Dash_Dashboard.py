@@ -60,12 +60,48 @@ def get_instrument_measurements(engine,config):
     logger.debug(f'get_instrument_measurements: Finished query in {(datetime.datetime.now()-st_time).total_seconds()} seconds')
     return data, df          
 
-graph_line_colors = ["rgba(0, 123, 255, 0.8)",# light blue line with transparency
-                     "rgba(182, 10, 10, 0.8)",# light red line with transparency
-                     "rgba(29, 163, 11, 0.8)",# light green line with transparency
-                     "rgba(140, 18, 189, 0.8)",# light purple line with transparency
-                     "rgba(161, 159, 9, 0.8)"]# light yellow line with transparency
-            
+graph_line_colors = [
+    "#2563eb",
+    "#dc2626",
+    "#059669",
+    "#7c3aed",
+    "#d97706",
+]
+
+PLOT_AXIS_TICK_SIZE = 13
+
+
+def legend_item(color, label):
+    return html.Span(
+        [
+            html.Span(className="legend-swatch", style={"backgroundColor": color}),
+            html.Span(label.replace("_", " "), className="legend-label"),
+        ],
+        className="legend-item",
+    )
+
+
+def build_trace_legend(graph_data):
+    if not graph_data:
+        return None
+    return html.Div(
+        [
+            legend_item(graph_line_colors[i % len(graph_line_colors)], g["parameter"])
+            for i, g in enumerate(graph_data)
+        ],
+        className="cell-legend-row",
+    )
+
+
+def build_cell_header(title, graph_data=None, alarm_class=None):
+    """Instrument title and trace legend on one row."""
+    row = [html.H2(title.replace("_", " "), className=alarm_class)]
+    legend = build_trace_legend(graph_data)
+    if legend is not None:
+        row.append(legend)
+    return html.Div(row, className="cell-header-row")
+
+
 def is_consistently_increasing(column):
     """
     Test if a Pandas Series of datetimes consistently increases.
@@ -123,107 +159,70 @@ def create_trend_plot(instrument_data_list, config, zoomed=False, show_axes=Fals
                     'line_width': 0
                 })
 
-    # Create layout with multiple y-axes if separate scales are enabled
+    tick_font = dict(color="#5c6b7a", size=PLOT_AXIS_TICK_SIZE)
+    axis_style = dict(
+        visible=show_axes,
+        showgrid=True,
+        gridcolor="rgba(0,0,0,0.06)",
+        tickfont=tick_font,
+        linecolor="#d8dee6",
+    )
+    plot_margin = dict(l=8, r=52, t=8, b=32) if show_axes else dict(l=4, r=4, t=4, b=4)
     layout = go.Layout(
-        margin=dict(l=0, r=0, t=0, b=0),
-        xaxis=dict(visible=show_axes, showgrid=False, tickfont=dict(color='lightblue')),
-        yaxis=dict(visible=show_axes, side='right', showgrid=False, tickfont=dict(color='lightblue')),
+        margin=plot_margin,
+        xaxis=dict(**axis_style),
+        yaxis=dict(**axis_style, side="right"),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         shapes=shapes,
-        showlegend=False
+        showlegend=False,
     )
 
     # Dynamically add additional y-axes for separate scales
     if separate_scales:
         layout.yaxis = dict(
-            domain=y_axis_domains[0], 
-            side='right',
-            showgrid=False, 
-            tickfont=dict(color='lightblue')
+            domain=y_axis_domains[0],
+            side="right",
+            showgrid=True,
+            gridcolor="rgba(0,0,0,0.06)",
+            tickfont=tick_font,
+            linecolor="#d8dee6",
         )
         for i, domain in enumerate(y_axis_domains[1:], start=1):
             layout[f"yaxis{i+1}"] = dict(
                 domain=domain,
-                side='right',
-                showgrid=False,
-                tickfont=dict(color='lightblue'),
-                anchor="x"
+                side="right",
+                showgrid=True,
+                gridcolor="rgba(0,0,0,0.06)",
+                tickfont=tick_font,
+                linecolor="#d8dee6",
+                anchor="x",
             )
 
     return go.Figure(graphs, layout)
 
-def create_grid_cell(graph,text, instrument = None):
-    # Use dcc.Graph for trend plot background and overlay html for the text
+def create_grid_cell(graph, text, instrument=None):
+    """Instrument card: labels in header above chart (no overlay on data)."""
     if instrument:
-        cell_id = {'type': 'instrument_cell', 'index': instrument} 
+        cell_id = {'type': 'instrument_cell', 'index': instrument}
     else:
         cell_id = None
     class_name = 'instrument_cell'
-    cell_style={
-        "position": "relative",
-        "width": "48%",
-        "padding-bottom": "15%",
-        "display": "inline-block",
-        "margin": "10px",
-        "background-color": "black"
-    }
     if graph:
-        graph_cell =  dcc.Graph(
+        graph_cell = dcc.Graph(
             figure=graph,
             config={"displayModeBar": False},
-            style={
-                "position": "absolute",
-                "top": 0,
-                "left": 0,
-                "height": "100%",
-                "width": "100%",
-                "background-color": "black"
-            },
+            style={"height": "100%", "width": "100%"},
         )
     else:
-        graph_cell = html.Div([],            
-                style={
-                "position": "absolute",
-                "top": 0,
-                "left": 0,
-                "height": "100%",
-                "width": "100%",
-                "background-color": "black"
-            })
-    cell_children=[
-        graph_cell,
-        html.Div(
-            children=text,
-            style={
-                "position": "absolute",
-                #"top": "50%",
-                #"left": "50%",
-                #"transform": "translate(-50%, -50%)",
-                "color": "white",
-                "font-family": "sans-serif",
-#                      "font-size": "24px",
-#                      "font-weight": "bold",
-                    #"text-align": "left",
-            },
-        ),
+        graph_cell = html.Div(className="cell-chart-empty")
+    cell_children = [
+        html.Div(children=text, className="cell-header"),
+        html.Div(graph_cell, className="cell-chart"),
     ]
     if cell_id:
-        cell = html.Div(
-                id=cell_id,
-                className=class_name, 
-                style=cell_style,
-                children=cell_children,
-                #n_clicks=0
-            )
-    else:
-        cell = html.Div(
-                className=class_name, 
-                style=cell_style,
-                children=cell_children,
-                #n_clicks=0
-            )
-    return cell
+        return html.Div(id=cell_id, className=class_name, children=cell_children)
+    return html.Div(className=class_name, children=cell_children)
 
 flashing_text = {
             "outline": "2px solid red",    # Red outline
@@ -250,8 +249,12 @@ def build_page_contents(engine, config, measurements = None, dataFrame = None, z
             if not instrument:
                 instrument_text = inst
                 alarm_box_style = 'flashing-box-alarm'
-                instrument_name = html.H2(instrument_text.replace('_',' '), className=alarm_box_style)
-                items.append(create_grid_cell(None,html.Div([instrument_name, html.H1('NO DATA')],className='no_data_label')))
+                no_data_header = build_cell_header(inst, alarm_class=alarm_box_style)
+                items.append(create_grid_cell(
+                    None,
+                    html.Div([no_data_header, html.Span('NO DATA', className='no-data-badge')],
+                             className='no_data_label'),
+                ))
             else:
                 instrument = instrument[0]
                 instrument_text = list(instrument.keys())[0]
@@ -270,32 +273,14 @@ def build_page_contents(engine, config, measurements = None, dataFrame = None, z
                         alarm_box_style = 'flashing-box-alarm'
                     elif alarm_level == 1:
                         alarm_box_style = 'flashing-box-warning'
-                    instrument_name = html.H2(instrument_text.replace('_',' '), className=alarm_box_style)
-                    
-                    reading_cells = [instrument_name]
+                    header = build_cell_header(
+                        instrument_text, graph_data=graph_data, alarm_class=alarm_box_style,
+                    )
                     for parameter in instrument[instrument_text]:
-                        parameter_text = parameter['parameter']
-                        do_display = False
-                        if parameter_text in config['display_params'][instrument_text]['display']:
-                            do_display = True
-                            # Vulnerability here v
-                            try:
-                                reading_string = parameter_text + ': ' + '{:.4f}'.format(get_last_valid_value(parameter['measurements'],'value')) + ' '+ parameter['unit']
-                            except TypeError as e:
-                                reading_string = 'Bad Value: '+ str(get_last_valid_value(parameter['measurements'],'value'))
-                            reading_line = None
-                            if 'engineering' in parameter['acquisition_type']:
-            #                   reading_line = html.Div(reading_string,className='engineering_reading')  
-                                reading_line = None  
-                            else:
-                                if do_display:
-                                    reading_line = html.Div(reading_string,className='ambient_reading')
-                                else:
-                                    reading_line = None
-                            if reading_line:
-                                reading_cells.append(reading_line)
-                            sample_time = get_last_valid_value(parameter['measurements'],'sample_time')
-                    items.append(create_grid_cell(graph,reading_cells, instrument = instrument_text))
+                        sample_time = get_last_valid_value(
+                            parameter['measurements'], 'sample_time',
+                        )
+                    items.append(create_grid_cell(graph, header, instrument=instrument_text))
     else:
         inst_measurements = [m for m in measurements if zoom_to_instrument in m.keys()][0][zoom_to_instrument]
         items.append(html.Div(children=[html.H2(zoom_to_instrument.replace('_',' ')),html.Button('<--Back', id='zoom_back_button', n_clicks=0)]))
@@ -313,32 +298,14 @@ def build_page_contents(engine, config, measurements = None, dataFrame = None, z
                 alarm_box_style = 'flashing-box-alarm'
             elif alarm_level == 1:
                 alarm_box_style = 'flashing-box-warning'
-            parameter_name = html.H2(parameter_text, className=alarm_box_style)
-            aqu_type_text = html.H3(aqu_type_text)
-            reading_cells = [parameter_name, aqu_type_text]
-            reading_string = ''
-
-            try:
-                reading_string = '{:.4f}'.format(get_last_valid_value(parameter['measurements'],'value')) + ' '+ parameter['unit']
-            except TypeError as e:
-                reading_string = 'Bad Value: '+ str(get_last_valid_value(parameter['measurements'],'value'))
-            if 'engineering' in aqu_type_text:
-                reading_line = html.Div(reading_string,className='engineering_reading')  
-            else:
-                reading_line = html.Div(reading_string,className='ambient_reading')
-            if reading_line:
-                reading_cells.append(reading_line)
-            sample_time = get_last_valid_value(parameter['measurements'],'sample_time')
-            items.append(create_grid_cell(graph,reading_cells))
+            header = build_cell_header(
+                parameter_text, graph_data=graph_data, alarm_class=alarm_box_style,
+            )
+            sample_time = get_last_valid_value(parameter['measurements'], 'sample_time')
+            items.append(create_grid_cell(graph, header))
 
     return items, sample_time, dataFrame, measurements
 
-
-local_styles ={
-    'font-family': 'sans-serif',
-    'background-color': 'black',
-    'color':'white'
-}
 
 refresh_secs = 5
 
@@ -351,18 +318,20 @@ def layout_dashboard(config):
         content = ['Awaiting data...']
     layout = html.Div([
         dcc.Interval(id='interval', interval=refresh_secs * 1000, n_intervals=0),
-        dcc.Store(id="cache-timestamp", data=None),  # To store the last seen timestamp
-        dcc.Store(id="instrument_zoom", data = None),
-        html.H1('VanDAQ Operator Dashboard', style={'text-align': 'left'}, id='clickhere', n_clicks=0),
-        html.Div('',id='sample_timestamp'),
-        dcc.Checklist(
-            options=[{'label': 'Freeze', 'value': 'suspend'}],
-            id='suspend-dashboard_updates',
-            value=[],  # Default: updates are not suspended
-            style={'margin-bottom': '10px'}
-        ),
-        html.Div(id='grid-container', children=content)
-    ])
+        dcc.Store(id="cache-timestamp", data=None),
+        dcc.Store(id="instrument_zoom", data=None),
+        html.Div([
+            html.H1('VanDAQ Operator Dashboard', id='clickhere', n_clicks=0),
+            html.Div('', id='sample_timestamp', className='sample-timestamp'),
+            dcc.Checklist(
+                options=[{'label': ' Freeze updates', 'value': 'suspend'}],
+                id='suspend-dashboard_updates',
+                value=[],
+                className='dashboard-freeze',
+            ),
+        ], className='page-toolbar'),
+        html.Div(id='grid-container', children=content),
+    ], className='page-panel dashboard-page')
     return layout
 
 
@@ -480,27 +449,39 @@ def regenerate_pages(engine, config, lock):
     logger.info('Dashboard:  regenerate_pages: Starting dashboard background page regeneration thread')
     while True:
         if regpage:
-            # Here is the expensive query and page-build
-            #print(f'Starting dash regenerate {datetime.datetime.now()}')                
-            st_time = datetime.datetime.now()
-            pages['dashboard'], sample_time, dataFrame, measurements = build_page_contents(engine, config)
-            logger.debug(f'Dashboard:  regenerate_pages: Main Page build took {(datetime.datetime.now() - st_time).total_seconds()} seconds')
-            instruments = dataFrame['instrument'].unique()
-            for instrument in instruments:
-                pages[instrument],stime,df,meas = build_page_contents(engine, config, measurements=measurements, zoom_to_instrument=instrument)
-            global latest_pages
-            global latest_page_time
-            global latest_sample_time
-            global latest_data_frame
-            global latest_measurements_dict
-            with lock:
-                latest_pages = pages
-                latest_page_time = datetime.datetime.now()
-                latest_sample_time = sample_time
-                latest_data_frame = dataFrame
-                latest_measurements_dict = measurements
-            #print(f'Finished dash regenerate {datetime.datetime.now()} {(datetime.datetime.now() - st_time).total_seconds()}')                
-            logger.debug(f'regenerate_pages: Finished all page regenerations {(datetime.datetime.now() - st_time).total_seconds()} seconds')
+            try:
+                st_time = datetime.datetime.now()
+                pages['dashboard'], sample_time, dataFrame, measurements = build_page_contents(
+                    engine, config,
+                )
+                logger.debug(
+                    'Dashboard: regenerate_pages: main page build took %.3fs',
+                    (datetime.datetime.now() - st_time).total_seconds(),
+                )
+                if dataFrame is not None and len(dataFrame) > 0:
+                    for instrument in dataFrame['instrument'].unique():
+                        pages[instrument], _, _, _ = build_page_contents(
+                            engine, config,
+                            measurements=measurements,
+                            zoom_to_instrument=instrument,
+                        )
+                global latest_pages
+                global latest_page_time
+                global latest_sample_time
+                global latest_data_frame
+                global latest_measurements_dict
+                with lock:
+                    latest_pages = pages
+                    latest_page_time = datetime.datetime.now()
+                    latest_sample_time = sample_time
+                    latest_data_frame = dataFrame
+                    latest_measurements_dict = measurements
+                logger.debug(
+                    'regenerate_pages: finished all page regenerations in %.3fs',
+                    (datetime.datetime.now() - st_time).total_seconds(),
+                )
+            except Exception:
+                logger.exception('Dashboard: regenerate_pages failed')
         time.sleep(0.1)  # give some time back to the main thread
 
 

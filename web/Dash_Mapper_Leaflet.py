@@ -412,14 +412,15 @@ def layout_map_display(config):
     )
 
     return html.Div([
-        html.H1("Drive Map"),
+        html.Div([
+            html.H1("Drive Map"),
+            dcc.Checklist(
+                options=[{"label": " Today only", "value": "today"}],
+                id="today-checkbox",
+                value=["today"],
+            ),
+        ], className="page-toolbar"),
         dcc.Interval(id="check-interval", interval=check_interval * 1000, n_intervals=0),
-        dcc.Checklist(
-            options=[{"label": "Today", "value": "today"}],
-            id="today-checkbox",
-            value=["today"],
-            style={"margin-bottom": "10px"},
-        ),
         dcc.Store(id="refresh-trigger", data=0),
         dcc.Store(
             id="map-state",
@@ -475,10 +476,10 @@ def layout_map_display(config):
                 )),
             ]),
             html.Button("Center", id="center-button", className="map-control-button", n_clicks=0),
-        ], style={"display": "flex", "flexDirection": "row", "gap": "10px", "flexWrap": "wrap"}),
+        ], className="map-toolbar"),
         html.Div(
             id="map-container",
-            className="leaflet-map-wrapper",
+            className="leaflet-map-wrapper map-container-panel",
             style={"position": "relative", "width": "100%", "height": "700px", "minHeight": "700px"},
             children=[
                 leaflet_map,
@@ -504,8 +505,8 @@ def layout_map_display(config):
                 ),
             ],
         ),
-        html.P(f"Tiles: {tile_attribution}", style={"fontSize": "11px", "color": "#666"}),
-    ])
+        html.P(f"Tiles: {tile_attribution}", className="map-attribution"),
+    ], className="page-panel map-page")
 
 
 def update_map_page(app, engine, config):

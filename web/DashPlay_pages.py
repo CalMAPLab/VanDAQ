@@ -84,23 +84,27 @@ update_alarm_table(app, engine, config)
 update_map_page(app, engine, config)
 instrument_controls(app, engine, config)
 
-tabstyle = {'padding':'5px 25px', 'position': 'sticky'}
 # Main layout with tabs
 logger.debug('Creating tab layout')
 app.layout = html.Div([
-    dcc.Tabs(id='tabs', className="tab-container", value='dashboard', children=[
-        dcc.Tab(label='Dashboard', value='dashboard', style=tabstyle, selected_style=tabstyle),
-        dcc.Tab(label='Alarm Table', value='alarm-table', style=tabstyle, selected_style=tabstyle),
-        dcc.Tab(label='Map', value='map-display', style=tabstyle, selected_style=tabstyle),
-        dcc.Tab(label='Controls', value='instrument-controls', style=tabstyle, selected_style=tabstyle)
-    ]),
+    dcc.Tabs(
+        id='tabs',
+        className='tab-container',
+        value='dashboard',
+        children=[
+            dcc.Tab(label='Dashboard', value='dashboard', className='vandaq-tab', selected_className='vandaq-tab--selected'),
+            dcc.Tab(label='Alarm Table', value='alarm-table', className='vandaq-tab', selected_className='vandaq-tab--selected'),
+            dcc.Tab(label='Map', value='map-display', className='vandaq-tab', selected_className='vandaq-tab--selected'),
+            dcc.Tab(label='Controls', value='instrument-controls', className='vandaq-tab', selected_className='vandaq-tab--selected'),
+        ],
+    ),
     html.Div([
         html.Div(layout_dashboard(config), id="dashboard-content", style={"display": "block"}),
         html.Div(layout_alarm_table(config), id="alarm-table-content", style={"display": "none"}),
         html.Div(layout_map_display(config), id="map-content", style={"display": "none"}),
-        html.Div(layout_instrument_controls(config), id="instrument-controls-content", style={"display": "none"})
-    ], id='app-content', className='page-content')
-])
+        html.Div(layout_instrument_controls(config), id="instrument-controls-content", style={"display": "none"}),
+    ], id='app-content', className='page-content'),
+], className='vandaq-app')
 
 
 # Callback to update tab content
