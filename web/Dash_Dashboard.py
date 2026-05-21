@@ -71,14 +71,38 @@ graph_line_colors = [
 PLOT_AXIS_TICK_SIZE = 13
 
 
-def legend_item(color, label):
-    return html.Span(
-        [
-            html.Span(className="legend-swatch", style={"backgroundColor": color}),
-            html.Span(label.replace("_", " "), className="legend-label"),
-        ],
-        className="legend-item",
-    )
+def param_alarm_level(measurements):
+    if measurements is None or "max_alarm_level" not in measurements.columns:
+        return 0
+    recent = measurements["max_alarm_level"].dropna()
+    if recent.empty:
+        return 0
+    return int(recent.tail(20).max())
+
+
+def max_alarm_from_parameters(parameters):
+    level = 0
+    for param in parameters:
+        level = max(level, param_alarm_level(param.get("measurements")))
+    return level
+
+
+def alarm_badge(level):
+    if level >= 2:
+        return html.Span("ALARM", className="alarm-badge alarm-badge--critical")
+    if level >= 1:
+        return html.Span("WARNING", className="alarm-badge alarm-badge--warning")
+    return None
+
+
+def legend_item(color, label, alarm_level=0):
+    parts = [html.Span(className="legend-swatch", style={"backgroundColor": color})]
+    if alarm_level >= 2:
+        parts.append(html.Span(className="legend-alarm-dot legend-alarm-dot--critical", title="Alarm"))
+    elif alarm_level >= 1:
+        parts.append(html.Span(className="legend-alarm-dot legend-alarm-dot--warning", title="Warning"))
+    parts.append(html.Span(label.replace("_", " "), className="legend-label"))
+    return html.Span(parts, className="legend-item")
 
 
 def build_trace_legend(graph_data):
@@ -86,16 +110,23 @@ def build_trace_legend(graph_data):
         return None
     return html.Div(
         [
-            legend_item(graph_line_colors[i % len(graph_line_colors)], g["parameter"])
+            legend_item(
+                graph_line_colors[i % len(graph_line_colors)],
+                g["parameter"],
+                alarm_level=param_alarm_level(g.get("measurements")),
+            )
             for i, g in enumerate(graph_data)
         ],
         className="cell-legend-row",
     )
 
 
-def build_cell_header(title, graph_data=None, alarm_class=None):
-    """Instrument title and trace legend on one row."""
-    row = [html.H2(title.replace("_", " "), className=alarm_class)]
+def build_cell_header(title, graph_data=None, alarm_level=0):
+    """Instrument title, status badge, and trace legend on one row."""
+    row = [html.H2(title.replace("_", " "))]
+    badge = alarm_badge(alarm_level)
+    if badge is not None:
+        row.append(badge)
     legend = build_trace_legend(graph_data)
     if legend is not None:
         row.append(legend)
@@ -144,7 +175,11 @@ def create_trend_plot(instrument_data_list, config, zoomed=False, show_axes=Fals
         if config.get('alarm_shapes', False) and 'max_alarm_level' in data.columns:
             alarm_intervals = data[data['max_alarm_level'] > 0]
             for idx, row in alarm_intervals.iterrows():
-                color = 'rgba(255,0,0,0.6)' if row['max_alarm_level'] == 2 else 'rgba(255,255,0,0.6)'
+                color = (
+                    "rgba(220, 38, 38, 0.22)"
+                    if row["max_alarm_level"] == 2
+                    else "rgba(217, 119, 6, 0.2)"
+                )
                 shapes.append({
                     'type': 'rect',
                     'xref': 'x',
@@ -201,13 +236,22 @@ def create_trend_plot(instrument_data_list, config, zoomed=False, show_axes=Fals
 
     return go.Figure(graphs, layout)
 
-def create_grid_cell(graph, text, instrument=None):
+def create_grid_cell(graph, header_content, instrument=None, alarm_level=0):
     """Instrument card: labels in header above chart (no overlay on data)."""
     if instrument:
         cell_id = {'type': 'instrument_cell', 'index': instrument}
     else:
         cell_id = None
     class_name = 'instrument_cell'
+    if alarm_level >= 2:
+        class_name += ' instrument-cell--alarm'
+    elif alarm_level >= 1:
+        class_name += ' instrument-cell--warning'
+    header_class = 'cell-header'
+    if alarm_level >= 2:
+        header_class += ' cell-header--alarm'
+    elif alarm_level >= 1:
+        header_class += ' cell-header--warning'
     if graph:
         graph_cell = dcc.Graph(
             figure=graph,
@@ -217,7 +261,7 @@ def create_grid_cell(graph, text, instrument=None):
     else:
         graph_cell = html.Div(className="cell-chart-empty")
     cell_children = [
-        html.Div(children=text, className="cell-header"),
+        html.Div(children=header_content, className=header_class),
         html.Div(graph_cell, className="cell-chart"),
     ]
     if cell_id:
@@ -248,12 +292,12 @@ def build_page_contents(engine, config, measurements = None, dataFrame = None, z
             instrument = [i for i in measurements if i.get(inst)]
             if not instrument:
                 instrument_text = inst
-                alarm_box_style = 'flashing-box-alarm'
-                no_data_header = build_cell_header(inst, alarm_class=alarm_box_style)
+                no_data_header = build_cell_header(inst, alarm_level=2)
                 items.append(create_grid_cell(
                     None,
                     html.Div([no_data_header, html.Span('NO DATA', className='no-data-badge')],
                              className='no_data_label'),
+                    alarm_level=2,
                 ))
             else:
                 instrument = instrument[0]
@@ -264,23 +308,19 @@ def build_page_contents(engine, config, measurements = None, dataFrame = None, z
                     graph = None
                     separate_scales = config['display_params'][instrument_text].get('separate_scales',False)
                     graph = create_trend_plot(graph_data, config, show_axes = True, separate_scales=separate_scales)
-                    try:
-                        alarm_level = max([max(list(data['measurements']['max_alarm_level'][-5:])) for data in graph_data])
-                    except ValueError as e:
-                        alarm_level = 0
-                    alarm_box_style = None
-                    if alarm_level == 2:
-                        alarm_box_style = 'flashing-box-alarm'
-                    elif alarm_level == 1:
-                        alarm_box_style = 'flashing-box-warning'
+                    alarm_level = max_alarm_from_parameters(instrument[instrument_text])
                     header = build_cell_header(
-                        instrument_text, graph_data=graph_data, alarm_class=alarm_box_style,
+                        instrument_text, graph_data=graph_data, alarm_level=alarm_level,
                     )
                     for parameter in instrument[instrument_text]:
                         sample_time = get_last_valid_value(
                             parameter['measurements'], 'sample_time',
                         )
-                    items.append(create_grid_cell(graph, header, instrument=instrument_text))
+                    items.append(
+                        create_grid_cell(
+                            graph, header, instrument=instrument_text, alarm_level=alarm_level,
+                        ),
+                    )
     else:
         inst_measurements = [m for m in measurements if zoom_to_instrument in m.keys()][0][zoom_to_instrument]
         items.append(html.Div(children=[html.H2(zoom_to_instrument.replace('_',' ')),html.Button('<--Back', id='zoom_back_button', n_clicks=0)]))
@@ -292,17 +332,12 @@ def build_page_contents(engine, config, measurements = None, dataFrame = None, z
             #graph_params = config['display_params'][instrument_text]['graph']
             graph_data = [{'parameter': parameter_text, 'measurements': parameter['measurements']}]
             graph = create_trend_plot(graph_data, config, zoomed=True, show_axes=True)
-            alarm_level = max(parameter['measurements']['max_alarm_level'][-5:])
-            alarm_box_style = None
-            if alarm_level == 2:
-                alarm_box_style = 'flashing-box-alarm'
-            elif alarm_level == 1:
-                alarm_box_style = 'flashing-box-warning'
+            alarm_level = param_alarm_level(parameter['measurements'])
             header = build_cell_header(
-                parameter_text, graph_data=graph_data, alarm_class=alarm_box_style,
+                parameter_text, graph_data=graph_data, alarm_level=alarm_level,
             )
             sample_time = get_last_valid_value(parameter['measurements'], 'sample_time')
-            items.append(create_grid_cell(graph, header))
+            items.append(create_grid_cell(graph, header, alarm_level=alarm_level))
 
     return items, sample_time, dataFrame, measurements
 
