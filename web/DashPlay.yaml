@@ -1,5 +1,5 @@
 dashboard_refresh_secs: 3
-alarm_shapes: False
+alarm_shapes: True
 master_GPS: "ublox_M8Q_GPS"
 #master_GPS: "GPS_sim"
 db_connect_string: "postgresql://vandaq:YOUR_PASSWORD@localhost:5432/vandaq-dev"
