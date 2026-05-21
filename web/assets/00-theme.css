@@ -1,0 +1,107 @@
+/* VanDAQ light theme — design tokens and global base */
+:root {
+  --bg-page: #f4f6f9;
+  --bg-surface: #ffffff;
+  --bg-muted: #eef1f5;
+  --border: #d8dee6;
+  --border-strong: #b8c2ce;
+  --text: #1a2332;
+  --text-muted: #5c6b7a;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --alarm: #dc2626;
+  --warning: #d97706;
+  --success: #059669;
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.1);
+  --radius: 8px;
+  --font-sans: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --header-height: 52px;
+  --tabs-height: 44px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-page);
+  color: var(--text);
+  margin: 0;
+  line-height: 1.45;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text);
+  font-weight: 600;
+  margin-top: 0;
+}
+
+h1 {
+  font-size: 1.5rem;
+}
+
+h2 {
+  font-size: 1.125rem;
+}
+
+h3 {
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+
+button,
+.map-control-button {
+  font-family: inherit;
+  font-size: 0.875rem;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+button:hover,
+.map-control-button:hover {
+  background: var(--bg-muted);
+  border-color: var(--accent);
+}
+
+input[type="text"],
+textarea,
+.dash-input {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: var(--bg-surface);
+  color: var(--text);
+}
+
+.Select-control {
+  border: 1px solid var(--border) !important;
+  border-radius: 6px !important;
+  background: var(--bg-surface) !important;
+  min-height: 34px !important;
+}
+
+.Select-value-label,
+.Select-value {
+  color: var(--text) !important;
+  background: transparent !important;
+}
+
+.Select-menu-outer {
+  color: var(--text) !important;
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.DateInput_input {
+  height: 34px !important;
+  font-size: 0.875rem !important;
+  padding: 6px 10px !important;
+  color: var(--text) !important;
+  background: var(--bg-surface) !important;
+}

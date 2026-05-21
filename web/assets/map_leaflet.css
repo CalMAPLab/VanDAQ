@@ -4,6 +4,23 @@
     overflow: visible;
 }
 
+.map-page .page-toolbar {
+  margin-bottom: 12px;
+}
+
+.map-container-panel {
+  border: 1px solid var(--border, #d8dee6);
+  border-radius: var(--radius, 8px);
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(15, 23, 42, 0.08));
+  overflow: hidden;
+}
+
+.map-attribution {
+  font-size: 11px;
+  color: var(--text-muted, #5c6b7a);
+  margin-top: 8px;
+}
+
 #map-container,
 .leaflet-map-wrapper {
     width: 100%;

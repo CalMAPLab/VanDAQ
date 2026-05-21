@@ -1,9 +1,1 @@
-body {
-    font-family: sans-serif;
-    background-color: black;
-    color: white;
-}
-
-h1, h2, h3, h4, h5, h6 {
-    color: rgb(248, 249, 249)
-}
+/* Dash auto-loads 00-theme.css; this file kept for compatibility */
