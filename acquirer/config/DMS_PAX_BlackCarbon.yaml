@@ -21,10 +21,10 @@ stream:
 alarms:
   BC_mass:
     - value_<: 
-        value: -1
+        value: -2
         alarm_level: alarm
         alarm_type: underrange
-        alarm_message: "BC_mass below -1 ug/m3"
+        alarm_message: "BC_mass below -2 ug/m3"
         impacts_data: true
   mode:
     - value_!=:
