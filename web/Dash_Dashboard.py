@@ -33,6 +33,9 @@ sample_time = datetime.datetime.now()
 config = None
 engine = None
 
+DASHBOARD_WINDOW_MINUTES = 5
+active_zoom_instrument = None
+
 
 def get_last_valid_value(df, column):
     # Get the last valid (non-NaN) value in the specified column
@@ -45,20 +48,85 @@ def get_last_valid_value(df, column):
         return valid_values.iloc[-1]
     return None
 
-def get_instrument_measurements(engine,config):
-    # Fetch the latest measurement set
-    #df = get_measurements(engine, start_time=datetime.datetime.now()-datetime.timedelta(minutes=5))
+def _apply_display_timezone(df, config):
+    if len(df) > 0 and config.get('display_timezone'):
+        df['sample_time'] = (
+            df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config['display_timezone'])
+        )
+        df.set_index('sample_time', inplace=True, drop=False)
+    return df
+
+
+def _trim_to_dashboard_window(df):
+    """Keep rows within the last DASHBOARD_WINDOW_MINUTES (UTC naive, pre-display-tz)."""
+    if df is None or len(df) == 0:
+        return df
+    cutoff = datetime.datetime.utcnow() - datetime.timedelta(minutes=DASHBOARD_WINDOW_MINUTES)
+    st = df['sample_time']
+    if hasattr(st.dt, 'tz') and st.dt.tz is not None:
+        cutoff = pd.Timestamp(cutoff, tz='UTC').tz_convert(st.dt.tz)
+    return df[df['sample_time'] >= cutoff].copy()
+
+
+def refresh_measurement_cache(engine, config, cached_df=None, force_full=False):
+    """
+    Read-only incremental fetch: full 5-minute window on cold start, then only new rows.
+    Uses existing get_2step_query_with_alarms SELECT only (no schema or write changes).
+    """
     st_time = datetime.datetime.now()
-    logger.debug(f'get_instrument_measurements: Starting query at {st_time}')
+    now = datetime.datetime.utcnow()
+    window_start = now - datetime.timedelta(minutes=DASHBOARD_WINDOW_MINUTES)
     include_engineering = config.get('include_engineering', True)
-    df = get_2step_query_with_alarms(engine, datetime.datetime.now()-datetime.timedelta(minutes=5),wide=False, include_engineering=include_engineering)
-    if len(df) > 0:
-        if 'display_timezone' in config:
-            df['sample_time'] = df['sample_time'].dt.tz_localize('UTC').dt.tz_convert(config['display_timezone'])
-            df.set_index('sample_time', inplace = True, drop=False)
-    data = transform_instrument_dataframe(df)
-    logger.debug(f'get_instrument_measurements: Finished query in {(datetime.datetime.now()-st_time).total_seconds()} seconds')
-    return data, df          
+
+    if force_full or cached_df is None or len(cached_df) == 0:
+        df_new = get_2step_query_with_alarms(
+            engine, window_start, end_time=now, wide=False,
+            include_engineering=include_engineering,
+        )
+        merged = df_new
+        query_mode = 'full'
+    else:
+        max_ts = cached_df['sample_time'].max()
+        if hasattr(max_ts, 'tzinfo') and max_ts.tzinfo is not None:
+            since = max_ts.to_pydatetime() + datetime.timedelta(seconds=1)
+        else:
+            since = max_ts + datetime.timedelta(seconds=1)
+        df_new = get_2step_query_with_alarms(
+            engine, since, end_time=now, wide=False,
+            include_engineering=include_engineering,
+        )
+        if len(df_new) == 0:
+            merged = cached_df
+        elif 'id' in cached_df.columns and 'id' in df_new.columns:
+            merged = pd.concat([cached_df, df_new], ignore_index=True)
+            merged = merged.drop_duplicates(subset=['id'], keep='last')
+        else:
+            merged = pd.concat([cached_df, df_new], ignore_index=True)
+            merged = merged.drop_duplicates(
+                subset=['sample_time', 'instrument', 'parameter', 'acquisition_type'],
+                keep='last',
+            )
+        query_mode = 'incremental'
+
+    merged = _trim_to_dashboard_window(merged)
+    cache_df_utc = merged.copy()
+    display_df = _apply_display_timezone(merged.copy(), config)
+    data = transform_instrument_dataframe(display_df)
+    elapsed = (datetime.datetime.now() - st_time).total_seconds()
+    log = config.get('logger')
+    if log:
+        log.info(
+            'Dashboard: refresh_measurement_cache %s query returned %d rows (%.3fs)',
+            query_mode, len(display_df), elapsed,
+        )
+    return data, display_df, cache_df_utc
+
+
+def get_instrument_measurements(engine, config, cached_df=None, force_full=False):
+    data, display_df, _cache_df_utc = refresh_measurement_cache(
+        engine, config, cached_df=cached_df, force_full=force_full,
+    )
+    return data, display_df
 
 graph_line_colors = [
     "#2563eb",
@@ -146,8 +214,21 @@ def create_trend_plot(instrument_data_list, config, zoomed=False, show_axes=Fals
     shapes = []
     num_traces = len(instrument_data_list)
 
+    if num_traces == 0:
+        return go.Figure(
+            layout=go.Layout(
+                margin=dict(l=4, r=4, t=4, b=4),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+            ),
+        )
+
     # Define y-axis domains dynamically if using separate scales
-    y_axis_domains = [(i / num_traces, (i + 1) / num_traces) for i in range(num_traces)] if separate_scales else [(0, 1)]
+    if separate_scales and num_traces > 0:
+        y_axis_domains = [(i / num_traces, (i + 1) / num_traces) for i in range(num_traces)]
+    else:
+        y_axis_domains = [(0, 1)]
+        separate_scales = False
 
     for i, instrument_data in enumerate(instrument_data_list):
         name = instrument_data['parameter']
@@ -304,10 +385,17 @@ def build_page_contents(engine, config, measurements = None, dataFrame = None, z
                 instrument_text = list(instrument.keys())[0]
                 if instrument_text in config['display_params']:
                     graph_params = config['display_params'][instrument_text]['graph']
-                    graph_data = [{'parameter':param['parameter'], 'measurements':param['measurements']} for param in instrument[instrument_text] if param['parameter'] in graph_params]
-                    graph = None
-                    separate_scales = config['display_params'][instrument_text].get('separate_scales',False)
-                    graph = create_trend_plot(graph_data, config, show_axes = True, separate_scales=separate_scales)
+                    graph_data = [
+                        {'parameter': param['parameter'], 'measurements': param['measurements']}
+                        for param in instrument[instrument_text]
+                        if param['parameter'] in graph_params
+                        and len(param['measurements'][['value']].dropna()) > 0
+                    ]
+                    separate_scales = config['display_params'][instrument_text].get('separate_scales', False)
+                    graph = (
+                        create_trend_plot(graph_data, config, show_axes=True, separate_scales=separate_scales)
+                        if graph_data else None
+                    )
                     alarm_level = max_alarm_from_parameters(instrument[instrument_text])
                     header = build_cell_header(
                         instrument_text, graph_data=graph_data, alarm_level=alarm_level,
@@ -331,7 +419,7 @@ def build_page_contents(engine, config, measurements = None, dataFrame = None, z
             aqu_type_text = parameter['acquisition_type']
             #graph_params = config['display_params'][instrument_text]['graph']
             graph_data = [{'parameter': parameter_text, 'measurements': parameter['measurements']}]
-            graph = create_trend_plot(graph_data, config, zoomed=True, show_axes=True)
+            graph = create_trend_plot(graph_data, config, show_axes=True)
             alarm_level = param_alarm_level(parameter['measurements'])
             header = build_cell_header(
                 parameter_text, graph_data=graph_data, alarm_level=alarm_level,
@@ -342,11 +430,10 @@ def build_page_contents(engine, config, measurements = None, dataFrame = None, z
     return items, sample_time, dataFrame, measurements
 
 
-refresh_secs = 5
-
 # Layout for the dashboard page
 def layout_dashboard(config):
     global latest_pages
+    refresh_secs = config.get('dashboard_refresh_secs', 2)
     if latest_pages:
         content = latest_pages['dashboard']
     else:
@@ -374,6 +461,7 @@ latest_pages = None
 latest_page_time = None
 latest_sample_time = None
 latest_data_frame = None
+latest_cache_df_utc = None
 latest_measurements_dict = None
 
 
@@ -391,16 +479,27 @@ def update_dashboard(app, engine, config):
         prevent_initial_call=True
     )
     def instrument_cell_clicked(clicks1):
-        global latest_pages
+        global latest_pages, latest_measurements_dict, latest_data_frame, active_zoom_instrument
         logger.debug(f'Dashboard:  Got to instrument_cell_clicked: {datetime.datetime.now()}')
         for t in ctx.triggered:
             if t['value']:
                 tr = json.loads(t['prop_id'].replace('.n_clicks',''))
-                #print(f'Cell Clicked {datetime.datetime.now()} {tr["index"]}')
                 instrument = tr['index']
                 with lock:
-                    page = latest_pages[instrument]
-                return tr['index'], page
+                    if latest_pages and instrument in latest_pages:
+                        page = latest_pages[instrument]
+                    elif latest_measurements_dict is not None:
+                        page, _, _, _ = build_page_contents(
+                            engine, config,
+                            measurements=latest_measurements_dict,
+                            dataFrame=latest_data_frame,
+                            zoom_to_instrument=instrument,
+                        )
+                        latest_pages[instrument] = page
+                    else:
+                        raise PreventUpdate
+                active_zoom_instrument = instrument
+                return instrument, page
         logger.debug(f'Returning from instrument_cell_clicked: {datetime.datetime.now()}')
 
         raise PreventUpdate
@@ -412,13 +511,14 @@ def update_dashboard(app, engine, config):
         prevent_initial_call=True    
     )
     def zoom_back_clicked(clicks):
-        global latest_pages
+        global latest_pages, active_zoom_instrument
         logger.debug(f'Dashboard:  Got to zoom_back_clicked: {datetime.datetime.now()}')
         if clicks > 0:
-            global latest_pages
             with lock:
+                if not latest_pages or 'dashboard' not in latest_pages:
+                    raise PreventUpdate
                 page = latest_pages['dashboard']
-            #print(f'Clicked back button {datetime.datetime.now()}')
+            active_zoom_instrument = None
             logger.debug(f'Dashboard:  Returning from zoom_back_clicked: {datetime.datetime.now()}')
             return None, page
         raise PreventUpdate
@@ -436,7 +536,7 @@ def update_dashboard(app, engine, config):
             State('suspend-dashboard_updates', 'value'),
             State("cache-timestamp", "data")
         ],
-        prevent_initial_call=True
+        prevent_initial_call=False
     )
     def update_page(n_intervals, instrument_zoom, suspend_updates, last_seen_timestamp):
         global latest_pages
@@ -451,24 +551,35 @@ def update_dashboard(app, engine, config):
             raise PreventUpdate
         else:
             if isinstance(last_seen_timestamp, str):
-                last_seen_timestamp = datetime.datetime.strptime(last_seen_timestamp,'%Y-%m-%dT%H:%M:%S.%f')
+                try:
+                    last_seen_timestamp = datetime.datetime.fromisoformat(last_seen_timestamp)
+                except ValueError:
+                    last_seen_timestamp = datetime.datetime.strptime(
+                        last_seen_timestamp, '%Y-%m-%dT%H:%M:%S.%f',
+                    )
             with lock:
                 cached_timestamp = latest_page_time
-            if cached_timestamp and ((last_seen_timestamp is None) or (cached_timestamp > last_seen_timestamp)):
-                with lock:
-                    cached_timestamp = latest_page_time
-                    items = latest_pages['dashboard']
-                    cached_sample_time = latest_sample_time
+                pages = latest_pages
+            if cached_timestamp and pages and 'dashboard' in pages and (
+                (last_seen_timestamp is None) or (cached_timestamp > last_seen_timestamp)
+            ):
+                items = pages['dashboard']
+                cached_sample_time = latest_sample_time
                 if isinstance(cached_sample_time, datetime.datetime):
                     sample_timestamp = f'Last sample time: {cached_sample_time.strftime("%m/%d/%Y, %H:%M:%S")}'
                 else:
                     sample_timestamp = ''
-                if instrument_zoom:
-                    items = latest_pages[instrument_zoom]                
+                if instrument_zoom and instrument_zoom in pages:
+                    items = pages[instrument_zoom]                
                                 
                 #print(f'Returning updated page {instrument_zoom}')
                 logger.debug(f'Dashboard:  Returning from to update_page -- page updated: {datetime.datetime.now()}')
-                return items, sample_timestamp, cached_timestamp
+                ts_out = (
+                    cached_timestamp.isoformat()
+                    if isinstance(cached_timestamp, datetime.datetime)
+                    else cached_timestamp
+                )
+                return items, sample_timestamp, ts_out
 
         #print(f'Preventing update {datetime.datetime.now()}')                
         logger.debug(f'Dashboard:  Returning from to update_page -- no update: {datetime.datetime.now()}')
@@ -478,45 +589,57 @@ def update_dashboard(app, engine, config):
 
 # Periodically regenerate the page content in the background
 def regenerate_pages(engine, config, lock):
-    regpage = True
-    count = 0
-    pages = {}
-    logger.info('Dashboard:  regenerate_pages: Starting dashboard background page regeneration thread')
+    global latest_pages, latest_page_time, latest_sample_time
+    global latest_data_frame, latest_cache_df_utc, latest_measurements_dict
+    global active_zoom_instrument
+
+    log = config.get('logger')
+    if log:
+        log.info('Dashboard: regenerate_pages: Starting background page regeneration thread')
     while True:
-        if regpage:
-            try:
-                st_time = datetime.datetime.now()
-                pages['dashboard'], sample_time, dataFrame, measurements = build_page_contents(
+        try:
+            st_time = datetime.datetime.now()
+            with lock:
+                cached_utc = latest_cache_df_utc
+                zoom_inst = active_zoom_instrument
+                prior_pages = latest_pages
+
+            measurements, dataFrame, cache_df_utc = refresh_measurement_cache(
+                engine, config, cached_df=cached_utc,
+            )
+            pages = {}
+            pages['dashboard'], sample_time, _, _ = build_page_contents(
+                engine, config,
+                measurements=measurements,
+                dataFrame=dataFrame,
+            )
+
+            if zoom_inst and measurements is not None:
+                pages[zoom_inst], _, _, _ = build_page_contents(
                     engine, config,
+                    measurements=measurements,
+                    dataFrame=dataFrame,
+                    zoom_to_instrument=zoom_inst,
                 )
-                logger.debug(
-                    'Dashboard: regenerate_pages: main page build took %.3fs',
-                    (datetime.datetime.now() - st_time).total_seconds(),
+
+            elapsed = (datetime.datetime.now() - st_time).total_seconds()
+            with lock:
+                latest_pages = pages
+                latest_page_time = datetime.datetime.now()
+                latest_sample_time = sample_time
+                latest_data_frame = dataFrame
+                latest_cache_df_utc = cache_df_utc
+                latest_measurements_dict = measurements
+            if log:
+                log.debug(
+                    'Dashboard: regenerate_pages cycle finished in %.3fs (zoom=%s)',
+                    elapsed, zoom_inst,
                 )
-                if dataFrame is not None and len(dataFrame) > 0:
-                    for instrument in dataFrame['instrument'].unique():
-                        pages[instrument], _, _, _ = build_page_contents(
-                            engine, config,
-                            measurements=measurements,
-                            zoom_to_instrument=instrument,
-                        )
-                global latest_pages
-                global latest_page_time
-                global latest_sample_time
-                global latest_data_frame
-                global latest_measurements_dict
-                with lock:
-                    latest_pages = pages
-                    latest_page_time = datetime.datetime.now()
-                    latest_sample_time = sample_time
-                    latest_data_frame = dataFrame
-                    latest_measurements_dict = measurements
-                logger.debug(
-                    'regenerate_pages: finished all page regenerations in %.3fs',
-                    (datetime.datetime.now() - st_time).total_seconds(),
-                )
-            except Exception:
-                logger.exception('Dashboard: regenerate_pages failed')
-        time.sleep(0.1)  # give some time back to the main thread
+        except Exception:
+            if log:
+                log.exception('Dashboard: regenerate_pages failed')
+            with lock:
+                latest_cache_df_utc = None
+        time.sleep(max(config.get('dashboard_refresh_secs', 2) * 0.5, 0.5))
 
 

@@ -49,7 +49,7 @@ lock = Lock()
 logger = None
 myConfig = None
 
-FULL_REFRESH_EVERY = 100
+FULL_REFRESH_EVERY = 200
 
 
 class MapMachine(object):
