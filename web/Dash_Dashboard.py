@@ -25,6 +25,7 @@ from threading import Thread, Lock
 #from vandaq_measurements_query import get_measurements
 from vandaq_2step_measurements_query import get_2step_query_with_alarms
 from vandaq_2step_measurements_query import transform_instrument_dataframe
+from sqlalchemy import text
 
 
 
@@ -33,8 +34,14 @@ sample_time = datetime.datetime.now()
 config = None
 engine = None
 
-DASHBOARD_WINDOW_MINUTES = 5
 active_zoom_instrument = None
+
+# Periodic full 5-minute SQL refresh to correct drift (~150 cycles at 2s refresh)
+DASHBOARD_FULL_REFRESH_EVERY = 150
+
+
+def dashboard_window_minutes(config):
+    return config.get('dashboard_window_minutes', 5)
 
 
 def get_last_valid_value(df, column):
@@ -57,11 +64,12 @@ def _apply_display_timezone(df, config):
     return df
 
 
-def _trim_to_dashboard_window(df):
-    """Keep rows within the last DASHBOARD_WINDOW_MINUTES (UTC naive, pre-display-tz)."""
+def _trim_to_dashboard_window(df, config):
+    """Keep rows within dashboard_window_minutes (UTC naive, pre-display-tz)."""
     if df is None or len(df) == 0:
         return df
-    cutoff = datetime.datetime.utcnow() - datetime.timedelta(minutes=DASHBOARD_WINDOW_MINUTES)
+    minutes = dashboard_window_minutes(config)
+    cutoff = datetime.datetime.utcnow() - datetime.timedelta(minutes=minutes)
     st = df['sample_time']
     if hasattr(st.dt, 'tz') and st.dt.tz is not None:
         cutoff = pd.Timestamp(cutoff, tz='UTC').tz_convert(st.dt.tz)
@@ -75,7 +83,7 @@ def refresh_measurement_cache(engine, config, cached_df=None, force_full=False):
     """
     st_time = datetime.datetime.now()
     now = datetime.datetime.utcnow()
-    window_start = now - datetime.timedelta(minutes=DASHBOARD_WINDOW_MINUTES)
+    window_start = now - datetime.timedelta(minutes=dashboard_window_minutes(config))
     include_engineering = config.get('include_engineering', True)
 
     if force_full or cached_df is None or len(cached_df) == 0:
@@ -108,7 +116,7 @@ def refresh_measurement_cache(engine, config, cached_df=None, force_full=False):
             )
         query_mode = 'incremental'
 
-    merged = _trim_to_dashboard_window(merged)
+    merged = _trim_to_dashboard_window(merged, config)
     cache_df_utc = merged.copy()
     display_df = _apply_display_timezone(merged.copy(), config)
     data = transform_instrument_dataframe(display_df)
@@ -199,6 +207,13 @@ def build_cell_header(title, graph_data=None, alarm_level=0):
     if legend is not None:
         row.append(legend)
     return html.Div(row, className="cell-header-row")
+
+
+def build_spectrum_cell_header(title):
+    return html.Div(
+        [html.H2(title.replace("_", " "))],
+        className="cell-header-row",
+    )
 
 
 def is_consistently_increasing(column):
@@ -317,6 +332,148 @@ def create_trend_plot(instrument_data_list, config, zoomed=False, show_axes=Fals
 
     return go.Figure(graphs, layout)
 
+
+def _dp_from_psd_parameter(parameter: str):
+    if not parameter.startswith("dN_") or not parameter.endswith("_nm"):
+        return None
+    core = parameter[3:-3].replace("p", ".")
+    try:
+        return float(core)
+    except ValueError:
+        return None
+
+
+def _spectrum_rows_to_scan(sample_time, rows):
+    scan_id = None
+    n_tot = None
+    diameters = []
+    values = []
+    for param, val, _, s in rows:
+        if param == "scan_id" and s:
+            scan_id = s
+            continue
+        if param == "N_tot":
+            n_tot = val
+            continue
+        dp = _dp_from_psd_parameter(param)
+        if dp is None:
+            continue
+        diameters.append(dp)
+        values.append(val)
+    if not diameters:
+        return None
+    order = sorted(range(len(diameters)), key=lambda i: diameters[i])
+    return {
+        "sample_time": sample_time,
+        "scan_id": scan_id,
+        "n_tot": n_tot,
+        "diameters": [diameters[i] for i in order],
+        "values": [values[i] for i in order],
+    }
+
+
+def fetch_recent_spectra(engine, instrument: str, config, num_scans=5):
+    """Last N inverted PSD scans within the dashboard time window (oldest first)."""
+    cutoff = datetime.datetime.utcnow() - datetime.timedelta(
+        minutes=dashboard_window_minutes(config),
+    )
+    sql = text("""
+        SELECT p.parameter, m.value, m.sample_time, m.string
+        FROM measurement m
+        JOIN instrument i ON m.instrument_id = i.id
+        JOIN parameter p ON m.parameter_id = p.id
+        WHERE i.instrument = :instrument
+          AND m.sample_time >= :cutoff
+          AND m.sample_time IN (
+            SELECT sample_time FROM (
+              SELECT DISTINCT m3.sample_time AS sample_time
+              FROM measurement m3
+              JOIN instrument i3 ON m3.instrument_id = i3.id
+              WHERE i3.instrument = :instrument
+                AND m3.sample_time >= :cutoff
+              ORDER BY sample_time DESC
+              LIMIT :num_scans
+            ) recent
+          )
+        ORDER BY m.sample_time ASC
+    """)
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sql,
+            {"instrument": instrument, "cutoff": cutoff, "num_scans": num_scans},
+        ).fetchall()
+    if not rows:
+        return []
+
+    by_time = {}
+    for param, val, sample_time, s in rows:
+        by_time.setdefault(sample_time, []).append((param, val, sample_time, s))
+
+    scans = []
+    for sample_time in sorted(by_time.keys()):
+        scan = _spectrum_rows_to_scan(sample_time, by_time[sample_time])
+        if scan:
+            scans.append(scan)
+    return scans
+
+
+def _spectrum_scan_label(scan, config):
+    label = scan.get("scan_id") or "scan"
+    st = scan["sample_time"]
+    if config.get("display_timezone"):
+        try:
+            st = pd.Timestamp(st, tz="UTC").tz_convert(config["display_timezone"])
+        except Exception:
+            pass
+    if hasattr(st, "strftime"):
+        label = f"{label} {st.strftime('%H:%M:%S')}"
+    return label
+
+
+SPECTRUM_HISTORY_COLOR = "#b8c4d0"
+SPECTRUM_LATEST_COLOR = graph_line_colors[0]
+
+
+def create_spectrum_plot(scans, config, show_axes=True):
+    tick_font = dict(color="#5c6b7a", size=PLOT_AXIS_TICK_SIZE)
+    axis_style = dict(
+        visible=show_axes,
+        showgrid=True,
+        gridcolor="rgba(0,0,0,0.06)",
+        tickfont=tick_font,
+        linecolor="#d8dee6",
+    )
+    traces = []
+    for i, scan in enumerate(scans):
+        is_latest = i == len(scans) - 1
+        color = SPECTRUM_LATEST_COLOR if is_latest else SPECTRUM_HISTORY_COLOR
+        width = 2.5 if is_latest else 1.5
+        traces.append(
+            go.Scatter(
+                x=scan["diameters"],
+                y=scan["values"],
+                mode="lines+markers",
+                line=dict(color=color, width=width),
+                marker=dict(size=3 if is_latest else 2, color=color),
+                showlegend=False,
+                hovertemplate=(
+                    f"{_spectrum_scan_label(scan, config)}<br>"
+                    "Dp=%{x:.2f} nm<br>"
+                    "dN/dlog10Dp=%{y:.2f}<extra></extra>"
+                ),
+            )
+        )
+    layout = go.Layout(
+        margin=dict(l=8, r=52, t=8, b=40) if show_axes else dict(l=4, r=4, t=4, b=4),
+        xaxis=dict(**axis_style, type="log", title="Dp (nm)"),
+        yaxis=dict(**axis_style, side="right", title="dN/dlog10Dp (1/cm³)"),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        showlegend=False,
+    )
+    return go.Figure(traces, layout)
+
+
 def create_grid_cell(graph, header_content, instrument=None, alarm_level=0):
     """Instrument card: labels in header above chart (no overlay on data)."""
     if instrument:
@@ -370,6 +527,24 @@ def build_page_contents(engine, config, measurements = None, dataFrame = None, z
     items = []
     if not zoom_to_instrument:
         for inst in instruments:
+            inst_cfg = config['display_params'].get(inst, {})
+            if inst_cfg.get('spectrum'):
+                num_scans = inst_cfg.get('spectrum_num_scans', 5)
+                scans = fetch_recent_spectra(engine, inst, config, num_scans=num_scans)
+                if scans:
+                    graph = create_spectrum_plot(scans, config)
+                    header = build_spectrum_cell_header(inst)
+                    sample_time = scans[-1]['sample_time']
+                    items.append(create_grid_cell(graph, header, instrument=inst))
+                else:
+                    no_data_header = build_cell_header(inst, alarm_level=2)
+                    items.append(create_grid_cell(
+                        None,
+                        html.Div([no_data_header, html.Span('NO DATA', className='no-data-badge')],
+                                 className='no_data_label'),
+                        alarm_level=2,
+                    ))
+                continue
             instrument = [i for i in measurements if i.get(inst)]
             if not instrument:
                 instrument_text = inst
@@ -596,17 +771,41 @@ def regenerate_pages(engine, config, lock):
     log = config.get('logger')
     if log:
         log.info('Dashboard: regenerate_pages: Starting background page regeneration thread')
+    cycle = 0
+    consecutive_query_failures = 0
     while True:
-        try:
-            st_time = datetime.datetime.now()
-            with lock:
-                cached_utc = latest_cache_df_utc
-                zoom_inst = active_zoom_instrument
-                prior_pages = latest_pages
+        cycle += 1
+        st_time = datetime.datetime.now()
+        with lock:
+            cached_utc = latest_cache_df_utc
+            zoom_inst = active_zoom_instrument
 
+        force_full = (
+            cached_utc is None
+            or len(cached_utc) == 0
+            or (cycle % DASHBOARD_FULL_REFRESH_EVERY == 1)
+            or consecutive_query_failures >= 3
+        )
+
+        try:
             measurements, dataFrame, cache_df_utc = refresh_measurement_cache(
-                engine, config, cached_df=cached_utc,
+                engine, config, cached_df=cached_utc, force_full=force_full,
             )
+            consecutive_query_failures = 0
+        except Exception:
+            consecutive_query_failures += 1
+            if log:
+                log.exception(
+                    'Dashboard: regenerate_pages refresh failed (%d consecutive)',
+                    consecutive_query_failures,
+                )
+            if consecutive_query_failures >= 3:
+                with lock:
+                    latest_cache_df_utc = None
+            time.sleep(max(config.get('dashboard_refresh_secs', 2) * 0.5, 0.5))
+            continue
+
+        try:
             pages = {}
             pages['dashboard'], sample_time, _, _ = build_page_contents(
                 engine, config,
@@ -631,15 +830,20 @@ def regenerate_pages(engine, config, lock):
                 latest_cache_df_utc = cache_df_utc
                 latest_measurements_dict = measurements
             if log:
-                log.debug(
+                log.info(
                     'Dashboard: regenerate_pages cycle finished in %.3fs (zoom=%s)',
                     elapsed, zoom_inst,
                 )
         except Exception:
             if log:
-                log.exception('Dashboard: regenerate_pages failed')
+                log.exception(
+                    'Dashboard: regenerate_pages UI build failed; keeping SQL cache',
+                )
             with lock:
-                latest_cache_df_utc = None
+                latest_cache_df_utc = cache_df_utc
+                latest_measurements_dict = measurements
+                latest_data_frame = dataFrame
+
         time.sleep(max(config.get('dashboard_refresh_secs', 2) * 0.5, 0.5))
 
 
