@@ -10,6 +10,10 @@ env/*
 filers/files/*
 submitter/log/*
 web/log/*
+data/spider_psd/incoming/
+data/spider_psd/processed/
+data/spider_psd/failed/
+data/spider_psd/ingest_state.json
 MagicLog.txt
 *.osm.pbf
 *.mbtiles
