@@ -3,4 +3,15 @@
 **/*.bak
 **/*.sbm
 acquirer/log/*
+acquirer/config/save/*
+acquirer/test_data
 collector/log/*
+env/*
+filers/files/*
+submitter/log/*
+web/log/*
+MagicLog.txt
+*.osm.pbf
+*.mbtiles
+scripts/tiles/planetiler.jar
+scripts/tiles/california-latest.osm.pbf

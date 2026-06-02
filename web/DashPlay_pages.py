@@ -26,7 +26,7 @@ from logging.handlers import TimedRotatingFileHandler
 # import other dashboard pages
 from Dash_Alarm_Table import *
 from Dash_Dashboard import *
-from Dash_Mapper_FSM import layout_map_display, update_map_page
+from Dash_Mapper_Leaflet import layout_map_display, update_map_page
 from Dash_Instrument_Controls import layout_instrument_controls, instrument_controls
 
 # Initialize the Dash app
