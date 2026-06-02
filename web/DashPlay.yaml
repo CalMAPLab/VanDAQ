@@ -14,17 +14,34 @@ logs:
 mapping:
   default_platform: "van1"
   default_gps: "ublox_M8Q_GPS"
+  default_center: [37.87, -122.27]
+  default_zoom: 12
+  # Match map_native_max_zoom to MAX_ZOOM in scripts/tiles/build_norcal_mbtiles.sh
+  map_native_max_zoom: 16
+  map_max_zoom: 18
+  tile_server:
+    enabled: true
+    base_url: "http://192.168.1.100:8080"
+    style_path: "/styles/norcal/style.json"
+    raster_tiles_url: "/styles/norcal/{z}/{x}/{y}.png"
+    fallback_tiles_url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+    subdomains: "abc"
   #default_gps: "GPS_sim"
   map_check_secs: 3
   instruments:
     - Aeris_CH4_C2H6
-    - Aeris_N2O_CO 
-    - Airmar_WX200  
+    - Aeris_N2O_CO
+    - EcoPhysics_NOX
+    - MAGEE_AE33_Aethalometer
+    - TSI_3789_CPC
+    - Airmar_WX200
   # test_day: "08/12/2025"
   # test_hour_offset: -3
   wind_rose:
     show: True
-    num_points: 8
+    window_minutes: 5
+    num_bins: 16
+    show_mean_vector: True
     instrument: "Airmar_WX200"
     wind_dir_param: "Wind_Angle"
     wind_speed_param: "Wind_Speed"
@@ -39,17 +56,12 @@ display_params:
       - "NO2"
     display:
       - 'NO2'
-  LabJack_T7_1:
+  Phidget_1:
     separate_scales: True
     graph:
-      - "Bozons"
+      - "SolarRadiation"
     display:
       - "SolarRadiation"
-  TSI_3788_CPC:
-    graph:
-      - "particle_conc"
-    display:
-      - "particle_conc"
   TSI_3789_CPC:
     graph:
       - "particle_conc"

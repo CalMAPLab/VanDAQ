@@ -33,6 +33,7 @@ from transitions import Machine
 
 from vandaq_2step_measurements_query import get_measurements_with_locations_opt
 from vandaq_2step_measurements_query import get_all_geolocations
+from wind_rose import build_wind_rose_figure, instruments_for_map_query
 import os
 
 global query_results
@@ -638,64 +639,7 @@ def update_map_page(app, engine, config):
                             showlegend=False,
                             name="Current Location"
                         )
-                    wind_fig = None
-                    if config['mapping'].get('wind_rose', None) and config['mapping']['wind_rose'].get('show', False):
-                        wr_instrument = config['mapping']['wind_rose'].get('instrument',None)
-                        wr_speed_param = config['mapping']['wind_rose'].get('wind_speed_param',None)
-                        wr_dir_param = config['mapping']['wind_rose'].get('wind_dir_param',None)
-                        if wr_instrument and wr_speed_param and wr_dir_param:
-                            ws_recs = df[(df["instrument"] == wr_instrument)
-                                        & (df["parameter"]  == wr_speed_param)
-                                        ].sort_index()
-                            wd_recs = df[(df["instrument"] == wr_instrument)
-                                        & (df["parameter"]  == wr_dir_param)
-                                        ].sort_index()
-                            num_wr_points = config['mapping']['wind_rose'].get('num_points',1)
-                            if not ws_recs.empty and not wd_recs.empty:
-                                # Collect the last num_wr_points wind speed values into a list
-                                wind_speeds = ws_recs["value"].tail(num_wr_points).tolist()
-                                wind_dirs = wd_recs["value"].tail(num_wr_points).tolist()
-                                wind_fig = go.Figure()
-
-                                # Add wind rose as an inset in the upper right corner
-                                if len(wind_speeds) > 0 and len(wind_dirs) > 0:
-                                    speeds = wind_speeds
-                                    angles = wind_dirs
-                                    # Create wind rose figure
-                                    wind_fig = go.Figure()
-
-                                    wind_fig.add_trace(go.Barpolar(
-                                        r=speeds,
-                                        theta=angles,
-                                        width=45,
-                                        marker_color=speeds,
-                                        marker_colorscale="Viridis",
-                                        opacity=0.7,
-                                        hovertemplate="dir [deg]: %{theta}<br>speed [m/s]: %{r}<extra></extra>"
-                                    ))
-
-                                    wind_fig.update_layout(
-                                        title=dict(text="Wind", x=0.5, xanchor="center"),
-                                        margin=dict(l=0, r=0, t=30, b=20),  # give room for title
-                                        polar=dict(
-                                            radialaxis=dict(
-                                                showticklabels=False,
-                                                ticks=''
-                                            ),
-                                            angularaxis=dict(
-                                                rotation=90,           # 0° at top
-                                                direction="clockwise", # degrees increase clockwise
-                                                tickmode="array",
-                                                tickvals=[0, 90, 180, 270],
-                                                ticktext=["N", "E", "S", "W"]
-                                            )
-                                        ),
-                                        showlegend=False,
-                                        paper_bgcolor='rgba(0,0,0,0)',
-                                        plot_bgcolor='rgba(0,0,0,0)',
-                                        width=200,
-                                        height=200
-                                    )                                    
+                    wind_fig = build_wind_rose_figure(config, df)
 
                     # Add community polygons if selected
                     layers = []
@@ -899,7 +843,7 @@ def requery_geo(engine, config, lock):
         while True:
             # first check for new data for today (if today's data previously fetched)
             today = today_date(config)
-            instruments = config['mapping'].get('instruments', None)
+            instruments = instruments_for_map_query(config)
             # In case map is run overnight into a new day 
             if not today in query_results['data']:
                 query_results['data'][today] = None

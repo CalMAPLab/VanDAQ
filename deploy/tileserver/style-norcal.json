@@ -1,0 +1,51 @@
+{
+  "version": 8,
+  "name": "NorCal OSM",
+  "metadata": { "mapbox:autocomposite": false },
+  "sources": {
+    "norcal": {
+      "type": "vector",
+      "url": "mbtiles://norcal"
+    }
+  },
+  "glyphs": "{fontstack}/{range}.pbf",
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": { "background-color": "#f8f4f0" }
+    },
+    {
+      "id": "landcover",
+      "type": "fill",
+      "source": "norcal",
+      "source-layer": "landcover",
+      "paint": { "fill-color": "#e8eddb", "fill-opacity": 0.6 }
+    },
+    {
+      "id": "water",
+      "type": "fill",
+      "source": "norcal",
+      "source-layer": "water",
+      "paint": { "fill-color": "#aad3df" }
+    },
+    {
+      "id": "transportation",
+      "type": "line",
+      "source": "norcal",
+      "source-layer": "transportation",
+      "paint": {
+        "line-color": "#ffffff",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 14, 2]
+      }
+    },
+    {
+      "id": "building",
+      "type": "fill",
+      "source": "norcal",
+      "source-layer": "building",
+      "minzoom": 13,
+      "paint": { "fill-color": "#dcd9d6", "fill-opacity": 0.7 }
+    }
+  ]
+}

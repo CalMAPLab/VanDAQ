@@ -1,0 +1,16 @@
+[Unit]
+Description=VanDAQ local map tile server (tileserver-gl)
+After=network.target
+
+[Service]
+Type=simple
+User=vandaq
+Group=vandaq
+# Raster PNG tiles require full tileserver-gl, not tileserver-gl-light.
+ExecStart=/usr/bin/node /usr/local/lib/node_modules/tileserver-gl/src/main.js --config /etc/vandaq/tileserver/config.json -p 8080 -u 127.0.0.1
+# Install: sudo npm install -g tileserver-gl@5.6.0  (Node 20+)
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
