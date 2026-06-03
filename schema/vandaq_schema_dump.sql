@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 14.17 (Ubuntu 14.17-0ubuntu0.22.04.1)
+-- Dumped from database version 14.17 (Ubuntu 14.17-1.pgdg22.04+1)
 -- Dumped by pg_dump version 14.17 (Ubuntu 14.17-0ubuntu0.22.04.1)
 
 SET statement_timeout = 0;
@@ -15,6 +15,131 @@ SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
+
+--
+-- Name: pg_cron; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
+
+
+--
+-- Name: EXTENSION pg_cron; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION pg_cron IS 'Job scheduler for PostgreSQL';
+
+
+--
+-- Name: delete_old_records(integer); Type: PROCEDURE; Schema: public; Owner: vandaq
+--
+
+CREATE PROCEDURE public.delete_old_records(IN days_old integer)
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    v_start_time timestamptz := clock_timestamp();
+    v_end_time timestamptz;
+    v_alarm_deleted integer := 0;
+    v_measurement_deleted integer := 0;
+    v_geolocation_deleted integer := 0;
+    v_time_deleted integer := 0;
+    v_batch_count integer;
+    v_cutoff_time timestamptz := NOW() - INTERVAL '1 day' * days_old;
+BEGIN
+    RAISE NOTICE 'Starting delete_old_records for data older than % days (cutoff: %)', days_old, v_cutoff_time;
+
+    -- Delete from alarm in batches using CTE
+    LOOP
+        WITH alarm_batch AS (
+            SELECT a.id FROM alarm a
+            JOIN time t ON a.sample_time_id = t.id
+            WHERE t.time < v_cutoff_time
+            LIMIT 10000
+        ),
+        deleted AS (
+            DELETE FROM alarm
+            WHERE id IN (SELECT id FROM alarm_batch)
+            RETURNING *
+        )
+        SELECT count(*) INTO v_batch_count FROM deleted;
+
+        v_alarm_deleted := v_alarm_deleted + v_batch_count;
+        RAISE NOTICE 'Deleted % alarm rows (total %)', v_batch_count, v_alarm_deleted;
+        EXIT WHEN v_batch_count = 0;
+    END LOOP;
+
+    -- Delete from geolocation in batches using CTE
+    LOOP
+        WITH geolocation_batch AS (
+            SELECT g.id FROM geolocation g
+            JOIN time t ON g.sample_time_id = t.id
+            WHERE t.time < v_cutoff_time
+            LIMIT 10000
+        ),
+        deleted AS (
+            DELETE FROM geolocation
+            WHERE id IN (SELECT id FROM geolocation_batch)
+            RETURNING *
+        )
+        SELECT count(*) INTO v_batch_count FROM deleted;
+
+        v_geolocation_deleted := v_geolocation_deleted + v_batch_count;
+        RAISE NOTICE 'Deleted % geolocation rows (total %)', v_batch_count, v_geolocation_deleted;
+        EXIT WHEN v_batch_count = 0;
+    END LOOP;
+
+    -- Delete from measurement in batches using CTE
+    LOOP
+        WITH measurement_batch AS (
+            SELECT id FROM measurement
+            WHERE sample_time < v_cutoff_time
+            LIMIT 10000
+        ),
+        deleted AS (
+            DELETE FROM measurement
+            WHERE id IN (SELECT id FROM measurement_batch)
+            RETURNING *
+        )
+        SELECT count(*) INTO v_batch_count FROM deleted;
+
+        v_measurement_deleted := v_measurement_deleted + v_batch_count;
+        RAISE NOTICE 'Deleted % measurement rows (total %)', v_batch_count, v_measurement_deleted;
+        EXIT WHEN v_batch_count = 0;
+    END LOOP;
+
+    -- Delete from time in batches using CTE
+	/*
+    LOOP
+        WITH time_batch AS (
+            SELECT id FROM time
+            WHERE time < v_cutoff_time
+            LIMIT 10000
+        ),
+        deleted AS (
+            DELETE FROM time
+            WHERE id IN (SELECT id FROM time_batch)
+            RETURNING *
+        )
+        SELECT count(*) INTO v_batch_count FROM deleted;
+
+        v_time_deleted := v_time_deleted + v_batch_count;
+        RAISE NOTICE 'Deleted % time rows (total %)', v_batch_count, v_time_deleted;
+        EXIT WHEN v_batch_count = 0;
+    END LOOP;
+	*/
+
+    v_end_time := clock_timestamp();
+
+    INSERT INTO delete_old_records_log(run_time, duration, days_old, alarm_deleted, measurement_deleted, time_deleted, geolocation_deleted)
+    VALUES (v_start_time, v_end_time - v_start_time, days_old, v_alarm_deleted, v_measurement_deleted, v_time_deleted, v_geolocation_deleted);
+
+    RAISE NOTICE 'Finished delete_old_records. Duration: %', v_end_time - v_start_time;
+END;
+$$;
+
+
+ALTER PROCEDURE public.delete_old_records(IN days_old integer) OWNER TO vandaq;
 
 SET default_tablespace = '';
 
@@ -251,6 +376,46 @@ CREATE VIEW public.alarms_view AS
 ALTER TABLE public.alarms_view OWNER TO vandaq;
 
 --
+-- Name: delete_old_records_log; Type: TABLE; Schema: public; Owner: vandaq
+--
+
+CREATE TABLE public.delete_old_records_log (
+    id integer NOT NULL,
+    run_time timestamp with time zone NOT NULL,
+    duration interval NOT NULL,
+    days_old integer NOT NULL,
+    alarm_deleted integer NOT NULL,
+    measurement_deleted integer NOT NULL,
+    time_deleted integer NOT NULL,
+    geolocation_deleted bigint
+);
+
+
+ALTER TABLE public.delete_old_records_log OWNER TO vandaq;
+
+--
+-- Name: delete_old_records_log_id_seq; Type: SEQUENCE; Schema: public; Owner: vandaq
+--
+
+CREATE SEQUENCE public.delete_old_records_log_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.delete_old_records_log_id_seq OWNER TO vandaq;
+
+--
+-- Name: delete_old_records_log_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: vandaq
+--
+
+ALTER SEQUENCE public.delete_old_records_log_id_seq OWNED BY public.delete_old_records_log.id;
+
+
+--
 -- Name: geolocation_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
@@ -285,24 +450,16 @@ ALTER TABLE public.geolocation OWNER TO postgres;
 --
 
 CREATE VIEW public.geolocation_view AS
- SELECT m_lat.sample_time_id,
-    m_lat.platform_id,
-    m_lat.instrument_id,
+ SELECT pl.platform,
+    ins.instrument,
     t."time",
-    pl.platform,
-    i.instrument,
-    m_lat.value AS latitude,
-    m_lon.value AS longitude
-   FROM ((((((((public.measurement m_lat
-     JOIN public.measurement m_lon ON (((m_lat.sample_time_id = m_lon.sample_time_id) AND (m_lat.instrument_id = m_lon.instrument_id) AND (m_lat.platform_id = m_lon.platform_id))))
-     JOIN public."time" t ON ((t.id = m_lat.sample_time_id)))
-     JOIN public.platform pl ON ((m_lat.platform_id = pl.id)))
-     JOIN public.instrument i ON ((m_lat.instrument_id = i.id)))
-     JOIN public.acquisition_type at_lat ON ((m_lat.acquisition_type_id = at_lat.id)))
-     JOIN public.acquisition_type at_lon ON ((m_lon.acquisition_type_id = at_lon.id)))
-     JOIN public.parameter p_lat ON ((m_lat.parameter_id = p_lat.id)))
-     JOIN public.parameter p_lon ON ((m_lon.parameter_id = p_lon.id)))
-  WHERE (((at_lat.acquisition_type)::text = 'GPS'::text) AND ((at_lon.acquisition_type)::text = 'GPS'::text) AND ((p_lat.parameter)::text = 'latitude'::text) AND ((p_lon.parameter)::text = 'longitude'::text));
+    g.latitude,
+    g.longitude
+   FROM (((public.geolocation g
+     JOIN public.platform pl ON ((pl.id = g.platform_id)))
+     JOIN public.instrument ins ON ((ins.id = g.instrument_id)))
+     JOIN public."time" t ON ((t.id = g.sample_time_id)))
+  WHERE ((g.latitude <> 'NaN'::double precision) AND (g.latitude <> (0)::double precision) AND (g.longitude <> 'NaN'::double precision) AND (g.longitude <> (0)::double precision));
 
 
 ALTER TABLE public.geolocation_view OWNER TO postgres;
@@ -388,13 +545,13 @@ CREATE VIEW public.measurement_alarm_view AS
     t1."time" AS acquisition_time,
     t2."time" AS instrument_time,
     t3."time" AS sample_time,
-    i.instrument,
-    p.parameter,
-    u.unit,
-    at.acquisition_type,
+    i.instrument AS instrument_name,
+    p.parameter AS parameter_name,
+    u.unit AS unit_name,
+    at.acquisition_type AS acquisition_type_name,
     m.value,
     m.string,
-    plat.platform,
+    plat.platform AS platform_name,
     al.alarm_count,
     al.max_alarm_level,
     al.data_impacted,
@@ -579,6 +736,13 @@ ALTER TABLE ONLY public.alarm_type ALTER COLUMN id SET DEFAULT nextval('public.a
 
 
 --
+-- Name: delete_old_records_log id; Type: DEFAULT; Schema: public; Owner: vandaq
+--
+
+ALTER TABLE ONLY public.delete_old_records_log ALTER COLUMN id SET DEFAULT nextval('public.delete_old_records_log_id_seq'::regclass);
+
+
+--
 -- Name: instrument id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
@@ -684,6 +848,14 @@ ALTER TABLE ONLY public.alarm_type
 
 
 --
+-- Name: delete_old_records_log delete_old_records_log_pkey; Type: CONSTRAINT; Schema: public; Owner: vandaq
+--
+
+ALTER TABLE ONLY public.delete_old_records_log
+    ADD CONSTRAINT delete_old_records_log_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: geolocation geolocation_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -784,7 +956,7 @@ ALTER TABLE ONLY public.unit
 --
 
 ALTER TABLE ONLY public.instrument_measurements
-    ADD CONSTRAINT uq_instrument_measurements UNIQUE (platform_id, instrument_id, parameter_id, unit_id, acquisition_type_id);
+    ADD CONSTRAINT uq_instrument_measurements UNIQUE (instrument_id, parameter_id, unit_id, acquisition_type_id);
 
 
 --
@@ -844,13 +1016,6 @@ CREATE INDEX idx_alarm_type_id ON public.alarm_type USING btree (id) WITH (dedup
 
 
 --
--- Name: idx_geolocation_instrument_id; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX idx_geolocation_instrument_id ON public.geolocation USING btree (instrument_id) WITH (deduplicate_items='true');
-
-
---
 -- Name: idx_geolocation_sample_time_id; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -869,6 +1034,13 @@ CREATE INDEX idx_geolocation_time_platform_instrument_ids ON public.geolocation 
 --
 
 CREATE INDEX idx_instrument_id ON public.instrument USING btree (id);
+
+
+--
+-- Name: idx_measurement_acquisition_type_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_measurement_acquisition_type_id ON public.measurement USING btree (acquisition_type_id) WITH (deduplicate_items='true');
 
 
 --
@@ -953,7 +1125,7 @@ CREATE INDEX idx_unit_id ON public.unit USING btree (id);
 --
 
 ALTER TABLE ONLY public.alarm
-    ADD CONSTRAINT acq_time_fk FOREIGN KEY (sample_time_id) REFERENCES public."time"(id);
+    ADD CONSTRAINT acq_time_fk FOREIGN KEY (sample_time_id) REFERENCES public."time"(id) ON DELETE CASCADE;
 
 
 --
@@ -993,7 +1165,7 @@ ALTER TABLE ONLY public.geolocation
 --
 
 ALTER TABLE ONLY public.geolocation
-    ADD CONSTRAINT geolocation_sample_time_id_fkey FOREIGN KEY (sample_time_id) REFERENCES public."time"(id);
+    ADD CONSTRAINT geolocation_sample_time_id_fkey FOREIGN KEY (sample_time_id) REFERENCES public."time"(id) ON DELETE CASCADE;
 
 
 --
@@ -1049,7 +1221,7 @@ ALTER TABLE ONLY public.instrument_measurements
 --
 
 ALTER TABLE ONLY public.measurement
-    ADD CONSTRAINT measurement_acquisition_time_id_fkey FOREIGN KEY (acquisition_time_id) REFERENCES public."time"(id);
+    ADD CONSTRAINT measurement_acquisition_time_id_fkey FOREIGN KEY (acquisition_time_id) REFERENCES public."time"(id) ON DELETE CASCADE;
 
 
 --
@@ -1081,7 +1253,7 @@ ALTER TABLE ONLY public.measurement
 --
 
 ALTER TABLE ONLY public.measurement
-    ADD CONSTRAINT measurement_instrument_time_id_fkey FOREIGN KEY (instrument_time_id) REFERENCES public."time"(id);
+    ADD CONSTRAINT measurement_instrument_time_id_fkey FOREIGN KEY (instrument_time_id) REFERENCES public."time"(id) ON DELETE CASCADE;
 
 
 --
@@ -1105,7 +1277,7 @@ ALTER TABLE ONLY public.measurement
 --
 
 ALTER TABLE ONLY public.measurement
-    ADD CONSTRAINT measurement_sample_time_id_fkey FOREIGN KEY (sample_time_id) REFERENCES public."time"(id);
+    ADD CONSTRAINT measurement_sample_time_id_fkey FOREIGN KEY (sample_time_id) REFERENCES public."time"(id) ON DELETE CASCADE;
 
 
 --
@@ -1140,7 +1312,7 @@ ALTER TABLE ONLY public.alarm
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 14.17 (Ubuntu 14.17-0ubuntu0.22.04.1)
+-- Dumped from database version 14.17 (Ubuntu 14.17-1.pgdg22.04+1)
 -- Dumped by pg_dump version 14.17 (Ubuntu 14.17-0ubuntu0.22.04.1)
 
 SET statement_timeout = 0;
