@@ -2,11 +2,17 @@
 STATIONARY_HOST: "169.229.157.7"  # Replace with the static IP of the stationary host
 SSH_PORT: 2025
 USERNAME: "vandaq"         # Replace with your SSH username
-PRIVATE_KEY_PATH: "/home/vandaq/.ssh/vandaq_central"  # Path to your SSH private key
+PRIVATE_KEY_PATH: "/home/vandaq/.ssh/vandaq_central_2026"  # Path to your SSH private key
 SUBMIT_FILE_PATTERN: "submit_*.sbm"
 DATA_DIR: "/home/vandaq/vandaq/collector/submission/"         # Directory containing files to transfer
 ARCHIVE_DIR: "/home/vandaq/vandaq/collector/submission/submitted"  # Directory to move files after transfer
 REMOTE_PATH: "/home/vandaq/vandaq/collector/submission/"
 PING_HOST: "169.229.157.7"              # Host to ping for network check
 CHECK_INTERVAL: 10                # Time in seconds to wait between checks
+
+logs:
+  log_dir: "/home/vandaq/vandaq/submitter/log"
+  log_file: "submitter.log"
+  log_level: "INFO"
+  logger_name: "submitter"
 
