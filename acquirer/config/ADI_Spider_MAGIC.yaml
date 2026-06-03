@@ -10,6 +10,10 @@ connection: serial
 serial:
   device: "/dev/usb_serial_ADI_Spider_MAGIC"
   baud: 115200
+init:
+  stop_scan: "stop\r"
+  disable_header: "hdr,0\r"
+  start_logging: "log,1\r"
 measurement_delay_secs: 0 
 stream:
   line_delimiter: "\r\n"
