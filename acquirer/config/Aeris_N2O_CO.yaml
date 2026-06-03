@@ -64,10 +64,10 @@ alarms:
         impacts_data: true
   T2:
     - value_<: 
-        value: 35
+        value: 30
         alarm_level: alarm
         alarm_type: underrange
-        alarm_message: "T2 is below 35 deg C"
+        alarm_message: "T2 is below 30 deg C"
         impacts_data: true
   Inlet_Number:
     - value_!=: 
