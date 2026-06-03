@@ -30,6 +30,55 @@ VanDAQ is an open-source scientific data-acquisition system for mobile or fixed 
 - `vandaq_admin/`: admin CLI code and configs.
 - `filers/`, `utils/`, `common/`, `va/`: shared helpers and data export tooling.
 - `doc/`: documentation listed above.
+- `tests/`: pytest unit tests.
+- `archive/web_tests/`: retired manual scripts formerly under `web/tests/`.
+
+## Testing
+
+Tests use [pytest](https://docs.pytest.org/) with coverage via [pytest-cov](https://pytest-cov.readthedocs.io/). Hardware SDKs (LabJack, Phidget) are not required for the default suite.
+
+### Setup
+
+```bash
+python3 -m venv env
+source env/bin/activate
+pip install -r requirements-dev.txt
+```
+
+### Run tests
+
+```bash
+make test              # unit tests (excludes integration)
+make coverage          # tests + terminal report + htmlcov/index.html
+make coverage-xml      # tests + coverage.xml (same format CI uploads)
+```
+
+Or directly:
+
+```bash
+pytest -m "not integration"
+```
+
+### What is tested
+
+- Acquirer parsing, alarms, and NMEA handling (production YAML configs)
+- Serial line buffering with mocked `serial.Serial`
+- Collector `Inserter` dimension cache and batch insert (in-memory SQLite)
+
+### Test markers
+
+- `integration` — needs PostgreSQL or POSIX message queues; skipped in CI
+- `hardware` — needs serial, LabJack, or Phidget devices
+
+Run integration tests locally only when those services are available:
+
+```bash
+pytest -m integration
+```
+
+### Continuous integration
+
+On push and pull request, [`.github/workflows/test.yml`](.github/workflows/test.yml) runs the unit test suite on Ubuntu with Python 3.10. Download `coverage.xml` from the workflow run **Artifacts** (`coverage-report`).
 
 ## License
 
