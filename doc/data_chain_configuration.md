@@ -260,7 +260,7 @@ logs:
   logger_name: "collector"
 submissions:
   submit_file_dir: "/home/vandaq/vandaq/collector/submission"
-  submit_file_basename: "submit_HaleyCar_"
+  submit_file_basename: "submit_van1_"
   submit_file_minutes: 1
   submit_file_timezone: "America/Los_Angeles"
   submit_file_tz_abbr: "PST"

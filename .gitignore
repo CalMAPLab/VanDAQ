@@ -19,3 +19,4 @@ MagicLog.txt
 *.mbtiles
 scripts/tiles/planetiler.jar
 scripts/tiles/california-latest.osm.pbf
+scripts/tiles/data*
