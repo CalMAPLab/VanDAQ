@@ -17,6 +17,8 @@ collDir = '/home/vandaq/vandaq/collector/'
 collLogDir = collDir+'log/'
 submDir =  '/home/vandaq/vandaq/submitter/'
 submLogDir = submDir+'log/'
+repoDir = '/home/vandaq/vandaq/'
+spiderPsdLogDir = repoDir + 'data/spider_psd/log/'
 processes = []
 
 config_file_name = '/home/vandaq/vandaq/vandaq_admin.yaml' 
@@ -35,6 +37,10 @@ if config:
     acqLogDir = config['directories']['acquirer_log_directory']
     collDir = config['directories']['collector_directory']
     collLogDir = config['directories']['collector_log_directory']
+    repoDir = acqDir.rsplit('acquirer', 1)[0] if 'acquirer' in acqDir else repoDir
+    spiderPsdLogDir = config['directories'].get(
+        'spider_psd_log_directory', repoDir + 'data/spider_psd/log/',
+    )
 
 
 def getAcquirerProcesses():
@@ -65,6 +71,20 @@ def getCollectorProcesses():
                 if 'vandaq_collector.py' in cmdln:
                     ps.append(p)
     return ps
+
+def getSpiderPsdIngestProcesses():
+    ps = []
+    for p in psutil.process_iter():
+        try:
+            status = p.status()
+        except Exception:
+            continue
+        if p.status() != 'zombie':
+            cmdln = ' '.join(p.cmdline())
+            if 'spider_psd_ingest.py' in cmdln:
+                ps.append(p)
+    return ps
+
 
 def getSubmitterProcesses():
     ps = []
@@ -134,6 +154,23 @@ def startup(arg=None):
             print('Started submitter '+str(cmd)+'   pid='+str(proc.pid))
             processes.append({'cmd':cmd, 'pid':proc.pid})
 
+    if config and config['components'] and config['components'].get('launch_spider_psd_ingest'):
+        if arg is None or 'spider' in arg or 'psd' in arg:
+            ingest_script = repoDir + 'utils/spider_psd_ingest.py'
+            cmd = [
+                'python3', ingest_script,
+                '--no-move',
+                '--log-file', spiderPsdLogDir + 'spider_psd_ingest.log',
+            ]
+            os.makedirs(spiderPsdLogDir, exist_ok=True)
+            logFileName = spiderPsdLogDir + 'spider_psd_ingest.log'
+            logFile = open(logFileName, 'a')
+            proc = subprocess.Popen(cmd, env=this_env, stdout=logFile, stderr=logFile)
+            print('Started spider PSD ingest ' + str(cmd) + '   pid=' + str(proc.pid))
+            processes.append({'cmd': cmd, 'pid': proc.pid})
+            if arg is not None and ('spider' in arg or 'psd' in arg):
+                return
+
 
 def stop(arg=None):
     print('Stopping VanDAQ processes')
@@ -155,10 +192,21 @@ def stop(arg=None):
             print('stopping '+' '.join(p.cmdline())+' pid '+str(p.pid)) 
             p.kill()
             p.wait()
+    ps = getSpiderPsdIngestProcesses()
+    for p in ps:
+        if arg is None or 'spider' in arg or 'psd' in arg:
+            print('stopping '+' '.join(p.cmdline())+' pid '+str(p.pid))
+            p.kill()
+            p.wait()
 
 def status(arg=None):
     print('Looking for VanDAQ processes')
-    ps = getCollectorProcesses() + getAcquirerProcesses() + getSubmitterProcesses()
+    ps = (
+        getCollectorProcesses()
+        + getAcquirerProcesses()
+        + getSubmitterProcesses()
+        + getSpiderPsdIngestProcesses()
+    )
     if not ps:
         print('No VanDAQ process running')
     else:

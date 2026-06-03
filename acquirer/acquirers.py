@@ -519,7 +519,9 @@ class SerialStreamAcquirer(Acquirer):
                             self.put_response_to_queue(response)
                             continue
                     if line and len(line.split(self.config['stream']['item_delimiter'])) == self.num_items_per_line:
-                        #print(str(line))
+                        # Skip CSV header rows (e.g. date_____Time) from hdr,N output
+                        if not line.lstrip().startswith('20'):
+                            continue
                         command = None
                         dataMessage = self.parse_simple_string_to_record(line,config_dict=self.config['stream'])
                         dataMessage = self.apply_alarms(dataMessage)
