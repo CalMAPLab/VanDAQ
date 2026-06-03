@@ -2,7 +2,7 @@ queue:
   name: "/dev-measurements"
   max_msg_size: 8000
   max_msgs: 50
-connect_string: "postgresql://vandaq:YOUR_PASSWORD@localhost:5432/vandaq-test"
+connect_string: "postgresql://vandaq:YOUR_PASSWORD@localhost:5432/vandaq-dev"
 insert_batch_seconds: 1
 cache_time_seconds: 3600
 queued_recs_to_batch: 1000
