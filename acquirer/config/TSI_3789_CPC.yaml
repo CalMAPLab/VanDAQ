@@ -30,7 +30,7 @@ poll:
     formats: "f,h,f,f,f,f,f,f,f,f" 
     units: "P/cm^3, errors, temp_C,temp_C,temp_C,kPa,kPa,kPa,mA,liquid_level"
     acqTypes: "measurement_calibrated,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering,engineering"
-  
+    scalers: "1,1,1,1,1,1,1,1,1,1"
 logs:
   log_dir: "/home/vandaq/vandaq/acquirer/log"
   log_file: "acquirer_TSI_3789_CPC.log"

@@ -1,5 +1,5 @@
 ---
-platform: car1
+platform: van1
 instrument: Phidget_1
 type: Phidget
 #verbose: 1
@@ -17,11 +17,20 @@ Parameters:
 - SolarRadiation:
     signal_type: Analog
     channel_name: 0
-    v_offset: -0.007
-    v_per_unit: 0.00730
+    v_offset: 0
+    v_per_unit: 0.00000730
     aggregate: "mean"
     aggregate_hz: 10
-    unit: "kW*m^-2"
+    unit: "W*m^-2"
+    aquisition_type: "measurement_calibrated"
+- SolarVolts:
+    signal_type: Analog
+    channel_name: 0
+    v_offset: 0
+    v_per_unit: 1
+    aggregate: "mean"
+    aggregate_hz: 10
+    unit: "V"
     aquisition_type: "measurement_calibrated"
 # - SomeVoltage:
 #     signal_type: Analog
