@@ -9,7 +9,7 @@ queue:
   max_msgs: 50
 connection: serial
 serial:
-  device: "/dev/usb_serial_TSI_WCPC"
+  device: "/dev/usb_serial_TSI_3789_WCPC"
   baud: 115200
 measurement_delay_secs: 0
 data_freq_secs: 1
