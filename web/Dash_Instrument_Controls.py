@@ -103,20 +103,20 @@ def layout_instrument_controls(configdict):
                 response_box = dcc.Textarea(
                     id={"type": "response_box", "instrument": instrument_name, "name": "response_box"},
                     value="",
-                    style={'width': '100%', 'height': f'{line_height}em', 'margin-top': '10px', 'background':'black', 'color':'white'}
+                    className='controls-response-box',
+                    style={'height': f'{line_height}em'},
                 )
                 elements.append(response_box)
                 queues["response_box"] = response_box
 
         instrument_queues.append(queues)
-        control_elements.append(html.Div(elements, style={'margin-bottom': '20px'}))
-        control_elements.append(html.Hr(style={'margin-bottom': '20px', 'margin-top': '10px'}))
+        control_elements.append(html.Div(elements, className='controls-instrument-block'))
     return html.Div([
         dcc.Interval(id="poller", interval=500, n_intervals=0),
-        html.H1('Instrument Controls', style={'text-align': 'left'}),
+        html.H1('Instrument Controls'),
         html.Div(control_elements),
-        html.Div(id="output_instrument_controls", style={"display": "none"})
-    ])
+        html.Div(id="output_instrument_controls", style={"display": "none"}),
+    ], className='page-panel')
 
 
 # Callback for instrument controls

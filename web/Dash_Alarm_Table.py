@@ -40,40 +40,50 @@ def layout_alarm_table(configdict):
     global config
     config = configdict
     return html.Div([
-        html.H1('Alarm Table', style={'text-align': 'left'}),
-        dcc.Checklist(
-            options=[{'label': 'Freeze', 'value': 'suspend'}],
-            id='suspend-alarm_updates',
-            value=[],  # Default: updates are not suspended
-            style={'margin-bottom': '10px'}
-        ),
-        dcc.Interval(
-            id='update-interval',
-            interval=2*1000,  # 1-second interval
-            n_intervals=0
-        ),
+        html.Div([
+            html.H1('Alarm Table'),
+            dcc.Checklist(
+                options=[{'label': ' Freeze updates', 'value': 'suspend'}],
+                id='suspend-alarm_updates',
+                value=[],
+            ),
+        ], className='page-toolbar'),
+        dcc.Interval(id='update-interval', interval=2 * 1000, n_intervals=0),
         dash_table.DataTable(
             id='alarm-table',
-            columns = get_alarm_columns(engine),
+            columns=get_alarm_columns(engine),
             style_table={
-                'height': '400px',  # Limit height for the scrollable area
-                'overflowY': 'auto',  # Ensure smooth vertical scrolling
-                'overflowX': 'auto',  # Allow horizontal scrolling if needed
-                'border': '1px solid #444',  # Ensure clear boundaries
-                'background': 'black',
-                'color': 'white'
+                'height': '480px',
+                'overflowY': 'auto',
+                'overflowX': 'auto',
             },
-            style_cell={'textAlign': 'left', 'background':'black', 'color':'white'},
-            style_filter={'textAlign': 'left', 'background':'black', 'color':'white', 'textColor':'yellow'},
+            style_cell={
+                'textAlign': 'left',
+                'background': '#ffffff',
+                'color': '#1a2332',
+                'fontFamily': 'Segoe UI, system-ui, sans-serif',
+                'fontSize': '0.875rem',
+                'padding': '8px 12px',
+            },
+            style_filter={
+                'textAlign': 'left',
+                'background': '#eef1f5',
+                'color': '#1a2332',
+            },
+            style_header={
+                'backgroundColor': '#eef1f5',
+                'fontWeight': '600',
+                'borderBottom': '1px solid #d8dee6',
+            },
             filter_action='native',
             sort_action='native',
             page_action='native',
             page_current=0,
             page_size=10,
-            fixed_rows={'headers': True},  # Keep headers fixed while scrolling
-            sort_by=[{'column_id': 'time', 'direction': 'desc'}]
-        )
-    ])
+            fixed_rows={'headers': True},
+            sort_by=[{'column_id': 'time', 'direction': 'desc'}],
+        ),
+    ], className='page-panel')
 
 
 

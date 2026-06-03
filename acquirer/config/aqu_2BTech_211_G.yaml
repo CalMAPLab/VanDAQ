@@ -29,10 +29,10 @@ alarms:
         impacts_data: true
   cell_P:
     - value_<:
-        value: 982
+        value: 960
         alarm_level: alarm
         alarm_type: underrange
-        alarm_message: "cell_P below 982 mbar"
+        alarm_message: "cell_P below 960 mbar"
         impacts_data: true
     - value_>:
         value: 990 

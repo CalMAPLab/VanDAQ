@@ -12,8 +12,8 @@ def empty_wind_rose_figure():
         height=200,
         width=200,
         margin=dict(l=0, r=0, t=0, b=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(255,255,255,0.95)",
+        plot_bgcolor="rgba(255,255,255,0.9)",
     )
     return fig
 
@@ -162,8 +162,8 @@ def _wind_rose_layout(fig, title_text):
             ),
         ),
         showlegend=False,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(255,255,255,0.95)",
+        plot_bgcolor="rgba(255,255,255,0.9)",
         width=200,
         height=200,
     )
