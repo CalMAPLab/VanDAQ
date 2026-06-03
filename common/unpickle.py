@@ -13,7 +13,7 @@ Released under the BSD 3-Clause License.
 import pickle
 import lzma
 
-filename = '/home/vandaq/vandaq/collector/submission/submit_HaleyCar_20250108_095052_PST_.sbm'
+filename = '/home/vandaq/vandaq/collector/submission/submit_van1_20250108_095052_PST_.sbm'
 
 with lzma.open(filename,'rb') as file:
     data = pickle.load(file)
