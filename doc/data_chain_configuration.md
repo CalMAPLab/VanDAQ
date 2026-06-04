@@ -16,6 +16,8 @@ VanDAQ runs a separate acquirer process for each instrument that produces data t
 
 This guide explains how to author YAML configs for acquirers in `/home/vandaq/vandaq/acquirer/config/`. Each config selects an acquirer type via `type` and supplies connection, parsing, queue, and logging details. Keys marked **required** must be present for that acquirer type; others are optional.
 
+For a full integration walkthrough (startup, verification, dashboard), see [Adding a new instrument](adding_a_new_instrument.md).
+
 ### Common keys (all acquirer types)
 
 - `platform `**required**: platform name (e.g., vehicle ID).
