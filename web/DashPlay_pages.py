@@ -11,6 +11,7 @@ Released under the BSD 3-Clause License.
 """
 
 import os
+import sys
 import dash
 from dash import Dash, dcc, html, Input, Output, State, dash_table
 import dash_bootstrap_components as dbc
@@ -36,13 +37,15 @@ app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
 config = {}
 
+_WEB_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_WEB_DIR, "..", "common"))
+
 configfile_name = '/home/vandaq/vandaq/web/DashPlay.yaml'
 try:
-    configfile = open(configfile_name,'r')
-    config = yaml.load(configfile, Loader=yaml.FullLoader)
-    configfile.close()
-except:
-    print("Cannot load config file "+configfile_name)
+    from config_loader import load_yaml_config
+    config = load_yaml_config(configfile_name, Loader=yaml.FullLoader)
+except Exception:
+    print("Cannot load config file " + configfile_name)
     exit()
 
 # create logger

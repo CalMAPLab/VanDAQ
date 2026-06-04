@@ -43,7 +43,15 @@ Set `connect_string` in `collector/vandaq_collector.yaml` and `db_connect_string
 postgresql://vandaq:YOUR_PASSWORD@localhost:5432/vandaq-dev
 ```
 
-Tracked YAML in the public repository uses placeholders (`YOUR_PASSWORD`, `central.example.org`, example LAN addresses). On each deployment host, set real database URLs, central hostnames, SSH key paths, and tileserver URLs in those files **locally** and do not commit them. After `git pull`, re-apply your values or keep copies under `~/vandaq-deploy-secrets/` and copy them back. Optional gitignored overrides: `*.local.yaml` (see `.gitignore`).
+Tracked YAML uses placeholders. On each host, copy the `.local.yaml.example` files next to the main config, rename to `.local.yaml` (gitignored), and put production secrets there:
+
+| Example file | Copy to |
+|--------------|---------|
+| `collector/vandaq_collector.local.yaml.example` | `collector/vandaq_collector.local.yaml` |
+| `web/DashPlay.local.yaml.example` | `web/DashPlay.local.yaml` |
+| `submitter/vandaq_submitter.local.yaml.example` | `submitter/vandaq_submitter.local.yaml` |
+
+VanDAQ merges the local file over the tracked YAML at startup (collector, submitter, dashboard, acquirers, `vandaq_admin`). You can `git pull` without touching secrets. Per-instrument acquirer overrides: `acquirer/config/MyInstrument.local.yaml` beside `MyInstrument.yaml`.
 
 ## 3. Python environment
 

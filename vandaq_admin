@@ -7,6 +7,9 @@ import subprocess
 import psutil
 from  ipcqueue import posixmq
 
+_REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_REPO_ROOT, "common"))
+
 args = sys.argv
 if 'python' in args[0]:
     args = args[1:]
@@ -25,11 +28,10 @@ config_file_name = '/home/vandaq/vandaq/vandaq_admin.yaml'
 config = None 
 
 try:
-    configfile = open(config_file_name,'r')
-    config = yaml.load(configfile, Loader=yaml.FullLoader)
-    configfile.close()
-except:
-    print("Cannot load config file "+sys.argv[1])
+    from config_loader import load_yaml_config
+    config = load_yaml_config(config_file_name, Loader=yaml.FullLoader)
+except Exception:
+    print("Cannot load config file " + config_file_name)
     exit()
     
 if config:
@@ -125,7 +127,10 @@ def startup(arg=None):
                 return
 
     if config and config['components'] and config['components']['launch_acquirers']:
-        acq_configs = glob(basedir+'*.yaml')
+        acq_configs = [
+            p for p in glob(basedir + '*.yaml')
+            if '.local.' not in os.path.basename(p)
+        ]
 
         if len(acq_configs) > 0:
             for acq_config in acq_configs:

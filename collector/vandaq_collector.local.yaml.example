@@ -1,0 +1,2 @@
+# Copy to vandaq_collector.local.yaml (gitignored) and set production values.
+connect_string: "postgresql://vandaq:YOUR_PASSWORD@localhost:5432/vandaq-dev"

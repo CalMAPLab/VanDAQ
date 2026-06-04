@@ -53,11 +53,10 @@ parser = argparse.ArgumentParser(description='VanDAQ create daily data file star
 
 configfile_name = '/home/vandaq/vandaq/filers/dayfile.yaml'
 try:
-    configfile = open(configfile_name,'r')
-    config = yaml.load(configfile, Loader=yaml.FullLoader)
-    configfile.close()
-except:
-    print("Cannot load config file "+configfile_name)
+    from config_loader import load_yaml_config
+    config = load_yaml_config(configfile_name, Loader=yaml.FullLoader)
+except Exception:
+    print("Cannot load config file " + configfile_name)
     exit()
 
 filedir = './filers/files/day/'
