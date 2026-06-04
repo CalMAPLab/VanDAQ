@@ -1,4 +1,4 @@
-# Offline map tiles (VanDAQ van)
+# Offline map tiles
 
 Build a local NorCal/Central California basemap for the Dash Leaflet map, then serve raster PNG tiles with **Docker** (`tileserver-gl`). This matches the VanDAQ van setup: MBTiles under `/home/vandaq/tiles/`, container `vandaq-tileserver` on port **8080**.
 
