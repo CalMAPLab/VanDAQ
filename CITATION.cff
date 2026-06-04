@@ -1,0 +1,42 @@
+cff-version: 1.2.0
+title: VanDAQ
+message: >-
+  If you use this software, please cite it using the metadata below.
+type: software
+license: BSD-3-Clause
+repository-code: "https://github.com/CalMAPLab/VanDAQ"
+url: "https://github.com/CalMAPLab/VanDAQ"
+abstract: >-
+  VanDAQ is an open-source scientific data-acquisition system for mobile or
+  fixed platforms carrying multiple atmospheric and environmental instruments.
+  It normalizes heterogeneous instrument outputs, writes them to PostgreSQL,
+  packages submissions for central aggregation, and provides Dash-based
+  diagnostic dashboards with alarm handling and remote instrument control.
+keywords:
+  - data acquisition
+  - atmospheric measurements
+  - PostgreSQL
+  - scientific software
+version: 1.1.0
+date-released: "2026-06-04"
+authors:
+  - family-names: Weber
+    given-names: Robert J.
+    affiliation: University of California, Berkeley
+  - family-names: Cliff
+    given-names: Samuel J.
+    affiliation: University of California, Berkeley
+    email: samcliff@berkeley.edu
+  - family-names: Giordano
+    given-names: Michael R.
+    affiliation: University of California, Berkeley
+  - family-names: Byrme
+    given-names: Haley
+    name-particle: McNamara
+    affiliation: University of California, Berkeley
+  - family-names: Apte
+    given-names: Joshua S.
+    affiliation: University of California, Berkeley
+  - family-names: Goldstein
+    given-names: Allen H.
+    affiliation: University of California, Berkeley

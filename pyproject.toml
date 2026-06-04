@@ -1,6 +1,6 @@
 [project]
 name = "vandaq"
-version = "0.0.0"
+version = "1.1.0"
 description = "VanDAQ mobile atmospheric data acquisition"
 readme = "README.md"
 requires-python = ">=3.10"
