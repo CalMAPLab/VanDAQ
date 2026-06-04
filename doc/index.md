@@ -25,9 +25,8 @@ All operator and integrator documentation for this repository lives under `doc/`
 
 | Document                                              | Description                                                     |
 | ----------------------------------------------------- | --------------------------------------------------------------- |
-| [Adding a new instrument](adding_a_new_instrument.md) | YAML, acquirer startup, database check, dashboard wiring        |
+| [Adding a new instrument](guides/adding_a_new_instrument.md) | YAML, acquirer startup, database check, dashboard wiring        |
 | [Offline map tiles](guides/map_tiles.md)              | Build and serve NorCal MBTiles for the Dash map (Docker on van) |
-| [Filers and export](guides/filers_and_export.md)      | Export database data to analysis files *(in progress)*          |
 
 
 ## Reference
@@ -35,7 +34,7 @@ All operator and integrator documentation for this repository lives under `doc/`
 
 | Document                                                | Description                                                    |
 | ------------------------------------------------------- | -------------------------------------------------------------- |
-| [Data chain configuration](data_chain_configuration.md) | YAML keys for acquirer, collector, submitter, dashboard, admin |
+| [Data chain configuration](reference/data_chain_configuration.md) | YAML keys for acquirer, collector, submitter, dashboard, admin |
 | [Database schema](reference/database_schema.md)         | Tables, dimensions, and `.sbm` submission files                |
 
 

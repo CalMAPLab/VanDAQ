@@ -73,7 +73,7 @@ Work through in order:
 3. **Queue alignment** — acquirer `queue.name` / `max_msg_size` / `max_msgs` must match `collector/vandaq_collector.yaml`.
 4. **Verbose acquirer** — set `verbose: 1` temporarily, restart acquirer, confirm dicts print; remove when done.
 5. **Collector log** — database connection errors, `IntegrityError`, or queue read failures?
-6. **SQL check** — see [Adding a new instrument](../adding_a_new_instrument.md#database-check).
+6. **SQL check** — see [Adding a new instrument](../guides/adding_a_new_instrument.md#database-check).
 
 If the acquirer runs but the collector does not, messages pile up in the POSIX queue; use `clearqueue` only if you intend to discard queued data.
 
@@ -88,7 +88,7 @@ If the acquirer runs but the collector does not, messages pile up in the POSIX q
 
 - `**db_connect_string`** in `web/DashPlay.yaml` must reach the same database the collector writes.
 - `**display_params**` keys must match acquirer `instrument` and parameter names exactly.
-- **Controls** — `queue_command` / `queue_response` names must match acquirer YAML; see [Adding a new instrument](../adding_a_new_instrument.md#controls).
+- **Controls** — `queue_command` / `queue_response` names must match acquirer YAML; see [Adding a new instrument](../guides/adding_a_new_instrument.md#controls).
 - **Config not visible after edits** — reload Apache (`sudo systemctl reload apache2`); see [Dashboard (Apache)](#dashboard-apache) above.
 - **500 / blank page** — check Apache error log (`myflaskapp_error.log`); confirm `mod_wsgi` and the venv `python-path` in `DashPlay.conf` match the deployed tree.
 
@@ -119,12 +119,12 @@ Symptoms: growing pile of `submit_*.sbm` in `collector/submission/`, nothing new
 
 - Repeated central `rejected/` files after SFTP succeeds.
 - Database corruption or migration needs beyond `vandaq_schema_dump.sql`.
-- New acquirer `type` or protocol changes — see [Data chain configuration](../data_chain_configuration.md) and developer tests in [README](../../README.md#testing).
+- New acquirer `type` or protocol changes — see [Data chain configuration](../reference/data_chain_configuration.md) and developer tests in [README](../../README.md#testing).
 
 ## Related
 
 - [Installation](installation.md)
 - [Network configuration](network_configuration.md)
-- [Adding a new instrument](../adding_a_new_instrument.md)
+- [Adding a new instrument](../guides/adding_a_new_instrument.md)
 - [Offline map tiles](../guides/map_tiles.md) (Docker tileserver)
 

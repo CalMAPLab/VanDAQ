@@ -18,7 +18,7 @@ VanDAQ runs one **acquirer** process per instrument. Each acquirer is configured
 
 Each config sets platform and instrument names, connection and parsing rules, POSIX queues for measurements (and optional command/response queues), optional alarms, and logging. Keys marked **required** must be present for that acquirer `type`; others are optional.
 
-For a full integration walkthrough (startup, verification, dashboard), see [Adding a new instrument](adding_a_new_instrument.md).
+For a full integration walkthrough (startup, verification, dashboard), see [Adding a new instrument](../guides/adding_a_new_instrument.md).
 
 ### Common keys (all acquirer types)
 
@@ -343,7 +343,7 @@ The Dash dashboard is configured in `web/DashPlay.yaml`, loaded at startup by `D
 - `map_max_zoom`: maximum zoom the UI allows (can exceed native zoom).
 - `map_check_secs`: seconds between map data polls.
 - `instruments`: list of instrument names shown on the map page.
-- `tile_server`: offline basemap (see [Offline map tiles](guides/map_tiles.md)).
+- `tile_server`: offline basemap (see [Offline map tiles](../guides/map_tiles.md)).
   - `enabled`: use local tileserver when true.
   - `base_url`: tileserver root (van LAN IP or `http://127.0.0.1:8080`).
   - `style_path`: path to MapLibre style JSON on the tileserver.
