@@ -18,7 +18,6 @@ VanDAQ is an open-source scientific data-acquisition system for mobile or fixed 
 - [Adding a new instrument](doc/adding_a_new_instrument.md): step-by-step acquirer and dashboard integration.
 - [Network configuration](doc/network_configuration.md): network paths and connectivity for remote vs. central deployments.
 - [Operation and troubleshooting](doc/operation_and_troubleshooting.md): runtime guidance and common fixes.
-- [Concise notes](doc/concise_notes.md): quick reminders and tips.
 - Assets used by the docs are in `doc/assets/`.
 
 ## Repository layout
