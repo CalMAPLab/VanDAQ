@@ -2,7 +2,7 @@
 
 VanDAQ often runs as a **remote** DAQ host (van) that records locally and **submits** measurement bundles to a **central** aggregation server. This page describes how those hosts connect and which directories must align.
 
-See [Overview](../overview.md) for roles of acquirer, collector, and submitter. YAML details: [Data chain configuration](../data_chain_configuration.md#submitter-configuration).
+See [Overview](../overview.md) for roles of acquirer, collector, and submitter. YAML details: [Data chain configuration](../reference/data_chain_configuration.md#submitter-configuration).
 
 ## Architecture
 

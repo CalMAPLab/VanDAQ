@@ -19,7 +19,7 @@ The diagram omits `instrument_measurements` (metadata cache of parameter combina
 - **`geolocation`** stores lat/lon keyed by platform, instrument, and sample time.
 - **`alarm`** links alarms to measurements and dimension rows.
 
-The collector creates dimension rows automatically the first time it sees new names in measurement dicts ([Adding a new instrument](../adding_a_new_instrument.md)).
+The collector creates dimension rows automatically the first time it sees new names in measurement dicts ([Adding a new instrument](../guides/adding_a_new_instrument.md)).
 
 ## Core tables
 
@@ -88,6 +88,6 @@ SELECT instrument FROM instrument ORDER BY instrument;
 
 ## Related
 
-- [Data chain configuration](../data_chain_configuration.md)
-- [Adding a new instrument](../adding_a_new_instrument.md#database-check)
+- [Data chain configuration](data_chain_configuration.md)
+- [Adding a new instrument](../guides/adding_a_new_instrument.md#database-check)
 - [Installation](../operations/installation.md)

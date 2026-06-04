@@ -13,12 +13,9 @@ VanDAQ is an open-source scientific data-acquisition system for mobile or fixed 
 
 ## Documentation
 
-- [Overview](doc/overview.md): architecture, theory of operation, and core processes.
-- [Data chain configuration](doc/data_chain_configuration.md): YAML keys for acquirer, collector, submitter, dashboards, and admin tools.
-- [Adding a new instrument](doc/adding_a_new_instrument.md): step-by-step acquirer and dashboard integration.
-- [Network configuration](doc/network_configuration.md): network paths and connectivity for remote vs. central deployments.
-- [Operation and troubleshooting](doc/operation_and_troubleshooting.md): runtime guidance and common fixes.
-- Assets used by the docs are in `doc/assets/`.
+Full table of contents: **[doc/index.md](doc/index.md)** (overview, installation, operations, guides, YAML reference, database schema, testing).
+
+Diagrams are in `doc/assets/`.
 
 ## Repository layout
 
@@ -29,7 +26,7 @@ VanDAQ is an open-source scientific data-acquisition system for mobile or fixed 
 - `schema/`: database schema definitions.
 - `vandaq_admin/`: admin CLI code and configs.
 - `filers/`, `utils/`, `common/`, `va/`: shared helpers and data export tooling.
-- `doc/`: documentation listed above.
+- `doc/`: documentation hub (`doc/index.md`) and topical guides.
 - `tests/`: pytest unit tests.
 - `archive/web_tests/`: retired manual scripts formerly under `web/tests/`.
 

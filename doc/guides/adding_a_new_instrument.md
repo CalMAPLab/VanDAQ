@@ -2,7 +2,7 @@
 
 This guide walks through integrating a new instrument into VanDAQ using an **existing acquirer type**: author the YAML config, start the acquirer process, confirm data reaches PostgreSQL, and optionally wire the Dash dashboard for live plots and controls.
 
-For the full list of YAML keys and per-type options, see [Data chain configuration](data_chain_configuration.md). For architecture and measurement-dict fields, see [Overview](overview.md).
+For the full list of YAML keys and per-type options, see [Data chain configuration](../reference/data_chain_configuration.md). For architecture and measurement-dict fields, see [Overview](../overview.md).
 
 ## How it fits in the data chain
 
@@ -41,7 +41,7 @@ The `type` field selects which Python acquirer class runs. Pick the closest matc
 | Instrument protocol                           | `type`             | Example config                                                                          |
 | --------------------------------------------- | ------------------ | --------------------------------------------------------------------------------------- |
 | Continuous delimited serial stream (CSV-like) | `simpleSerial`     | `acquirer/config/Aerodyne_CAPS_NO2.yaml`                                                |
-| Serial poll/request–response on a timer       | `serialPolled`     | See [config manual](data_chain_configuration.md#serialpolledacquirer-type-serialpolled) |
+| Serial poll/request–response on a timer       | `serialPolled`     | See [config manual](../reference/data_chain_configuration.md#serialpolledacquirer-type-serialpolled) |
 | NMEA sentences (wind, weather, etc.)          | `serial_nmea`      | `acquirer/config/Airmar_WX200.yaml`                                                     |
 | NMEA GPS only (lat/lon/speed)                 | `serial_nmea_GPS`  | GPS configs in `acquirer/config/`                                                       |
 | TCP/ZMQ or other network stream               | `networkStreaming` | `acquirer/config/VOCUS.yaml`                                                            |
@@ -133,7 +133,7 @@ alarms:
         impacts_data: true
 ```
 
-See [Alarm rules](data_chain_configuration.md#alarm-rules) in the configuration manual.
+See [Alarm rules](../reference/data_chain_configuration.md#alarm-rules) in the configuration manual.
 
 ### Optional: instrument commands
 
@@ -314,7 +314,7 @@ Copy widget patterns from `CAPS_NO2` or `Aeris_CH4_C2H6` in the same file (butto
 
 - **Filer / day exports:** If this instrument provides GPS or a primary position source, you may need to update `filers/dayfile.yaml` (`gps_instrument`).
 - **Wind rose:** For wind instruments, see `mapping.wind_rose` in `DashPlay.yaml` (example: `Airmar_WX200`).
-- **New protocol:** Implement a subclass in `acquirer/acquirers.py`, register it in `AquirerFactory.selector`, document the new `type` in [Data chain configuration](data_chain_configuration.md), then follow this guide for YAML and dashboard wiring.
+- **New protocol:** Implement a subclass in `acquirer/acquirers.py`, register it in `AquirerFactory.selector`, document the new `type` in [Data chain configuration](../reference/data_chain_configuration.md), then follow this guide for YAML and dashboard wiring.
 - **File-based ingest (exception):** Some instruments (e.g. Spider PSD drops) use `utils/spider_psd_ingest.py` and `launch_spider_psd_ingest` in `vandaq_admin.yaml` instead of a normal acquirer config.
 
 ## Quick checklist

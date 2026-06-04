@@ -2,7 +2,7 @@
 
 First-time setup for a **remote** measurement platform (van or field Linux host): PostgreSQL, Python environment, YAML configuration, and starting the data chain with `vandaq_admin`.
 
-For architecture context see [Overview](../overview.md). For YAML keys see [Data chain configuration](../data_chain_configuration.md). To add instruments after install see [Adding a new instrument](../adding_a_new_instrument.md).
+For architecture context see [Overview](../overview.md). For YAML keys see [Data chain configuration](../reference/data_chain_configuration.md). To add instruments after install see [Adding a new instrument](../guides/adding_a_new_instrument.md).
 
 ## Prerequisites
 
@@ -67,7 +67,7 @@ pip install dash plotly dash-bootstrap-components dash-leaflet dash-extensions
 
 ## 4. Configure the data chain
 
-Edit these files for your platform (see [Data chain configuration](../data_chain_configuration.md)):
+Edit these files for your platform (see [Data chain configuration](../reference/data_chain_configuration.md)):
 
 
 | File                              | Purpose                                               |
@@ -141,7 +141,7 @@ ORDER BY t.sample_time DESC
 LIMIT 10;
 ```
 
-If no rows appear, check that acquirer and collector queue names match and that the acquirer log shows data. See [Adding a new instrument](../adding_a_new_instrument.md) for more verification steps.
+If no rows appear, check that acquirer and collector queue names match and that the acquirer log shows data. See [Adding a new instrument](../guides/adding_a_new_instrument.md) for more verification steps.
 
 ### Optional: offline map tiles
 
@@ -161,7 +161,7 @@ Production deployment uses Apache + mod_wsgi for the dashboard; see [Operation a
 
 ## Next steps
 
-- [Adding a new instrument](../adding_a_new_instrument.md)
+- [Adding a new instrument](../guides/adding_a_new_instrument.md)
 - [Network configuration](network_configuration.md) (central aggregation)
 - [Operation and troubleshooting](operation_and_troubleshooting.md)
 
