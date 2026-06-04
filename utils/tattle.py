@@ -4,10 +4,10 @@ import time
 from datetime import datetime
 
 # Remote server details
-REMOTE_SERVER = "169.229.157.7"
-SSH_PORT = 2025  # Replace with the actual SSH port
+REMOTE_SERVER = "central.example.org"
+SSH_PORT = 22  # Replace with the actual SSH port
 USERNAME = "vandaq"  # Replace with the username
-PRIVATE_KEY_PATH = "/home/vandaq/.ssh/vandaq_central_2026"  # Path to your SSH private key
+PRIVATE_KEY_PATH = "/home/vandaq/.ssh/id_central"  # Path to your SSH private key
 REMOTE_FILE = "/home/vandaq/tattle.txt"  # Remote file to append data
 
 

@@ -21,7 +21,7 @@ print(sys.path)
 from TofDaq import *
 
 # Define the IP and port of the server to connect to
-HOST = '169.229.157.5'     # Replace with the server's IP address
+HOST = 'central.example.org'     # Replace with the server's IP address
 PORT = 6969                # Should match the server's port
 
 TwLoadDll()

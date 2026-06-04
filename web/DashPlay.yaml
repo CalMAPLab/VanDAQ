@@ -2,7 +2,7 @@ dashboard_refresh_secs: 2
 alarm_shapes: True
 master_GPS: "ublox_M8Q_GPS"
 #master_GPS: "GPS_sim"
-db_connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-dev"
+db_connect_string: "postgresql://vandaq:YOUR_PASSWORD@localhost:5432/vandaq-dev"
 show_mute_instruments: True
 shape_file_dir: "/home/vandaq/vandaq/web/shapefiles"
 display_timezone: "US/Pacific"
@@ -21,7 +21,7 @@ mapping:
   map_max_zoom: 18
   tile_server:
     enabled: true
-    base_url: "http://192.168.10.5:8080"
+    base_url: "http://192.168.1.100:8080"
     style_path: "/styles/norcal/style.json"
     raster_tiles_url: "/styles/norcal/{z}/{x}/{y}.png"
     fallback_tiles_url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

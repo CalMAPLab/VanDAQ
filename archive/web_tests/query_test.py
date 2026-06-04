@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, and_
 import statistics
 
 # Database connection
-engine = create_engine('postgresql://vandaq:p3st3r@localhost:5432/vandaq-dev', echo=False)
+engine = create_engine('postgresql://vandaq:YOUR_PASSWORD@localhost:5432/vandaq-dev', echo=False)
 
 times = []
 

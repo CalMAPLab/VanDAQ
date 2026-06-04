@@ -39,7 +39,7 @@ eng_codes = [{'name':'Interlock', "ID": "INTERLOCK_MON", "CAN": "3020070901"},
         {'name':'Turbo_T', "ID": "PFEIFFER_TMOTOR_MON", "CAN": "1320031503"}]
 
 # Define the IP and port of the server to connect to
-HOST = '169.229.157.5'     # Replace with the server's IP address
+HOST = 'central.example.org'     # Replace with the server's IP address
 PORT = 6969                # Should match the server's port
 
 TwLoadDll()

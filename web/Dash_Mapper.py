@@ -597,7 +597,7 @@ def requery_geo(engine, config, lock):
 if __name__ == "__main__":
     app = dash.Dash(__name__)
 
-    connect_string = 'postgresql://vandaq:p3st3r@localhost:5432/vandaq-test'
+    connect_string = 'postgresql://vandaq:YOUR_PASSWORD@localhost:5432/vandaq-test'
 
     engine = create_engine(connect_string, echo=False)
 

@@ -876,7 +876,7 @@ def update_map_page(app, engine, config):
             if (tab !== "map-display") {
                 return window.dash_clientside.no_update;
             }
-            var host = window.location.hostname || "192.168.10.5";
+            var host = window.location.hostname || "192.168.1.100";
             return "http://" + host + ":8080/styles/norcal/{z}/{x}/{y}.png";
         }
         """,

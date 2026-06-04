@@ -75,7 +75,7 @@ config['logger'] = logger
 if config and ('db_connect_string' in config):
     connect_string = config['db_connect_string']
 else:
-    connect_string = 'postgresql://vandaq:p3st3r@localhost:5432/vandaq-dev'
+    connect_string = 'postgresql://vandaq:YOUR_PASSWORD@localhost:5432/vandaq-dev'
 
 engine = create_engine(connect_string, echo=False)
 

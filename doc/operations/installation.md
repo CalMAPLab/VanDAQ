@@ -43,6 +43,8 @@ Set `connect_string` in `collector/vandaq_collector.yaml` and `db_connect_string
 postgresql://vandaq:YOUR_PASSWORD@localhost:5432/vandaq-dev
 ```
 
+Tracked YAML in the public repository uses placeholders (`YOUR_PASSWORD`, `central.example.org`, example LAN addresses). On each deployment host, set real database URLs, central hostnames, SSH key paths, and tileserver URLs in those files **locally** and do not commit them. After `git pull`, re-apply your values or keep copies under `~/vandaq-deploy-secrets/` and copy them back. Optional gitignored overrides: `*.local.yaml` (see `.gitignore`).
+
 ## 3. Python environment
 
 ```bash

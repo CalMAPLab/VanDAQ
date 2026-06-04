@@ -1,5 +1,5 @@
 directory: "/home/vandaq/vandaq/filers/files/day/"
-db_connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-test"
+db_connect_string: "postgresql://vandaq:YOUR_PASSWORD@localhost:5432/vandaq-test"
 timezone: "US/Pacific"
 platforms:
   - van1

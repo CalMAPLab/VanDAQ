@@ -916,7 +916,7 @@ if __name__ == '__main__':
     #startTime = datetime.now() - timedelta(minutes=5)
     #endTime = datetime.now()
     # Database connection
-    engine = create_engine('postgresql://vandaq:p3st3r@localhost:5432/vandaq-test', echo=False)
+    engine = create_engine('postgresql://vandaq:YOUR_PASSWORD@localhost:5432/vandaq-test', echo=False)
 
     df = get_measurements_with_alarms_and_locations(engine, startTime, 'Aeris_CH4_C2H6', end_time=endTime)
 #    struct = transform_instrument_dataframe(df)

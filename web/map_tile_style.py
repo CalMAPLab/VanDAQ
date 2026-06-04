@@ -90,10 +90,10 @@ def get_tile_url(config):
     if path.startswith("http"):
         return path
 
-    # Browser must use the configured host (e.g. 192.168.10.5), not 127.0.0.1 from
+    # Browser must use the configured host (e.g. 192.168.1.100), not 127.0.0.1 from
     # server-side probing — the dashboard server can reach localhost while the
     # user's browser cannot.
-    configured = tile_server.get("base_url", "http://192.168.10.5:8080").rstrip("/")
+    configured = tile_server.get("base_url", "http://192.168.1.100:8080").rstrip("/")
     tile_template = f"{configured}{path}"
 
     log = config.get("logger")

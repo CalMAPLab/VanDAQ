@@ -1,4 +1,4 @@
-connect_string: "postgresql://vandaq:p3st3r@localhost:5432/vandaq-test"
+connect_string: "postgresql://vandaq:YOUR_PASSWORD@localhost:5432/vandaq-test"
 insert_batch_seconds: 1
 cache_time_seconds: 3600
 logs:
