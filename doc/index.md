@@ -7,7 +7,7 @@ All operator and integrator documentation for this repository lives under `doc/`
 | Document | Description |
 |----------|-------------|
 | [Overview](overview.md) | Architecture, theory of operation, and core processes |
-| [Installation](operations/installation.md) | First-time setup: database, processes, verification *(in progress on this branch)* |
+| [Installation](operations/installation.md) | First-time setup: database, processes, verification |
 
 ## Operations
 
