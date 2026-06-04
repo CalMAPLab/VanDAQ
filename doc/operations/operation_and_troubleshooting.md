@@ -42,7 +42,7 @@ If behavior is still stale, use a full restart:
 sudo systemctl restart apache2
 ```
 
-Acquirer/collector/submitter processes do **not** need a restart for Dash YAML edits. Full Apache deployment is described in [Deployment](deployment.md).
+Acquirer/collector/submitter processes do **not** need a restart for Dash YAML edits. Sample Apache site config: [`web/DashPlay.conf`](../../web/DashPlay.conf).
 
 ## Log files
 
@@ -126,5 +126,5 @@ Symptoms: growing pile of `submit_*.sbm` in `collector/submission/`, nothing new
 - [Installation](installation.md)
 - [Network configuration](network_configuration.md)
 - [Adding a new instrument](../adding_a_new_instrument.md)
-- [Deployment](deployment.md) (Apache / WSGI setup)
+- [Offline map tiles](../guides/map_tiles.md) (Docker tileserver)
 

@@ -157,7 +157,7 @@ source ../env/bin/activate
 python3 DashPlay_pages.py
 ```
 
-Production deployment (Apache reverse proxy, systemd, autostart) is site-specific; see [Deployment](deployment.md) when available.
+Production deployment uses Apache + mod_wsgi for the dashboard; see [Operation and troubleshooting — Dashboard (Apache)](operation_and_troubleshooting.md#dashboard-apache) and [`web/DashPlay.conf`](../../web/DashPlay.conf).
 
 ## Next steps
 
