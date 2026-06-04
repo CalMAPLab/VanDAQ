@@ -45,7 +45,6 @@ All operator and integrator documentation for this repository lives under `doc/`
 | Document                                      | Description                                 |
 | --------------------------------------------- | ------------------------------------------- |
 | [Testing](development/testing.md)             | pytest, markers, CI                         |
-| [Concise notes](development/concise_notes.md) | Quick reference cheat sheet *(in progress)* |
 
 
 ## Repository entry points
