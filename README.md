@@ -15,6 +15,7 @@ VanDAQ is an open-source scientific data-acquisition system for mobile or fixed 
 
 - [Overview](doc/overview.md): architecture, theory of operation, and core processes.
 - [Data chain configuration](doc/data_chain_configuration.md): YAML keys for acquirer, collector, submitter, dashboards, and admin tools.
+- [Adding a new instrument](doc/adding_a_new_instrument.md): step-by-step acquirer and dashboard integration.
 - [Network configuration](doc/network_configuration.md): network paths and connectivity for remote vs. central deployments.
 - [Operation and troubleshooting](doc/operation_and_troubleshooting.md): runtime guidance and common fixes.
 - [Concise notes](doc/concise_notes.md): quick reminders and tips.
