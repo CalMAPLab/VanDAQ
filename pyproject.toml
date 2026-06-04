@@ -1,0 +1,16 @@
+[project]
+name = "vandaq"
+version = "0.0.0"
+description = "VanDAQ mobile atmospheric data acquisition"
+readme = "README.md"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["common", "acquirer", "collector", "submitter"]
+markers = [
+    "integration: needs PostgreSQL or POSIX message queue",
+    "hardware: needs serial, LabJack, or Phidget hardware",
+]
+addopts = "-ra --strict-markers"
+norecursedirs = ["env", ".git", "htmlcov", "data", "scripts"]

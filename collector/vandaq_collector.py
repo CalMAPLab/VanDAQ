@@ -333,7 +333,7 @@ class Inserter:
                     'alarm_type_id': self.get_or_create_dimension(DimAlarmType, 'alarm_type', alarm['alarm_type'], 'alarm_type'),
                     'alarm_level_id': self.get_or_create_dimension(DimAlarmLevel, 'alarm_level', alarm['alarm_level'], 'alarm_level'),
                     'data_impacted': alarm['data_impacted'],           
-                    'alarm_message': alarm['alarm_message'],           
+                    'message': alarm['alarm_message'],           
                 }
                 alarms.append(alarm_rec)
         self.batch_insert_alarms(alarms)
@@ -434,8 +434,8 @@ def get_time_from_submit_filename(filename):
     if file_time_string:
         file_time = datetime.strptime(file_time_string, '%Y%m%d_%H%M%S')
         if 'submit_file_timezone' in config['submissions']:
-            timezone = config['submissions']['submit_file_timezone']
-            file_time = file_time.replace(tzinfo=pytz.timezone(timezone))
+            tz_name = config['submissions']['submit_file_timezone']
+            file_time = file_time.replace(tzinfo=pytz.timezone(tz_name))
         else:
             file_time = file_time.replace(tzinfo=timezone.utc)
         return file_time
@@ -480,114 +480,114 @@ def move_file_to_submitted(filename, submitted_path):
     except Exception as e:
         logger.error("error moving file {} to {}, err = {}".format(filename, submitted_path,str(e)))
 
-# load configuration file
-if len(sys.argv) < 2:
-    print("Error: Must supply a configuration file")
-    exit()
-    
-config_file_name = sys.argv[1]    
+if __name__ == '__main__':
+    # load configuration file
+    if len(sys.argv) < 2:
+        print("Error: Must supply a configuration file")
+        exit()
 
-config = load_config_file(config_file_name)
-if not config:
-    print("Cannot load config file "+sys.argv[1])
-    exit()
+    config_file_name = sys.argv[1]
 
-# create logger
-log_file = os.path.join(config['logs']['log_dir'], config['logs']['log_file'])
-logging.basicConfig(
-    filename = log_file,
-    encoding="utf-8",
-    filemode="a",
-    format="{asctime} - {levelname} - {message}",
-    style="{",
-    datefmt="%Y-%m-%d %H:%M:%S",    
-)
-logger = logging.getLogger(config['logs']['logger_name'])
-logger.setLevel(config['logs']['log_level'])
-handler = TimedRotatingFileHandler(log_file, when="midnight", interval=1, backupCount=30)
-handler.setLevel(logging.INFO)
-logger.addHandler(handler)
+    config = load_config_file(config_file_name)
+    if not config:
+        print("Cannot load config file "+sys.argv[1])
+        exit()
 
-collector_input = None
-submit_file_directory = None
-submitted_file_directory = None
-submit_file_pattren = None
+    # create logger
+    log_file = os.path.join(config['logs']['log_dir'], config['logs']['log_file'])
+    logging.basicConfig(
+        filename = log_file,
+        encoding="utf-8",
+        filemode="a",
+        format="{asctime} - {levelname} - {message}",
+        style="{",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    logger = logging.getLogger(config['logs']['logger_name'])
+    logger.setLevel(config['logs']['log_level'])
+    handler = TimedRotatingFileHandler(log_file, when="midnight", interval=1, backupCount=30)
+    handler.setLevel(logging.INFO)
+    logger.addHandler(handler)
 
-logger.info('Starting collector')
-if 'queue' in config:
-    queue = open_queue(config, logger)
-    if queue:
-        collector_input = 'queue'
-else:
-    if 'submissions' in config:
-        collector_input = 'submissions'
-        submission_file_directory = config['submissions']['submit_file_dir']
-        submitted_file_directory = config['submissions']['submitted_file_dir']
-        submit_file_pattren = config['submissions']['submit_file_pattern']
-        
-engine = create_engine(config['connect_string'], echo=False)
+    collector_input = None
+    submit_file_directory = None
+    submitted_file_directory = None
+    submit_file_pattren = None
 
-Session = sessionmaker(bind=engine)
-session = Session()
+    logger.info('Starting collector')
+    if 'queue' in config:
+        queue = open_queue(config, logger)
+        if queue:
+            collector_input = 'queue'
+    else:
+        if 'submissions' in config:
+            collector_input = 'submissions'
+            submission_file_directory = config['submissions']['submit_file_dir']
+            submitted_file_directory = config['submissions']['submitted_file_dir']
+            submit_file_pattren = config['submissions']['submit_file_pattern']
 
-submissions = []
-sumbission_start_time = datetime.now()
+    engine = create_engine(config['connect_string'], echo=False)
 
-inserter = Inserter(engine, session, config, logger)
+    Session = sessionmaker(bind=engine)
+    session = Session()
 
-batch_insert = True 
+    submissions = []
+    sumbission_start_time = datetime.now()
 
-queued_recs_to_batch = config.get('queued_recs_to_batch', 1000)
+    inserter = Inserter(engine, session, config, logger)
 
-while True:
-    message = []
-    if collector_input == 'queue':
-        while len(message) < queued_recs_to_batch:
-            try:
-                logger.debug(f'Collector queue size = {queue.qsize()}')
-                record = queue.get()
-                # GPS acquireres package their coordinates as lists
-                # to keep coords from being separated in batching
-                if isinstance(record,list):
-                    for r in record:
-                        message.append(r)
-                else:
-                    message.append(record)
-                #continue
-            except Exception as e:
-                logger.error("exception in get from queue")
-                logger.error(e)
-            else:
-                logger.debug(str(message))
-    elif collector_input == 'submissions':
-        files = get_submission_files(submission_file_directory, submit_file_pattren) 
-        time.sleep(0.5)
-        if files:
-            file = files[0]
-            logger.info(f'Starting on submission file {file}')
-            try:
-                message = get_messages_from_file(file['filename'])
-            except Exception as e:
-                logger.error('Could not unpickle {}, error = {}'.format(file['filename'], str(e)))
-                move_file_to_submitted(file['filename'], submitted_file_directory+'rejected/')
-            else:     
-                files.remove(file)
-                move_file_to_submitted(file['filename'], submitted_file_directory) 
-                logger.info('Moved submission file {} to {}'.format(file['filename'], submitted_file_directory))
-                        
-    file_start_time = datetime.now()
+    batch_insert = True
 
-    if message and batch_insert:
-        numRecords = len(message)
-        start_time = datetime.now()
-        inserter.insert_batch(message)
-        end_time = datetime.now()
-        exec_secs = (end_time - start_time).total_seconds()
+    queued_recs_to_batch = config.get('queued_recs_to_batch', 1000)
+
+    while True:
+        message = []
         if collector_input == 'queue':
-            if submit_measurement(message, sumbission_start_time, config):
-                sumbission_start_time = datetime.now()
-    if message:
-        file_end_seconds = (datetime.now()-file_start_time).total_seconds()
-        logger.info(f'message cluster (submit file) length {len(message)} messages processed in {file_end_seconds} seconds')
-                   
+            while len(message) < queued_recs_to_batch:
+                try:
+                    logger.debug(f'Collector queue size = {queue.qsize()}')
+                    record = queue.get()
+                    # GPS acquireres package their coordinates as lists
+                    # to keep coords from being separated in batching
+                    if isinstance(record,list):
+                        for r in record:
+                            message.append(r)
+                    else:
+                        message.append(record)
+                    #continue
+                except Exception as e:
+                    logger.error("exception in get from queue")
+                    logger.error(e)
+                else:
+                    logger.debug(str(message))
+        elif collector_input == 'submissions':
+            files = get_submission_files(submission_file_directory, submit_file_pattren)
+            time.sleep(0.5)
+            if files:
+                file = files[0]
+                logger.info(f'Starting on submission file {file}')
+                try:
+                    message = get_messages_from_file(file['filename'])
+                except Exception as e:
+                    logger.error('Could not unpickle {}, error = {}'.format(file['filename'], str(e)))
+                    move_file_to_submitted(file['filename'], submitted_file_directory+'rejected/')
+                else:
+                    files.remove(file)
+                    move_file_to_submitted(file['filename'], submitted_file_directory)
+                    logger.info('Moved submission file {} to {}'.format(file['filename'], submitted_file_directory))
+
+        file_start_time = datetime.now()
+
+        if message and batch_insert:
+            numRecords = len(message)
+            start_time = datetime.now()
+            inserter.insert_batch(message)
+            end_time = datetime.now()
+            exec_secs = (end_time - start_time).total_seconds()
+            if collector_input == 'queue':
+                if submit_measurement(message, sumbission_start_time, config):
+                    sumbission_start_time = datetime.now()
+        if message:
+            file_end_seconds = (datetime.now()-file_start_time).total_seconds()
+            logger.info(f'message cluster (submit file) length {len(message)} messages processed in {file_end_seconds} seconds')
 

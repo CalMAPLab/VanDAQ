@@ -32,7 +32,7 @@ class DimInstrument(Base):
 # Dimension Table for Timestamps
 class DimTime(Base):
     __tablename__ = 'time'
-    id = Column(BigInteger, primary_key=True)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
     time = Column(DateTime , nullable=False, unique=True)
 
 # Dimension Table for measured Parameters
@@ -87,7 +87,7 @@ class InstrumentMeasurements(Base):
   
 class FactMeasurement(Base):
     __tablename__ = 'measurement'
-    id = Column(BigInteger, primary_key=True)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
 
     # Foreign keys to the DimTime table
     acquisition_time_id = Column(BigInteger, ForeignKey('time.id'), nullable=False)
@@ -135,7 +135,7 @@ class DimAlarmType(Base):
 # Fact Table for instrument alarms  
 class FactAlarm(Base):
     __tablename__ = 'alarm'
-    id = Column(BigInteger, primary_key=True)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
     measurement_id = Column(BigInteger, ForeignKey('measurement.id'), nullable=True)
     # foreign keys into dimension tables
     platform_id = Column(Integer, ForeignKey('platform.id'), nullable=False)
