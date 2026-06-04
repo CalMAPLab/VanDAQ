@@ -13,7 +13,7 @@ All operator and integrator documentation for this repository lives under `doc/`
 
 | Document | Description |
 |----------|-------------|
-| [Network configuration](operations/network_configuration.md) | Remote vs central servers, submission transfer *(in progress)* |
+| [Network configuration](operations/network_configuration.md) | Remote vs central servers, submission transfer |
 | [Operation and troubleshooting](operations/operation_and_troubleshooting.md) | Day-to-day commands, logs, common fixes *(in progress)* |
 | [Deployment](operations/deployment.md) | Dash, tileserver, systemd *(in progress)* |
 
