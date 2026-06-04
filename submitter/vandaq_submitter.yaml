@@ -1,6 +1,6 @@
 # Configuration
 STATIONARY_HOST: "central.example.org"  # Replace with the static IP of the stationary host
-SSH_PORT: 2025
+SSH_PORT: 22
 USERNAME: "vandaq"         # Replace with your SSH username
 PRIVATE_KEY_PATH: "/home/vandaq/.ssh/id_central"  # Path to your SSH private key
 SUBMIT_FILE_PATTERN: "submit_*.sbm"

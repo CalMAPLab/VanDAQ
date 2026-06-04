@@ -25,3 +25,9 @@ MagicLog.txt
 scripts/tiles/planetiler.jar
 scripts/tiles/california-latest.osm.pbf
 scripts/tiles/data*
+
+# Local deployment overrides (real passwords, hosts, keys)
+.env
+.env.*
+*.local.yaml
+**/local.yaml
