@@ -40,6 +40,16 @@ def test_load_config_file(tmp_path):
     assert loaded["connect_string"] == "sqlite:///"
 
 
+def test_load_config_file_merges_local(tmp_path):
+    cfg_path = tmp_path / "collector.yaml"
+    local_path = tmp_path / "collector.local.yaml"
+    cfg_path.write_text(yaml.dump({"connect_string": "sqlite:///", "queue": {"name": "/q"}}))
+    local_path.write_text(yaml.dump({"connect_string": "postgresql://local@host/db"}))
+    loaded = collector.load_config_file(str(cfg_path))
+    assert loaded["connect_string"] == "postgresql://local@host/db"
+    assert loaded["queue"]["name"] == "/q"
+
+
 def test_get_time_from_submit_filename_utc(tmp_path):
     collector.config = {
         "submissions": {},

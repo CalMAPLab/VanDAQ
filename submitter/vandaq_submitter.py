@@ -13,6 +13,9 @@ Released under the BSD 3-Clause License.
 import os
 import sys
 import time
+
+_SUBMITTER_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_SUBMITTER_DIR, "..", "common"))
 import shutil
 import yaml
 import paramiko
@@ -25,12 +28,10 @@ config = {}
 
 def load_config_file(filename):
 	try:
-		configfile = open(filename)
-		config = yaml.load(configfile, Loader=yaml.FullLoader)
-		configfile.close()
-		return config
-	except:
-		print("Cannot load config file "+sys.argv[1])
+		from config_loader import load_yaml_config
+		return load_yaml_config(filename, Loader=yaml.FullLoader)
+	except Exception:
+		print("Cannot load config file " + filename)
 		return None
 
 def is_network_available(host = '0.0.0.0', timeout=2):

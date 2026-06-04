@@ -18,18 +18,18 @@ from logging.handlers import TimedRotatingFileHandler
 import sys
 import os
 
+_ACQUIRER_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_ACQUIRER_DIR, "..", "common"))
 
 if len(sys.argv) < 2:
     print("Error: Must supply a configuration file")
     exit()
 
-         
 try:
-    configfile = open(sys.argv[1],'r')
-    config = yaml.load(configfile, Loader=yaml.FullLoader)
-    configfile.close()
-except:
-    print("Cannot load config file "+sys.argv[1])
+    from config_loader import load_yaml_config
+    config = load_yaml_config(sys.argv[1], Loader=yaml.FullLoader)
+except Exception:
+    print("Cannot load config file " + sys.argv[1])
     exit()
 
 # create logger

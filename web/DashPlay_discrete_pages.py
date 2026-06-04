@@ -1,3 +1,5 @@
+import os
+import sys
 import dash
 from dash import Dash, dcc, html, Input, Output, State, dash_table
 import dash_bootstrap_components as dbc
@@ -7,6 +9,9 @@ import plotly.graph_objs as go
 import yaml
 from sqlalchemy import create_engine
 
+_WEB_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_WEB_DIR, "..", "common"))
+
 # import other dashboard pages
 from Dash_Alarm_Table import *
 from Dash_Dashboard import *
@@ -15,16 +20,14 @@ from Dash_Mapper import layout_map_display, update_map_page
 # Initialize the Dash app
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
-def get_config(): 
+def get_config():
     configfile_name = '/home/vandaq/vandaq/web/DashPlay.yaml'
     try:
-        configfile = open(configfile_name,'r')
-        config = yaml.load(configfile, Loader=yaml.FullLoader)
-        configfile.close()
-    except:
-        print("Cannot load config file "+configfile_name)
+        from config_loader import load_yaml_config
+        return load_yaml_config(configfile_name, Loader=yaml.FullLoader)
+    except Exception:
+        print("Cannot load config file " + configfile_name)
         exit()
-    return config
 
 config = get_config()
 
