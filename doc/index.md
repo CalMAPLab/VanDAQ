@@ -36,7 +36,7 @@ All operator and integrator documentation for this repository lives under `doc/`
 | Document                                                | Description                                                    |
 | ------------------------------------------------------- | -------------------------------------------------------------- |
 | [Data chain configuration](data_chain_configuration.md) | YAML keys for acquirer, collector, submitter, dashboard, admin |
-| [Database schema](reference/database_schema.md)         | Tables, dimensions, submission files *(in progress)*           |
+| [Database schema](reference/database_schema.md)         | Tables, dimensions, and `.sbm` submission files                |
 
 
 ## Development
