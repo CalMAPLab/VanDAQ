@@ -1,0 +1,21 @@
+[run]
+source =
+    common
+    acquirer
+    collector
+    submitter
+    web
+    filers
+    utils
+omit =
+    */tests/*
+    web/tests/*
+    */env/*
+    */__pycache__/*
+
+[report]
+show_missing = True
+skip_empty = True
+
+[html]
+directory = htmlcov
