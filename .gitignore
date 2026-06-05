@@ -2,6 +2,7 @@
 coverage.xml
 htmlcov/
 .pytest_cache/
+.vscode/
 
 **/*.pyc
 **/*.log

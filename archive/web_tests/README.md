@@ -1,5 +1,7 @@
 # Archived web manual test scripts
 
+See also the [archive index](../README.md) for other retired code (`sender/`, `web/`).
+
 These files were moved from `web/tests/` in favor of the pytest suite under `tests/`.
 
 They are **not** part of CI and are kept for reference only:

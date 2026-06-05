@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Hygiene pass: untrack runtime artifacts that `.gitignore` already excludes (`acquirer/test_data/`, `filers/files/`, acquirer log placeholder); gitignore `.vscode/` (editor-specific debug config).
+- Move pre-submitter `sender/` scripts and alternate dashboard variants to `archive/sender/` and `archive/web/`; remove duplicate `web/Dash_Mapper_FSM copy.py`.
+
 ## [1.1.0] - 2026-06-04
 
 First public release on [CalMAPLab/VanDAQ](https://github.com/CalMAPLab/VanDAQ) `main`, combining field-hardening work from mobile deployments with documentation, automated testing, example-only tracked configuration, and gitignored local YAML overlays for deployment secrets.
