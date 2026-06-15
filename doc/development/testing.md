@@ -11,7 +11,7 @@ source env/bin/activate
 pip install -r requirements-dev.txt
 ```
 
-`requirements-dev.txt` installs pytest, pytest-cov, pytest-mock, and the Python packages needed to import acquirer and collector code under test.
+`requirements-dev.txt` includes `requirements.txt` (runtime stack) plus pytest, pytest-cov, and pytest-mock.
 
 ## Run tests
 

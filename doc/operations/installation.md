@@ -59,21 +59,24 @@ VanDAQ merges the local file over the tracked YAML at startup (collector, submit
 cd /home/vandaq/vandaq
 python3 -m venv env
 source env/bin/activate
-pip install -r requirements-dev.txt
+pip install -r requirements.txt
 ```
 
-`requirements-dev.txt` covers the acquirer, collector, and test stack (NumPy, pandas, SQLAlchemy, PyYAML, pyserial, pyzmq, ipcqueue, etc.).
+`requirements.txt` installs the full runtime stack: data chain (acquirer, collector), `vandaq_admin`, filers, submitter, PostgreSQL driver, and the Plotly Dash dashboard.
 
-**Dashboard** (when you run the Dash app on this host) also needs:
+For development and CI (adds pytest):
 
 ```bash
-pip install dash plotly dash-bootstrap-components dash-leaflet dash-extensions
+pip install -r requirements-dev.txt
 ```
 
 **Optional hardware** (install only if used):
 
-- LabJack: LabJack LJM Python package per [LabJack documentation](https://labjack.com/support/software/installation/ljm-python)
-- Phidget: `pip install Phidget22`
+```bash
+pip install -r requirements-hardware.txt   # Phidget22
+```
+
+- LabJack: install the LabJack LJM Python package per [LabJack documentation](https://labjack.com/support/software/installation/ljm-python) (not on PyPI)
 
 ## 4. Configure the data chain
 

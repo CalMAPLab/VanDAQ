@@ -1,0 +1,26 @@
+# VanDAQ runtime dependencies (install: pip install -r requirements.txt)
+# Python 3.10+. Covers data chain, vandaq_admin, filers, submitter, and dashboard.
+
+# Core data chain (acquirer, collector, common)
+numpy>=1.24
+pandas>=2.0
+PyYAML>=6.0
+SQLAlchemy>=2.0
+psycopg2-binary>=2.9
+pynmea2>=1.19
+pyserial>=3.5
+pyzmq>=25.0
+ipcqueue>=0.9
+pytz>=2024.1
+
+# Process manager and remote transfer
+psutil>=5.9
+paramiko>=3.4
+
+# Dashboard (Plotly Dash on van or central host)
+dash>=3.0
+plotly>=5.24
+dash-bootstrap-components>=1.6
+dash-leaflet>=1.0.15
+dash-extensions>=1.0
+transitions>=0.9

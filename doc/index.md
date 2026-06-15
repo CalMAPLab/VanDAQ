@@ -50,6 +50,7 @@ All operator and integrator documentation for this repository lives under `doc/`
 
 - [README](../README.md) — project summary and short test setup
 - [CONTRIBUTORS](../CONTRIBUTORS.md) — acknowledgements
+- Python deps: `requirements.txt` (runtime), `requirements-dev.txt` (tests), `requirements-hardware.txt` (optional Phidget)
 - Example YAML: `acquirer/config/`, `collector/`, `web/DashPlay.yaml`, `vandaq_admin.yaml`
 - Database dump: `schema/vandaq_schema_dump.sql`
 

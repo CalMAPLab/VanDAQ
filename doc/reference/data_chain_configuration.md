@@ -139,6 +139,8 @@ Receives pickled dictionaries over ZeroMQ PULL.
   - Optional `wholeDict` block: `parameter`, `unit`, `acqType` to store the entire dict as a string.
 - `measurement_delay_secs`: optional
 
+Example: [VOCUS.yaml](../../acquirer/config/VOCUS.yaml). The VOCUS PTR-MS uses TofDaq on Windows; a companion bridge script on the TofDaq PC must ZMQ PUSH pickled messages to this acquirer. See [archive/sender/README.md](../../archive/sender/README.md) and [Operation and troubleshooting — VOCUS](../operations/operation_and_troubleshooting.md#vocus-windows-tofdaq-bridge).
+
 ### SimulatedAcquirer (`type: simulated`)
 
 Generates synthetic signals for testing.

@@ -22,17 +22,20 @@ Diagrams are in `doc/assets/`.
 - `acquirer/`: instrument readers and configs.
 - `collector/`: database inserter and submission file handling.
 - `submitter/`: transfer of submission files to central servers.
-- `web/`: Dash application definitions.
+- `web/`: Dash application definitions (`DashPlay_pages.py` is the canonical entry point).
 - `schema/`: database schema definitions.
-- `vandaq_admin/`: admin CLI code and configs.
-- `filers/`, `utils/`, `common/`, `va/`: shared helpers and data export tooling.
+- `vandaq_admin`, `vandaq_admin.yaml`: process manager CLI at the repo root (`va` is a symlink to `vandaq_admin`).
+- `filers/`: export database data to analysis-ready files (see [day exports](doc/operations/operation_and_troubleshooting.md#day-file-exports-filersdayfilepy)).
+- `utils/`, `common/`: shared query helpers, schema models, and utilities.
 - `doc/`: documentation hub (`doc/index.md`) and topical guides.
 - `tests/`: pytest unit tests.
-- `archive/web_tests/`: retired manual scripts formerly under `web/tests/`.
+- `archive/`: retired code (`web_tests/`, Windows VOCUS bridge scripts, alternate dashboard variants).
 
 ## Testing
 
 See [doc/development/testing.md](doc/development/testing.md) for setup, `make test` / coverage, markers, and CI.
+
+Runtime dependencies: `pip install -r requirements.txt`. For tests: `pip install -r requirements-dev.txt`.
 
 ## License
 

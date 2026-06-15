@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hygiene pass: untrack runtime artifacts that `.gitignore` already excludes (`acquirer/test_data/`, `filers/files/`, acquirer log placeholder); gitignore `.vscode/` (editor-specific debug config).
 - Move pre-submitter `sender/` scripts and alternate dashboard variants to `archive/sender/` and `archive/web/`; remove duplicate `web/Dash_Mapper_FSM copy.py`.
 
+### Added
+
+- README layout corrections, day-file export ops (`filers/dayfile.py`), and VOCUS Windows/TofDaq bridge documentation.
+- `requirements.txt` for runtime deps (data chain, dashboard, submitter, filers); `requirements-hardware.txt` for optional Phidget; `requirements-dev.txt` now includes runtime via `-r requirements.txt`. Declared dependencies in `pyproject.toml`.
+
 ## [1.1.0] - 2026-06-04
 
 First public release on [CalMAPLab/VanDAQ](https://github.com/CalMAPLab/VanDAQ) `main`, combining field-hardening work from mobile deployments with documentation, automated testing, example-only tracked configuration, and gitignored local YAML overlays for deployment secrets.

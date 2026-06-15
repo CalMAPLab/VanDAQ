@@ -1,0 +1,7 @@
+# Optional instrument drivers (install only when used)
+# Usage: pip install -r requirements-hardware.txt
+#
+# LabJack: install the LabJack LJM Python package per vendor docs — not on PyPI:
+#   https://labjack.com/support/software/installation/ljm-python
+
+Phidget22>=1.14

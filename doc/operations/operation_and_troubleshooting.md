@@ -26,6 +26,43 @@ Restart pattern after config changes:
 
 Only `*.yaml` files **directly** in `acquirer/config/` are started. Files under `acquirer/config/disabled/` or `save/` are ignored.
 
+### Day file exports (`filers/dayfile.py`)
+
+Export a calendar day's measurements from PostgreSQL to CSV for offline analysis. Run from the repo root:
+
+```bash
+cd /home/vandaq/vandaq
+python3 filers/dayfile.py                  # today (local midnight boundary from config)
+python3 filers/dayfile.py 2025-06-01       # specific date (YYYY-MM-DD)
+python3 filers/dayfile.py 2025-06-01 --nogps           # full day, no GPS filter
+python3 filers/dayfile.py 2025-06-01 --all_drive_data    # first-to-last GPS point only
+```
+
+Configuration: [`filers/dayfile.yaml`](../../filers/dayfile.yaml)
+
+| Key | Purpose |
+|-----|---------|
+| `db_connect_string` | Same database the collector writes |
+| `directory` | Output root (default under `filers/files/day/`) |
+| `platforms` | List of platform names to export |
+| Per-platform `gps_instrument` | GPS acquirer name for geolocated exports (e.g. `ublox_M8Q_GPS`) |
+| Per-platform `subdir` | Optional subdirectory under `directory` |
+
+Default mode joins measurements with GPS locations for the configured `gps_instrument`. Output files are named `measurements_<platform>_<date>_long.csv` (prefixes `no-geolocations_` or `drive_range_` for the flag variants).
+
+Set `db_connect_string` before first use. If you add a new GPS source, update `gps_instrument` — see [Adding a new instrument](../guides/adding_a_new_instrument.md#next-steps).
+
+### VOCUS (Windows TofDaq bridge)
+
+The VOCUS instrument uses TofDaq on a **Windows PC**. The Linux acquirer ([`acquirer/config/VOCUS.yaml`](../../acquirer/config/VOCUS.yaml), `type: networkStreaming`) listens on port **6969** for pickled `{ms, eng}` messages.
+
+You must also run the Windows bridge script on the TofDaq machine:
+
+- [`archive/sender/VanDAQ_Sender_VOCUS_V1.py`](../../archive/sender/VanDAQ_Sender_VOCUS_V1.py)
+- Set `HOST` to the van's LAN IP; ensure firewall allows TCP 6969 from Windows to the van.
+
+See [archive/sender/README.md](../../archive/sender/README.md) for the full two-machine setup.
+
 ### Dashboard (Apache)
 
 On the van, the Dash app is usually served by **Apache2 with mod_wsgi**, not `vandaq_admin`. Example site config: `[web/DashPlay.conf](../../web/DashPlay.conf)` (often installed under `/etc/apache2/sites-available/` with the app at `/var/www/DashPlay`).

@@ -71,6 +71,12 @@ The VanDAQ dashboard web application queries PostgreSQL and provides:
 - **Map** — geolocated tracks as data develops
 - **Controls** — configurable commands to instruments
 
+Example screenshots of a live dashboard can be seen below:
+
+![VanDAQ dashboard diagnostics](assets/dashboard_timeseries.png)
+
+![VanDAQ drive map](assets/dashboard_map.png)
+
 ### Filers
 
 Filers are scripts that query PostgreSQL and write formatted text files for post-processing and analysis.
