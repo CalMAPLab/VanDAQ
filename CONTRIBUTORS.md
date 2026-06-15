@@ -16,7 +16,7 @@ Contributors
 ------------
 
 Michael Giordano
-Haley McNamara Byrme
+Haley McNamara Byrne
 Josh Apte
 Allen Goldstein
 University of California, Berkeley
