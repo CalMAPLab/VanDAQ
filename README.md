@@ -41,6 +41,12 @@ Runtime dependencies: `pip install -r requirements.txt`. For tests: `pip install
 
 Licensed under the BSD 3-Clause License (see `LICENSE`).
 
+## Citation
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20705283.svg)](https://doi.org/10.5281/zenodo.20705283)
+
+If you use this software, please cite it using [CITATION.cff](CITATION.cff) or the Zenodo record: https://doi.org/10.5281/zenodo.20705283
+
 ## Contributing
 
 Please open issues or pull requests with fixes and improvements; see `CONTRIBUTORS.md` for acknowledgements.
