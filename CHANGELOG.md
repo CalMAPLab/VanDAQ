@@ -7,19 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
+## [1.1.0] - 2026-06-15
 
-- Hygiene pass: untrack runtime artifacts that `.gitignore` already excludes (`acquirer/test_data/`, `filers/files/`, acquirer log placeholder); gitignore `.vscode/` (editor-specific debug config).
-- Move pre-submitter `sender/` scripts and alternate dashboard variants to `archive/sender/` and `archive/web/`; remove duplicate `web/Dash_Mapper_FSM copy.py`.
-
-### Added
-
-- README layout corrections, day-file export ops (`filers/dayfile.py`), and VOCUS Windows/TofDaq bridge documentation.
-- `requirements.txt` for runtime deps (data chain, dashboard, submitter, filers); `requirements-hardware.txt` for optional Phidget; `requirements-dev.txt` now includes runtime via `-r requirements.txt`. Declared dependencies in `pyproject.toml`.
-
-## [1.1.0] - 2026-06-04
-
-First public release on [CalMAPLab/VanDAQ](https://github.com/CalMAPLab/VanDAQ) `main`, combining field-hardening work from mobile deployments with documentation, automated testing, example-only tracked configuration, and gitignored local YAML overlays for deployment secrets.
+First public release on [CalMAPLab/VanDAQ](https://github.com/CalMAPLab/VanDAQ) `main`, combining field-hardening work from mobile deployments with documentation, automated testing, example-only tracked configuration, gitignored local YAML overlays for deployment secrets, and declared runtime dependencies.
 
 ### Added
 
@@ -31,7 +21,9 @@ First public release on [CalMAPLab/VanDAQ](https://github.com/CalMAPLab/VanDAQ) 
 - **Guides:** `doc/guides/map_tiles.md` (NorCal/Central California offline tiles via Planetiler + Docker `tileserver-gl` on the van; content migrated from `scripts/tiles/README.md` with a short pointer left in scripts), `doc/guides/adding_a_new_instrument.md` (YAML → acquirer → PostgreSQL → optional Dash wiring).
 - **Reference:** `doc/reference/data_chain_configuration.md` (complete YAML reference for acquirer, collector, submitter, dashboard, and `vandaq_admin`, with placeholder examples only), `doc/reference/database_schema.md` with ER diagram (`doc/assets/database_schema.png`).
 - **Development:** `doc/development/testing.md` (pytest, markers, CI artifacts).
+- Dashboard screenshots in `doc/assets/` (`dashboard_map.png`, `dashboard_timeseries.png`); expanded installation and operation/troubleshooting guides (runtime dependencies, day-file export, VOCUS Windows/TofDaq bridge notes).
 - `CHANGELOG.md` and `CITATION.cff` for release citation and version history.
+- `requirements.txt` for runtime deps (data chain, dashboard, submitter, filers); `requirements-hardware.txt` for optional Phidget; `requirements-dev.txt` includes runtime via `-r requirements.txt`. Declared dependencies in `pyproject.toml`.
 
 #### Testing and CI ([PR #1](https://github.com/CalMAPLab/VanDAQ/pull/1))
 
@@ -71,11 +63,13 @@ First public release on [CalMAPLab/VanDAQ](https://github.com/CalMAPLab/VanDAQ) 
 - BSD 3-Clause `LICENSE`, `CONTRIBUTORS.md` (maintainer and author credits).
 - Public GitHub home at `CalMAPLab/VanDAQ` (history consolidated from prior Berkeley Enterprise development).
 - `va` symlink to `vandaq_admin`; admin launcher prefers venv Python.
-- `.gitignore` entries for Python venv, Spider PSD runtime data, `*.local.yaml`, and `.env` patterns (PR #3); runtime secrets live in ignored local overlays, not in tracked YAML.
+- `.gitignore` entries for Python venv, Spider PSD runtime data, `*.local.yaml`, `.env`, and `.vscode/`; runtime secrets live in ignored local overlays, not in tracked YAML.
+- `archive/` layout for legacy code: pre-submitter `sender/` scripts, alternate dashboard variants (`Dash_Mapper.py`, `Dash_Mapper_FSM.py`, `DashPlay_discrete_pages.py`), and retired `web/tests/` manual scripts — each with README pointers.
 
 ### Changed
 
-- README documentation section points to `doc/index.md`; testing section points to `doc/development/testing.md`.
+- README layout corrections and pointers to `doc/index.md` and `doc/development/testing.md`.
+- Untrack runtime artifacts that `.gitignore` already excludes (`acquirer/test_data/`, `filers/files/`, acquirer log placeholder).
 - Tracked YAML and Python defaults normalized to **example** values ([PR #3](https://github.com/CalMAPLab/VanDAQ/pull/3)): placeholder database URLs (`YOUR_PASSWORD`), example central hostnames, generic LAN tileserver address.
 - `vandaq_admin`, acquirer, collector, submitter, filers, and Dash entrypoints load configuration through the shared overlay helper instead of raw `yaml.safe_load` only.
 - `doc/operations/installation.md` documents the `.local.yaml` workflow.
